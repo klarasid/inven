@@ -6,7 +6,7 @@ defined('INDEX_AUTH') || die('Direct access not allowed!');
 if (isset($_GET['action']) && $_GET['action'] === 'print_pdf') {
     require __DIR__ . '/print.php';
     exit;
-}
+}    
 
 require LIB . 'ip_based_access.inc.php';
 do_checkIP('smc');

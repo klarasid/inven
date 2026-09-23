@@ -44,11 +44,12 @@ final class Workspace
             $where=[];$args=[];
             if($library!==''){$where[]='i.library_code=?';$args[]=$library;}
             if($room){$where[]='i.room_key=?';$args[]=$room;}
-            if($search!==''){$where[]="JSON_UNQUOTE(JSON_EXTRACT(i.snapshot,'$.room_name')) LIKE ?";$args[]='%'.$search.'%';}
+            if($search!==''){$where[]='i.snapshot LIKE ?';$args[]='%"room_name":"%'.$search.'%';}
             $mine=($g['owner']??'mine')!=='all';
             if($kind==='inspections') {
                 $where[]=$history?"i.status='final'":"i.status<>'final'";
-                if($mine){$where[]="JSON_UNQUOTE(JSON_EXTRACT(i.snapshot,'$.assignee.id'))=?";$args[]=(string)$uid;}
+                // JSON_EXTRACT is unavailable on MySQL 5.6, match the encoded assignee id in the raw snapshot instead.
+                if($mine){$where[]='i.snapshot LIKE ?';$args[]='%"assignee":{"id":"'.$uid.'",%';}
                 $result=self::page($w,'i.*','FROM inventory_watch_inspections i WHERE '.implode(' AND ',$where),$args,$page,$history?'i.due_date DESC,i.id DESC':'i.due_date,i.id');
             } else {
                 $where[]=$kind==='review'?"f.status='review'":($history?"f.status='closed'":"f.status IN ('open','working')");
@@ -85,10 +86,10 @@ final class Workspace
         }
         if($resource==='templates'||$resource==='schedules') {
             $table=$resource==='templates'?'templates':'schedules';$where=['1=1'];$args=[];
-            if($search!==''){$where[]=$table==='templates'?'name LIKE ?':"JSON_UNQUOTE(JSON_EXTRACT(snapshot,'$.room_name')) LIKE ?";$args[]='%'.$search.'%';}
+            if($search!==''){$where[]=$table==='templates'?'name LIKE ?':'snapshot LIKE ?';$args[]=$table==='templates'?'%'.$search.'%':'%"room_name":"%'.$search.'%';}
             if($table==='schedules'){
                 if($room){$where[]='location_id=?';$args[]=$room;}
-                if($library!==''){$where[]="JSON_UNQUOTE(JSON_EXTRACT(snapshot,'$.library_code'))=?";$args[]=$library;}
+                if($library!==''){$where[]='snapshot LIKE ?';$args[]='%"library_code":"'.$library.'",%';}
                 if(($g['history']??'')!=='1')$where[]="active=1 AND location_id IS NOT NULL AND (end_date IS NULL OR end_date>=CURRENT_DATE)";
             }
             $result=self::page($w,'*','FROM inventory_watch_'.$table.' WHERE '.implode(' AND ',$where),$args,$page,'id DESC');

@@ -61,6 +61,11 @@ final class WatchView
         self::$users=$watch->query('SELECT user_id,realname FROM user ORDER BY realname')->fetchAll(\PDO::FETCH_ASSOC);
         $rooms=$watch->query('SELECT id,room_name,slims_location_id FROM inventory_locations ORDER BY room_name')->fetchAll(\PDO::FETCH_ASSOC);
         $libraries=$watch->query('SELECT location_id,location_name FROM mst_location ORDER BY location_name')->fetchAll(\PDO::FETCH_KEY_PAIR);
+        foreach ($rooms as $index=>$room) {
+            $code=(string)($room['slims_location_id']??'');
+            $location=$libraries[$code]??'Lokasi belum ditentukan';
+            $rooms[$index]['room_label']=$room['room_name'].' — '.$location.($code!==''?' ('.$code.')':'');
+        }
         $templates=$watch->query('SELECT * FROM inventory_watch_templates ORDER BY id DESC')->fetchAll(\PDO::FETCH_ASSOC);
         self::$base=InventoryUi::url(array_merge(self::$context,['tab'=>$tab]));
         InventoryUi::assets();
@@ -75,7 +80,7 @@ final class WatchView
             echo '<form class="watch-filter watch-grid" method="get" @submit.prevent="filter($event.target)">';
             self::hidden('tab',$tab);
             self::select('Perpustakaan','library',[''=>'Semua perpustakaan']+$libraries,$filter['library']);
-            self::select('Ruangan','room',[''=>'Semua ruangan']+array_column($rooms,'room_name','id'),$filter['room']);
+            self::select('Ruangan','room',[''=>'Semua ruangan']+array_column($rooms,'room_label','id'),$filter['room']);
             self::input('Dari tanggal','from',$filter['from'],'date',true); self::input('Sampai tanggal','to',$filter['to'],'date',true);
             if ($tab==='inspections') self::select('Status','inspection_status',[''=>'Semua status','pending'=>'Belum dimulai','draft'=>'Draf','final'=>'Difinalisasi'],$filter['inspection_status']);
             if ($tab==='findings') self::select('Status','finding_status',[''=>'Semua status','open'=>'Terbuka','working'=>'Dikerjakan','review'=>'Menunggu verifikasi','closed'=>'Selesai'],$filter['finding_status']);

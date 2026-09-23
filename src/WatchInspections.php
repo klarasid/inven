@@ -9,7 +9,7 @@ trait WatchInspections
         echo '<div class="table-wrap"><table><thead><tr><th>Tanggal jadwal</th><th>Ruangan</th><th>Jenis / status</th><th>Pelaksanaan</th><th></th></tr></thead><tbody>';
         foreach ($rows as $row) {
             $s=Supervision::decode($row['snapshot']);
-            echo '<tr><td>'.self::e($row['due_date']).'</td><td>'.self::e($s['library_name'].' / '.$s['room_name']).'</td><td>'.($row['kind']==='routine'?'Terjadwal':'Insidental').' / '.self::badge($row['status']).($row['status']!=='final'&&$row['due_date']<date('Y-m-d')?' <strong class="text-danger">Terlambat</strong>':'').'</td><td>'.self::e($row['performed_date']??'—').'<br>'.self::e($row['examiner_name']??'').'</td><td>';self::link('Buka',['tab'=>'inspection','record'=>$row['id']]);self::link('PDF',['tab'=>'pdf','record'=>$row['id']],true);echo '</td></tr>';
+            echo '<tr><td>'.self::e($row['due_date']).'</td><td>'.self::e($s['library_name'].' / '.$s['room_name']).'</td><td>'.($row['kind']==='historical'?'Impor riwayat':($row['kind']==='routine'?'Terjadwal':'Insidental')).' / '.self::badge($row['status']).($row['status']!=='final'&&$row['due_date']<date('Y-m-d')?' <strong class="text-danger">Terlambat</strong>':'').'</td><td>'.self::e($row['performed_date']??'—').'<br>'.self::e($row['examiner_name']??'').'</td><td>';self::link('Buka',['tab'=>'inspection','record'=>$row['id']]);self::link('PDF',['tab'=>'pdf','record'=>$row['id']],true);echo '</td></tr>';
         }
         if (!$rows) echo '<tr><td colspan="5">Belum ada pemeriksaan dalam filter ini.</td></tr>';
         echo '</tbody></table></div>'; self::pagination(self::$tab==='reports'?'reports':'inspections',$filter,$page,count($rows));echo '</div>';
@@ -20,7 +20,7 @@ trait WatchInspections
     }
     private static function inspection(Supervision $watch,int $id,bool $write): void {
         $d=$watch->document($id);$i=$d['inspection'];$s=$d['snapshot'];$editable=$write&&$i['status']!=='final';
-        echo '<div class="watch-card" data-inspection="'.$id.'"><div class="inv-row"><div><h3>Pemeriksaan #'.$id.' · '.self::e($s['room_name']).'</h3><p>'.self::e($s['library_name'].' / '.$s['template_name']).'</p></div><span data-document-status>'.self::badge($i['status']).'</span></div><p>Jadwal '.self::e($i['due_date']).' · '.($i['kind']==='routine'?'Terjadwal':'Insidental').'</p>';
+        echo '<div class="watch-card" data-inspection="'.$id.'"><div class="inv-row"><div><h3>Pemeriksaan #'.$id.' · '.self::e($s['room_name']).'</h3><p>'.self::e($s['library_name'].' / '.$s['template_name']).'</p></div><span data-document-status>'.self::badge($i['status']).'</span></div><p>Jadwal '.self::e($i['due_date']).' · '.($i['kind']==='historical'?'Impor riwayat':($i['kind']==='routine'?'Terjadwal':'Insidental')).'</p>';
         if ($i['reason']) echo '<p>Alasan: '.self::e($i['reason']).'</p>';
         echo '<div class="inv-actions">';
         if($i['parent_id'])self::link('Pemeriksaan asal',['tab'=>'inspection','record'=>$i['parent_id']]);

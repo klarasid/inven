@@ -16,6 +16,8 @@ use SLiMS\Plugins\Inventory\InventoryUi;
 require_once __DIR__ . '/InventoryUi.php';
 require_once __DIR__ . '/Workspace.php';
 require_once __DIR__ . '/WorkspaceRequests.php';
+require_once __DIR__ . '/HistoryWorkbook.php';
+require_once __DIR__ . '/HistoryImport.php';
 
 $canRead=utility::havePrivilege('stock_take','r');
 $canWrite=utility::havePrivilege('stock_take','w');
@@ -47,6 +49,27 @@ try {
         }
         if ($cached=\SLiMS\Plugins\Inventory\WorkspaceRequests::cached('watch')) { echo json_encode($cached); return; }
         $action=(string)($_POST['watch_action']??'');
+        if (in_array($action,['history_preview','history_commit'],true)) {
+            $import=new \SLiMS\Plugins\Inventory\HistoryImport($db,$watch);
+            if ($action==='history_preview') {
+                unset($_SESSION['inventory_history_preview']);
+                $file=$_FILES['workbook']??[];
+                if (!is_array($file) || ($file['error']??UPLOAD_ERR_NO_FILE)!==UPLOAD_ERR_OK || !is_string($file['tmp_name']??null) || !is_uploaded_file($file['tmp_name'])) throw new RuntimeException('Pilih berkas Excel .xlsx maksimal 2 MB.');
+                if (strtolower(pathinfo((string)$file['name'],PATHINFO_EXTENSION))!=='xlsx') throw new RuntimeException('Format yang diterima adalah .xlsx.');
+                $sheets=\SLiMS\Plugins\Inventory\HistoryWorkbook::read($file['tmp_name']);
+                $groups=$import->validate($sheets);
+                $token=bin2hex(random_bytes(32));
+                $_SESSION['inventory_history_preview']=['token'=>$token,'uid'=>(int)$_SESSION['uid'],'expires'=>time()+1800,'sheets'=>$sheets];
+                $data=\SLiMS\Plugins\Inventory\HistoryImport::preview($groups)+['token'=>$token];
+                echo json_encode(['ok'=>true,'data'=>$data]); return;
+            }
+            $preview=$_SESSION['inventory_history_preview']??null;
+            if (!$preview || $preview['uid']!==(int)$_SESSION['uid'] || $preview['expires']<time() || !is_string($_POST['token']??null) || !hash_equals($preview['token'],$_POST['token'])) throw new RuntimeException('Pratinjau berakhir atau berubah. Unggah dan validasi ulang berkas.');
+            $data=$import->save($preview['sheets'],(int)$_SESSION['uid']);
+            unset($_SESSION['inventory_history_preview']);
+            watch_log('Import','Impor riwayat pemeriksaan: '.Supervision::json($data['ids']));
+            echo json_encode(\SLiMS\Plugins\Inventory\WorkspaceRequests::remember('watch',['ok'=>true,'message'=>'Riwayat berhasil diimpor.','data'=>$data])); return;
+        }
         $result=$watch->mutate($action,$_POST,$_FILES['photos']??[],(int)($_SESSION['uid']??0));
         watch_log('Update','Aksi '.$action.'; '.Supervision::json($result));
         $navigation=array_intersect_key($_GET,array_flip(['library','room','from','to','inspection_status','finding_status','return_tab','list_page']));
@@ -57,6 +80,16 @@ try {
         unset($photo);
         echo json_encode(\SLiMS\Plugins\Inventory\WorkspaceRequests::remember('watch',['ok'=>true,'message'=>'Data pengawasan berhasil disimpan.','url'=>InventoryUi::url($navigation),'document'=>$metadata,'generated'=>$result['generated']??0,'more'=>$result['more']??false]));
         return;
+    }
+    if ($tab==='history_template') {
+        $rooms=$watch->query('SELECT l.id,l.room_name,l.slims_location_id,ml.location_name FROM inventory_locations l LEFT JOIN mst_location ml ON ml.location_id=l.slims_location_id ORDER BY ml.location_name,l.room_name,l.id')->fetchAll(PDO::FETCH_NUM);
+        $users=$watch->query('SELECT user_id,realname FROM user ORDER BY realname')->fetchAll(PDO::FETCH_NUM);
+        $items=$watch->query('SELECT id,location_id,item_code,item_name FROM inventory_items ORDER BY location_id,item_name,id')->fetchAll(PDO::FETCH_NUM);
+        $bytes=\SLiMS\Plugins\Inventory\HistoryWorkbook::template($rooms,$users,$items);
+        header('Cache-Control: private, no-store'); header('X-Content-Type-Options: nosniff');
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="template-riwayat-pemeriksaan.xlsx"');
+        echo $bytes; return;
     }
     if ($tab==='photo') {
         header('Cache-Control: private, no-store'); header('X-Content-Type-Options: nosniff');
@@ -75,7 +108,7 @@ try {
         header('Content-Type: application/json; charset=utf-8'); header('Cache-Control: private, no-store');
         echo json_encode(['ok'=>true,'data'=>\SLiMS\Plugins\Inventory\Workspace::read($watch,$_GET,(int)($_SESSION['uid']??0))]); return;
     }
-    if (!in_array($tab,['pdf'],true) && ($_GET['legacy']??'')!=='1') {
+    if (!in_array($tab,['pdf'],true)) {
         $view=$inventoryWorkspaceView??'tasks';
         \SLiMS\Plugins\Inventory\Workspace::shell($view,$canWrite); return;
     }

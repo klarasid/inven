@@ -15,7 +15,7 @@ final class WatchPdf
         if(!$summary['missing_rooms'])$h.='<p>Tidak ada.</p>';
         foreach($summary['missing_rooms']as$room)$h.='<p>'.self::e($room['room_name']).' — '.self::e($room['location_name']??'Tidak ditentukan').'</p>';
         $h.='<h2>Jadwal versus realisasi</h2><table><tr><th>ID / ruangan</th><th>Jenis / jadwal</th><th>Pelaksanaan / pemeriksa</th><th>Status</th></tr>';
-        foreach($rows as$row){$s=Supervision::decode($row['snapshot']);$h.='<tr><td>#'.(int)$row['id'].' '.self::e($s['room_name']).'<br>'.self::e($s['library_name']).'</td><td>'.($row['kind']==='routine'?'Rutin':'Insidental').'<br>'.self::e($row['due_date']).'</td><td>'.self::e($row['performed_date']??'Belum dilaksanakan').'<br>'.self::e($row['examiner_name']??'—').'</td><td>'.self::e(Supervision::STATUSES[$row['status']]).'</td></tr>';}
+        foreach($rows as$row){$s=Supervision::decode($row['snapshot']);$h.='<tr><td>#'.(int)$row['id'].' '.self::e($s['room_name']).'<br>'.self::e($s['library_name']).'</td><td>'.($row['kind']==='routine'?'Rutin':($row['kind']==='incidental'?'Insidental':'Pemeriksaan')).'<br>'.self::e($row['due_date']).'</td><td>'.self::e($row['performed_date']??'Belum dilaksanakan').'<br>'.self::e($row['examiner_name']??'—').'</td><td>'.self::e(Supervision::STATUSES[$row['status']]).'</td></tr>';}
         $h.='</table><h2>Daftar rencana jadwal</h2><table><tr><th>Ruangan / template</th><th>Frekuensi</th><th>Rencana / terbentuk / final</th></tr>';
         foreach($summary['schedules']??[]as$row)$h.='<tr><td>'.self::e($row['room']).'<br>'.self::e($row['template']).'</td><td>'.self::e($row['frequency']).'</td><td>'.$row['planned'].' / '.$row['formed'].' / '.$row['final'].'</td></tr>';
         $h.='</table><h2>Temuan dan tindak lanjut</h2><table><tr><th>Temuan / ruangan</th><th>Penanggung jawab / tenggat</th><th>Status</th></tr>';
@@ -25,7 +25,7 @@ final class WatchPdf
     public static function detail(array $document,callable $readPhoto): string {
         $i=$document['inspection'];$s=$document['snapshot'];
         if(count($document['photos'])>500)throw new \RuntimeException('Detail memiliki lebih dari 500 foto. Hubungi administrator untuk ekspor arsip.');
-        $h=self::style().'<h1>Dokumen Pemeriksaan #'.(int)$i['id'].'</h1><p>'.self::e($s['library_name'].' — '.$s['room_name']).'</p><p>Checklist: '.self::e($s['template_name']).' · Status: '.self::e(Supervision::STATUSES[$i['status']]).'</p><p>Jenis: '.($i['kind']==='routine'?'Terjadwal':'Insidental').' · Jadwal: '.self::e($i['due_date']).' · Pelaksanaan: '.self::e($i['performed_date']??'—').'</p><p>Pemeriksa: '.self::e($i['examiner_name']??'—').'</p><p>'.nl2br(self::e($i['reason'])).'</p><p>'.nl2br(self::e($i['notes'])).'</p>';
+        $h=self::style().'<h1>Dokumen Pemeriksaan #'.(int)$i['id'].'</h1><p>'.self::e($s['library_name'].' — '.$s['room_name']).'</p><p>Checklist: '.self::e($s['template_name']).' · Status: '.self::e(Supervision::STATUSES[$i['status']]).'</p><p>Jenis: '.($i['kind']==='routine'?'Terjadwal':($i['kind']==='incidental'?'Insidental':'Pemeriksaan')).' · Jadwal: '.self::e($i['due_date']).' · Pelaksanaan: '.self::e($i['performed_date']??'—').'</p><p>Pemeriksa: '.self::e($i['examiner_name']??'—').'</p><p>'.nl2br(self::e($i['reason'])).'</p><p>'.nl2br(self::e($i['notes'])).'</p>';
         if($i['parent_id'])$h.='<p>Pemeriksaan ulang dari #'.(int)$i['parent_id'].'</p>';
         $photos=function(?int $result,?int $action)use($document,$readPhoto):string{
             $html='';

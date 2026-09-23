@@ -223,3 +223,30 @@ php tests/watch_integration_test.php
 ```
 
 Tes integrasi memerlukan `INVENTORY_TEST_DSN`, `INVENTORY_TEST_USER`, dan `INVENTORY_TEST_PASSWORD`. Tes menggunakan tabel berawalan acak `iw_test_*` dan membersihkannya setelah selesai; jangan menjalankan dengan awalan milik proses tes lain. Untuk pengujian browser fixture, lihat `tests/watch_ui_browser_test.cjs`.
+
+## Impor riwayat pemeriksaan dan pekerjaan
+
+Buka **Tugas → Impor riwayat → Unduh template Excel**. Template dari aplikasi memuat ID ruang beserta lokasi perpustakaan, petugas, dan barang terbaru. Template kosong juga tersedia di `templates/template-riwayat-pemeriksaan.xlsx`.
+
+1. Isi **Pemeriksaan**: satu baris per butir, dengan `nomor_pemeriksaan` yang sama untuk satu kegiatan. `nomor_butir` unik dalam kegiatan. Tanggal, ID ruang, ID pemeriksa, dan nama checklist harus konsisten untuk setiap nomor pemeriksaan. ID barang opsional dan harus berada di ruangan tersebut.
+2. Isi **Tindak_lanjut** untuk perbaikan/pemeliharaan yang sudah dilaksanakan. Hubungkan dengan pasangan `nomor_pemeriksaan` dan `nomor_butir` yang memiliki hasil **Perlu tindakan**. Satu baris merangkum pekerjaan pada satu butir. Jika belum ada pekerjaan, biarkan lembar ini kosong.
+3. Jika pekerjaan sudah diverifikasi pada masa lalu, isi ketiga kolom `id_verifikator`, `tanggal_verifikasi`, dan `catatan_verifikasi`. Jika kosong, pekerjaan masuk **Menunggu verifikasi**. Temuan tanpa pekerjaan tetap **Terbuka**.
+4. Unggah `.xlsx`, klik **Validasi berkas**, periksa pratinjau, lalu **Simpan impor**. Pratinjau berlaku 30 menit dan terikat sesi pengguna. Server memvalidasi ulang saat menyimpan. Semua baris disimpan dalam satu transaksi; kesalahan membatalkan seluruh berkas. Nomor pemeriksaan yang pernah diimpor (tanpa membedakan huruf besar/kecil) ditolak, termasuk unggahan ulang dari sesi berbeda.
+5. Hasil terlihat pada **Tugas → Filter → Riwayat**, pilih **Semua tugas** untuk melihat pekerjaan petugas lain. Laporan mengikuti tanggal pemeriksaan asli; ubah periode laporan sesuai data lama.
+
+Tanggal memakai `YYYY-MM-DD` atau tanggal Excel sistem 1900. Biaya berupa angka tanpa pemisah ribuan atau `Rp`, dengan maksimal dua desimal. Batas: 2 MB, 100 pemeriksaan, 500 butir, 100 butir per pemeriksaan, dan 500 tindakan. File contoh pada lembar `Contoh_*` tidak diimpor. Isi lembar data dengan catatan asli, bukan nilai contoh.
+
+Impor tidak membuat jadwal berulang atau template checklist baru. Dokumen diberi jenis **Impor riwayat** sehingga tidak menambah perhitungan cakupan pemeriksaan rutin. Tanggal dan identitas pelaksana asli dipertahankan; waktu pencatatan dan pengimpor tercatat terpisah dalam audit. Foto tidak diimpor; kolom `referensi_bukti` menyimpan rujukan arsip sebagai teks dan tidak mengunduh URL. Jalur impor historis menerima arsip pekerjaan tanpa foto digital; persyaratan foto pada alur pekerjaan biasa tetap berlaku.
+
+Memerlukan PHP `zip` dan `SimpleXML` (tersedia pada server aplikasi), tanpa tambahan paket frontend atau migrasi database baru. Pemeriksaan keamanan memakai hak akses `stock_take`, CSRF, validasi struktur XLSX, batas ukuran hasil dekompresi, dan penolakan rumus/makro pada workbook. Berkas unggahan dibaca dari penyimpanan sementara PHP dan tidak diterbitkan.
+
+Pengujian:
+
+```sh
+php tests/history_workbook_test.php
+php tests/history_import_test.php
+cd frontend
+npm run build
+```
+
+Tes integrasi membutuhkan `INVENTORY_TEST_DSN`, `INVENTORY_TEST_USER`, `INVENTORY_TEST_PASSWORD`, PDO MySQL, cURL, dan izin membuat tabel/trigger. Tes memakai tabel sementara berawalan acak `ih_test_*`, tidak mengubah tabel aplikasi, dan membersihkan fixture setelah selesai.
