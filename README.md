@@ -173,6 +173,18 @@ Untuk kerusakan mendadak (misalnya komputer staf mati), gunakan **Tugas → Lapo
 - Jika penangan adalah pelapor sendiri dan masalah sudah ditangani, aktifkan **Sudah saya tangani sekarang**: pekerjaan dicatat dan laporan langsung selesai dengan verifikasi atas nama pelapor.
 - Di belakang layar laporan disimpan sebagai pemeriksaan insidental satu butir bertanda **Perlu tindakan**, sehingga tetap masuk riwayat, laporan periode, dan PDF.
 
+### Label barang dengan QR code
+
+Klik **Cetak label** pada halaman ruangan untuk mencetak label semua barang di ruangan, atau centang barang tertentu lalu klik **Cetak label terpilih**. Label satu barang juga tersedia dari tombol **Label** pada panel detail barang.
+
+- Ukuran: **A4 3×8** (64×34 mm, setara Avery L7159), **A4 2×7** (99×38 mm, setara Avery L7163), atau **stiker 50×30 mm** untuk printer label (satu label per halaman).
+- **Mulai dari label ke-**: klik kotak pertama yang masih kosong pada gambar lembar, sehingga lembar yang sudah terpakai sebagian dapat digunakan lagi.
+- Label memuat nama institusi, nama barang, kode barang, ruangan, dan lokasi. Barang tanpa kode dicetak dengan ID-nya.
+- QR code berisi tautan pendek `…/admin/plugin_container.php?…&qr=<id barang>`. Setelah masuk ke SLiMS, pemindaian membuka detail barang di ruangannya dalam tampilan ponsel, termasuk tombol **Laporkan kerusakan**. Jika barang sudah dihapus, halaman menampilkan pemberitahuan.
+- Cetak PDF dengan skala **100%** (nonaktifkan "sesuaikan ke halaman") agar label tepat pada lembar. Maksimal 500 label per cetak.
+
+Fitur ini memerlukan paket `mpdf/qrcode` (sudah tercantum di `composer.json`). Pada instalasi yang sudah berjalan, jalankan kembali `composer install --no-dev` dari direktori plugin.
+
 ### Format PDF laporan
 
 Laporan periode dan dokumen pemeriksaan/laporan kerusakan dapat dicetak dalam dua format melalui menu **Cetak PDF**:

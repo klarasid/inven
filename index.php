@@ -6,7 +6,11 @@ defined('INDEX_AUTH') || die('Direct access not allowed!');
 if (isset($_GET['action']) && $_GET['action'] === 'print_pdf') {
     require __DIR__ . '/print.php';
     exit;
-}    
+}
+if (isset($_GET['action']) && $_GET['action'] === 'print_labels') {
+    require __DIR__ . '/labels.php';
+    exit;
+}
 
 require LIB . 'ip_based_access.inc.php';
 do_checkIP('smc');
@@ -176,6 +180,22 @@ if (empty($_SESSION['inventory_csrf'])) {
 $csrf = (string) $_SESSION['inventory_csrf'];
 require_once __DIR__ . '/src/Workspace.php';
 require_once __DIR__ . '/src/WorkspaceRequests.php';
+// A scanned item label (?qr=<item id>) opens that item in its room, as a standalone mobile page.
+$scannedItem = filter_input(INPUT_GET, 'qr', FILTER_VALIDATE_INT);
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && $scannedItem) {
+    $statement = $db->prepare('SELECT location_id FROM inventory_items WHERE id = ?');
+    $statement->execute([$scannedItem]);
+    $scannedRoom = $statement->fetchColumn();
+    echo '<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Inventaris Barang</title><style>body{margin:0;background:#fff;font-family:system-ui,sans-serif}</style></head><body>';
+    if ($scannedRoom === false) {
+        echo '<p style="padding:24px">Barang dengan label ini tidak ditemukan. Barang mungkin sudah dihapus dari inventaris.</p></body></html>';
+        return;
+    }
+    $_GET = ['mod' => $_GET['mod'] ?? 'stock_take', 'id' => $_GET['id'] ?? '', 'action' => 'view_photos', 'record_id' => (string) $scannedItem, 'location_id' => (string) $scannedRoom];
+    \SLiMS\Plugins\Inventory\Workspace::shell('inventory', $canWrite);
+    echo '</body></html>';
+    return;
+}
 if ($_SERVER['REQUEST_METHOD']==='GET' && ($_GET['legacy']??'')!=='1') {
     \SLiMS\Plugins\Inventory\Workspace::shell('inventory',$canWrite); return;
 }

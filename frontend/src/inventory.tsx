@@ -16,6 +16,8 @@ import {
   Boxes,
   FileText,
   ChevronDown,
+  QrCode,
+  X,
 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
@@ -25,6 +27,8 @@ import { FieldGroup, Field, FieldLabel, FieldDescription } from "./components/ui
 import { ToggleGroup, ToggleGroupItem } from "./components/ui/toggle-group";
 import { Separator } from "./components/ui/separator";
 import { Input } from "./components/ui/input";
+import { Checkbox } from "./components/ui/checkbox";
+import { LabelDialog } from "./labels";
 import {
   Dialog,
   DialogContent,
@@ -306,6 +310,17 @@ function RoomItems() {
   const { data, error, loading } = useData<Page<Values>>("items", params);
   const [selected, setSelected] = useState<Values>();
   const [deleteRoom, setDeleteRoom] = useState<Values>();
+  // Items ticked for label printing, kept across pages of this room: id -> name.
+  const [picked, setPicked] = useState<Record<string, string>>({});
+  const [labelItems, setLabelItems] = useState<{ id: string; name: string }[] | null | undefined>(undefined);
+  const pickedCount = Object.keys(picked).length;
+  const toggle = (id: string, name: string) =>
+    setPicked((p) => {
+      const { [id]: had, ...rest } = p;
+      return had === undefined ? { ...p, [id]: name } : rest;
+    });
+  const pageIds = (data?.rows || []).map((r) => String(r.id));
+  const allOnPage = pageIds.length > 0 && pageIds.every((id) => picked[id] !== undefined);
   const info = data?.room;
   const counts = data?.conditions || {};
   const total = Object.values(counts).reduce((n, v) => n + Number(v), 0);
@@ -330,6 +345,10 @@ function RoomItems() {
         }
         actions={
           <>
+            <Button variant="outline" onClick={() => setLabelItems(null)}>
+              <QrCode data-icon="inline-start" />
+              Cetak label
+            </Button>
             <KirMenu room={room} />
             {w.config.write && (
               <>
@@ -382,6 +401,23 @@ function RoomItems() {
         />
       </div>
       <SearchBox placeholder="Cari nama, kode, atau merk barang…" />
+      {pickedCount > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2">
+          <span className="text-sm font-medium">{pickedCount} barang dipilih</span>
+          <Button
+            size="sm"
+            className="ml-auto"
+            onClick={() => setLabelItems(Object.entries(picked).map(([id, name]) => ({ id, name })))}
+          >
+            <QrCode data-icon="inline-start" />
+            Cetak label terpilih
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setPicked({})}>
+            <X data-icon="inline-start" />
+            Batalkan pilihan
+          </Button>
+        </div>
+      )}
       <ErrorBox message={error} />
       {loading && !data ? (
         <Loading />
@@ -408,6 +444,22 @@ function RoomItems() {
             <Table>
               <TableHeader className="bg-muted/50">
                 <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      aria-label="Pilih semua barang di halaman ini"
+                      checked={allOnPage}
+                      onCheckedChange={(on) =>
+                        setPicked((p) => {
+                          const next = { ...p };
+                          for (const r of data.rows) {
+                            if (on) next[String(r.id)] = String(r.item_name);
+                            else delete next[String(r.id)];
+                          }
+                          return next;
+                        })
+                      }
+                    />
+                  </TableHead>
                   <TableHead className="w-14">
                     <span className="sr-only">Foto</span>
                   </TableHead>
@@ -422,7 +474,19 @@ function RoomItems() {
               </TableHeader>
               <TableBody>
                 {data.rows.map((r) => (
-                  <TableRow key={String(r.id)} className="cursor-pointer" onClick={() => openItem(r.id)}>
+                  <TableRow
+                    key={String(r.id)}
+                    className="cursor-pointer"
+                    data-state={picked[String(r.id)] !== undefined ? "selected" : undefined}
+                    onClick={() => openItem(r.id)}
+                  >
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        aria-label={`Pilih ${r.item_name}`}
+                        checked={picked[String(r.id)] !== undefined}
+                        onCheckedChange={() => toggle(String(r.id), String(r.item_name))}
+                      />
+                    </TableCell>
                     <TableCell>
                       <div className="flex size-10 items-center justify-center overflow-hidden rounded-md border bg-muted">
                         {r.photo_url ? (
@@ -487,6 +551,13 @@ function RoomItems() {
           w.refresh();
         }}
       />
+      <LabelDialog
+        open={labelItems !== undefined}
+        onOpenChange={(open) => !open && setLabelItems(undefined)}
+        room={room}
+        items={labelItems || undefined}
+        total={Object.values(counts).reduce((n, v) => n + Number(v), 0)}
+      />
       <DeleteDialog
         kind="room"
         target={deleteRoom}
@@ -526,6 +597,7 @@ function ItemSheetBody({ record, onDelete }: { record: string; onDelete: (r: Val
   const w = useWorkspace();
   const { data, error } = useData<{ record: Values; photos: Photo[] }>("item", { record });
   const item = data?.record;
+  const [label, setLabel] = useState(false);
   return (
     <>
       <SheetHeader className="border-b">
@@ -543,6 +615,15 @@ function ItemSheetBody({ record, onDelete }: { record: string; onDelete: (r: Val
         <ErrorBox message={error} />
         {data ? <ItemDetails record={data.record} photos={data.photos} /> : !error && <Loading />}
       </div>
+      {item && (
+        <LabelDialog
+          open={label}
+          onOpenChange={setLabel}
+          room={String(item.location_id)}
+          items={[{ id: String(item.id), name: String(item.item_name) }]}
+          total={1}
+        />
+      )}
       {item && w.config.write && (
         <SheetFooter className="flex-row flex-wrap border-t">
           <Button
@@ -552,6 +633,10 @@ function ItemSheetBody({ record, onDelete }: { record: string; onDelete: (r: Val
           >
             <TriangleAlert data-icon="inline-start" />
             Laporkan kerusakan
+          </Button>
+          <Button variant="outline" onClick={() => setLabel(true)}>
+            <QrCode data-icon="inline-start" />
+            Label
           </Button>
           <Button
             variant="outline"
