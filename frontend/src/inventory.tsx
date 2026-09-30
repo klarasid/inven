@@ -795,6 +795,19 @@ function InventoryEditor({ record, photos: initialPhotos = [] }: { record?: Valu
       setBusy(false);
     }
   }
+  async function roomCode() {
+    setBusy(true);
+    setError("");
+    try {
+      const response = await w.mutate({ form_action: "suggest_location_code", slims_location_id: values.slims_location_id }, undefined, true);
+      update("location_code", response.code!);
+      setConfirmCode(false);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
   async function save() {
     if (lock.current) return;
     const errors: Record<string, string> = {};
@@ -974,9 +987,31 @@ function InventoryEditor({ record, photos: initialPhotos = [] }: { record?: Valu
                     items={w.options.libraries.map((x) => ({ value: x.location_id, label: x.location_name }))}
                     description="Dipakai untuk pembuatan kode barang otomatis dan filter."
                   />
-                  {text("location_code", "Nomor kode lokasi kartu", {
-                    description: "Boleh sama dengan ruangan lain di lokasi yang sama.",
-                  })}
+                  <Field data-invalid={!!errors.location_code}>
+                    <FieldLabel htmlFor="room-code">Kode ruangan</FieldLabel>
+                    <div className="flex gap-2">
+                      <Input
+                        id="room-code"
+                        className="tabular-nums"
+                        placeholder="Contoh: 00-RUANG-001"
+                        value={String(values.location_code ?? "")}
+                        onChange={(e) => update("location_code", e.target.value)}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={!values.slims_location_id}
+                        title={values.slims_location_id ? undefined : "Pilih lokasi perpustakaan dulu"}
+                        onClick={() => (values.location_code ? setConfirmCode(true) : roomCode())}
+                      >
+                        <Wand2 data-icon="inline-start" />
+                        Buat otomatis
+                      </Button>
+                    </div>
+                    <FieldDescription>
+                      Pola {"{kode lokasi}"}-RUANG-{"{nomor}"}, mis. 00-RUANG-001. Dicetak sebagai No. kode lokasi pada KIR.
+                    </FieldDescription>
+                  </Field>
                 </FieldGroup>
               </Panel>
               <Panel title="Wilayah dan unit" description="Tercetak di kepala KIR.">
@@ -1019,16 +1054,16 @@ function InventoryEditor({ record, photos: initialPhotos = [] }: { record?: Valu
       <Dialog open={confirmCode} onOpenChange={setConfirmCode}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Ganti kode barang?</DialogTitle>
+            <DialogTitle>Ganti kode {item ? "barang" : "ruangan"}?</DialogTitle>
             <DialogDescription>
-              Kode saat ini akan diganti dengan nomor baru dari perpustakaan ruangan yang dipilih.
+              Kode saat ini akan diganti dengan nomor berikutnya dari lokasi perpustakaan yang dipilih.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmCode(false)}>
               Batal
             </Button>
-            <Button disabled={busy} onClick={code}>
+            <Button disabled={busy} onClick={item ? code : roomCode}>
               Buat kode baru
             </Button>
           </DialogFooter>

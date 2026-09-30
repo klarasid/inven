@@ -12,9 +12,11 @@ import {
   Repeat,
   StopCircle,
   User,
+  UserCog,
   Building2,
 } from "lucide-react";
 import { Button } from "./components/ui/button";
+import { Checkbox } from "./components/ui/checkbox";
 import { Badge } from "./components/ui/badge";
 import { Card, CardContent } from "./components/ui/card";
 import { Input } from "./components/ui/input";
@@ -48,11 +50,92 @@ import {
 } from "./shared";
 import type { Schedule, Template, ChecklistItem, Page, Id } from "./types";
 
+/**
+ * Changes a schedule's assignee in place (no new schedule version). Inspections formed from now on go
+ * to the new assignee; ticking the option also moves inspections already formed but not yet started.
+ */
+function AssigneeDialog({ schedule, onClose }: { schedule?: Schedule; onClose: () => void }) {
+  const w = useWorkspace();
+  const [assignee, setAssignee] = useState("");
+  const [pending, setPending] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (schedule) {
+      setAssignee(String(schedule.assignee_id));
+      setPending(true);
+      setError("");
+    }
+  }, [schedule?.id]);
+  const name = w.options.users.find((u) => String(u.user_id) === assignee)?.realname;
+  return (
+    <Dialog open={!!schedule} onOpenChange={(open) => !open && !busy && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Ganti petugas {schedule?.snapshot.room_name}</DialogTitle>
+          <DialogDescription>
+            Petugas saat ini: {schedule?.assignee_name}. Jadwal lain tidak berubah, dan pemeriksaan yang sudah dikerjakan tetap tercatat atas nama petugasnya.
+          </DialogDescription>
+        </DialogHeader>
+        <ErrorBox message={error} />
+        <Choice
+          label="Petugas baru"
+          value={assignee}
+          onChange={setAssignee}
+          items={w.options.users.map((u) => ({ value: u.user_id, label: u.realname }))}
+        />
+        <label className="flex items-start gap-2 text-sm">
+          <Checkbox checked={pending} onCheckedChange={(v) => setPending(v === true)} className="mt-0.5" />
+          <span>
+            Alihkan juga pemeriksaan yang sudah terbentuk tetapi <b>belum dimulai</b>
+            <span className="block text-xs text-muted-foreground">Tanpa ini, hanya pemeriksaan berikutnya yang menjadi tugas petugas baru.</span>
+          </span>
+        </label>
+        <DialogFooter>
+          <Button variant="outline" disabled={busy} onClick={onClose}>
+            Batal
+          </Button>
+          <Button
+            disabled={busy || !assignee || assignee === String(schedule?.assignee_id)}
+            onClick={async () => {
+              if (!schedule) return;
+              setBusy(true);
+              setError("");
+              try {
+                const reply = await w.mutate({
+                  watch_action: "schedule_assignee",
+                  id: schedule.id,
+                  version: schedule.version,
+                  assignee_id: assignee,
+                  include_pending: pending ? "1" : "",
+                });
+                toast.success(
+                  `Petugas diganti ke ${name}` + (reply.generated ? `; ${reply.generated} pemeriksaan belum dimulai ikut dialihkan.` : "."),
+                );
+                onClose();
+                w.refresh();
+              } catch (e) {
+                setError((e as Error).message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <UserCog data-icon="inline-start" />
+            Ganti petugas
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function SetupList() {
   const w = useWorkspace();
   const schedule = w.route.view === "schedules";
   const { data, error, loading } = useData<Page<Schedule | Template>>(schedule ? "schedules" : "templates", w.route);
   const [stop, setStop] = useState<Schedule>();
+  const [reassign, setReassign] = useState<Schedule>();
   const [effective, setEffective] = useState(w.config.today);
   const [busy, setBusy] = useState(false);
   const [stopError, setStopError] = useState("");
@@ -186,6 +269,7 @@ export function SetupList() {
                               <Actions
                                 items={[
                                   { label: "Lihat detail", icon: Eye, run: () => w.go({ view: "schedule-detail", record: s.id }) },
+                                  { label: "Ganti petugas", icon: UserCog, run: () => setReassign(s) },
                                   {
                                     label: "Ganti jadwal",
                                     icon: Repeat,
@@ -311,6 +395,7 @@ export function SetupList() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <AssigneeDialog schedule={reassign} onClose={() => setReassign(undefined)} />
     </>
   );
 }
@@ -520,6 +605,7 @@ export function SchedulePage() {
 function ExistingSchedule() {
   const w = useWorkspace();
   const { data, error } = useData<Schedule>("schedule", { record: w.route.replaces_id || w.route.record });
+  const [reassign, setReassign] = useState(false);
   if (error) return <ErrorBox message={error} />;
   if (!data) return <Loading />;
   if (w.route.view !== "schedule-detail") return <ScheduleEditor previous={data} />;
@@ -550,13 +636,20 @@ function ExistingSchedule() {
         actions={
           w.config.write &&
           active && (
-            <Button variant="outline" onClick={() => w.go({ view: "schedule-edit", replaces_id: data.id })}>
-              <Repeat data-icon="inline-start" />
-              Ganti jadwal
-            </Button>
+            <>
+              <Button variant="outline" onClick={() => setReassign(true)}>
+                <UserCog data-icon="inline-start" />
+                Ganti petugas
+              </Button>
+              <Button variant="outline" onClick={() => w.go({ view: "schedule-edit", replaces_id: data.id })}>
+                <Repeat data-icon="inline-start" />
+                Ganti jadwal
+              </Button>
+            </>
           )
         }
       />
+      <AssigneeDialog schedule={reassign ? data : undefined} onClose={() => setReassign(false)} />
       <Panel title="Butir yang diperiksa" description={`${data.snapshot.items.length} butir`}>
         <ol className="flex flex-col divide-y">
           {data.snapshot.items.map((i, n) => (
@@ -582,8 +675,15 @@ type Scope = { items: ChecklistItem[]; assets: { id: Id; item_name: string; item
 function ScheduleEditor({ previous }: { previous?: Schedule }) {
   const w = useWorkspace();
   const incidental = w.route.view === "new-inspection";
+  // A replacement must start after the old schedule's start and not in the past: default to the later of
+  // tomorrow and the day after the old start (schedules that have not begun yet start in the future).
   const tomorrow = new Date(w.config.today + "T12:00:00");
   tomorrow.setDate(tomorrow.getDate() + 1);
+  if (previous) {
+    const afterOld = new Date(previous.start_date + "T12:00:00");
+    afterOld.setDate(afterOld.getDate() + 1);
+    if (afterOld > tomorrow) tomorrow.setTime(afterOld.getTime());
+  }
   const tomorrowString = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}`;
   const [values, setValues] = useState({
     location_id: String(previous?.location_id || w.route.room || ""),
@@ -597,6 +697,7 @@ function ScheduleEditor({ previous }: { previous?: Schedule }) {
   const [mapping, setMapping] = useState<string[]>(previous?.snapshot.items.map((i) => String(i.item_id || "")) || []);
   const [scope, setScope] = useState<Scope>();
   const [dates, setDates] = useState<string[]>([]);
+  const [moved, setMoved] = useState<Record<string, { from: string; reason: string | null }>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -627,8 +728,11 @@ function ScheduleEditor({ previous }: { previous?: Schedule }) {
     if (incidental || !values.start_date || !values.frequency) return;
     const controller = new AbortController();
     const timer = setTimeout(() => {
-      read<{ dates: string[] }>(w.config, "preview", values, controller.signal)
-        .then((r) => setDates(r.dates))
+      read<{ dates: string[]; moved: Record<string, { from: string; reason: string | null }> }>(w.config, "preview", values, controller.signal)
+        .then((r) => {
+          setDates(r.dates);
+          setMoved(r.moved || {});
+        })
         .catch(() => {});
     }, 250);
     return () => {
@@ -875,15 +979,34 @@ function ScheduleEditor({ previous }: { previous?: Schedule }) {
                     <dt className="mb-1 text-xs text-muted-foreground">Tanggal pemeriksaan berikutnya</dt>
                     <dd className="flex flex-wrap gap-1.5">
                       {dates.length ? (
-                        dates.map((date) => (
-                          <Badge variant="outline" key={date}>
-                            {dateLabel(date)}
-                          </Badge>
-                        ))
+                        dates.map((date) =>
+                          moved[date] ? (
+                            <Badge
+                              variant="warning"
+                              key={date}
+                              title={`Digeser dari ${dateLabel(moved[date].from)} (${moved[date].reason || "hari libur"})`}
+                            >
+                              {dateLabel(date)}*
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" key={date}>
+                              {dateLabel(date)}
+                            </Badge>
+                          ),
+                        )
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
                     </dd>
+                    {Object.keys(moved).length > 0 && (
+                      <p className="mt-1.5 text-xs text-muted-foreground">
+                        * Digeser ke hari kerja berikutnya karena libur:{" "}
+                        {Object.values(moved)
+                          .map((m) => `${dateLabel(m.from)} (${m.reason || "libur"})`)
+                          .join(", ")}
+                        .
+                      </p>
+                    )}
                   </div>
                 </>
               )}

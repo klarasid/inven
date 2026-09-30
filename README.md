@@ -46,6 +46,7 @@ Workflow `.github/workflows/release.yml` menjalankan `tools/release.sh package` 
 - Klik **Tambah Lokasi** untuk mencatat ruangan dan identitas yang akan tampil pada kartu inventaris.
 - Beberapa ruangan dapat menggunakan **Lokasi Perpustakaan** dan **No. Kode Lokasi Kartu** yang sama. Barang tetap dicatat terpisah berdasarkan ruangan.
 - Klik **Lihat Barang** pada ruangan untuk membuka daftar barang di dalamnya.
+- **Kode ruangan** mengikuti pola `{kode lokasi perpustakaan}-RUANG-{nomor urut 3 digit}`, misalnya `00-RUANG-001`, selaras dengan kode barang `00-INV-000001`. Pada form ruangan, klik **Buat otomatis** untuk mengisi nomor berikutnya dari lokasi perpustakaan yang dipilih. Kode ini dicetak sebagai *No. kode lokasi* pada KIR.
 
 ### Barang dalam ruangan
 
@@ -229,6 +230,12 @@ Laporan periode dan dokumen pemeriksaan/laporan kerusakan dapat dicetak dalam du
 - **Dokumen ISO**: kotak kepala dokumen terkendali di setiap halaman (institusi, judul, nomor dokumen, revisi, tanggal terbit, halaman), bagian bernomor, tabel bergaris penuh, dan tabel pengesahan (nama, jabatan, tanda tangan, tanggal).
 
 Nomor dokumen, revisi, dan tanggal terbit diatur per jenis dokumen melalui **Laporan → Pengaturan dokumen** (memerlukan hak tulis) dan disimpan di tabel `setting` SLiMS (`inventory_pdf_documents`). Format nomor dapat memuat penanda `{id}` (5 digit), `{tahun}`, `{bulan}`, `{romawi}` (bulan dalam angka Romawi), serta `{dari}` dan `{sampai}` untuk laporan periode, misalnya `FRM-SARPRAS-03/{romawi}/{tahun}/{id}`. Tanggal terbit yang dikosongkan memakai tanggal dokumen. Bawaan: `LAP-SARPRAS/{dari}-{sampai}`, `PMR-{id}`, `LK-{id}`, revisi `00`. Huruf **CMU Serif** (Computer Modern Unicode) disertakan di `assets/fonts/cmu` dengan lisensi SIL Open Font License (`OFL.txt`). Kartu Inventaris Ruangan tetap memakai template **Klasik** atau **Modern** yang dipilih dari menu **Cetak KIR**.
+
+### Hari libur
+
+Jadwal mengikuti data hari libur SLiMS (**Sistem → Hari Libur**): libur mingguan (misalnya Sabtu dan Minggu) dan libur bertanggal. Pemeriksaan yang jatuh pada hari libur digeser ke hari kerja berikutnya; untuk jadwal harian, hari libur dilewati. Aturan yang sama dipakai saat membentuk tugas, pada pratinjau tanggal di form jadwal (tanggal yang digeser diberi tanda * beserta alasannya), dan pada proyeksi laporan. Pemeriksaan yang sudah terbentuk tidak dipindahkan bila data libur diubah kemudian, jadi isi libur nasional tahun berjalan sebelum jadwal jatuh tempo.
+
+Petugas jadwal dapat diganti melalui **Ganti petugas** tanpa membuat versi jadwal baru; pemeriksaan yang sudah terbentuk tetapi belum dimulai dapat ikut dialihkan.
 
 ### Versi jadwal dan histori
 

@@ -236,7 +236,11 @@ try {
         $now = date('Y-m-d H:i:s');
         $uid = isset($_SESSION['uid']) ? (int) $_SESSION['uid'] : null;
 
-        if ($postAction === 'reserve_item_code') {
+        if ($postAction === 'suggest_location_code') {
+            require_once __DIR__ . '/src/RoomCodes.php';
+            $reservedCode = \SLiMS\Plugins\Inventory\RoomCodes::next($db, inventory_post('slims_location_id'));
+            $message = 'Kode ruangan berhasil dibuat.';
+        } elseif ($postAction === 'reserve_item_code') {
             $owner = \SLiMS\Plugins\Inventory\ItemCodes::owner(inventory_post('code_form_token'), session_id());
             $db->beginTransaction();
             $reservedCode = \SLiMS\Plugins\Inventory\ItemCodes::reserve($db, (int) ($_POST['location_id'] ?? 0), $owner);

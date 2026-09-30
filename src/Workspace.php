@@ -22,6 +22,11 @@ final class Workspace
         echo '<div data-inventory-app data-version="'.htmlspecialchars($version,ENT_QUOTES,'UTF-8').'" data-config="'.htmlspecialchars(json_encode($config,JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT),ENT_QUOTES,'UTF-8').'" data-css="'.htmlspecialchars($asset.'inventory-app.css?v='.$version,ENT_QUOTES,'UTF-8').'"><p role="status">Memuat inventaris…</p></div>';
         echo '<script>(function(){var s=document.createElement("script");s.src='.json_encode($asset.'inventory-app.js?v='.$version).';document.head.appendChild(s);s.onload=function(){s.remove()};s.onerror=function(){document.querySelectorAll("[data-inventory-app]").forEach(function(e){if(!e.shadowRoot)e.textContent="Aplikasi gagal dimuat. Muat ulang halaman."})}})();</script>';
     }
+    /** LIKE patterns for a snapshot's assignee id, as a quoted string (pre-PHP 8.1 data) or a JSON integer. */
+    private static function assigneeLike(int $uid): array
+    {
+        return ['%"assignee":{"id":"'.$uid.'",%','%"assignee":{"id":'.$uid.',%'];
+    }
     private static function page(Supervision $w,string $select,string $from,array $args,int $page,string $order): array
     {
         $total=(int)$w->query('SELECT COUNT(*) '.$from,$args)->fetchColumn();
@@ -51,7 +56,8 @@ final class Workspace
             if($kind==='inspections') {
                 $where[]=$history?"i.status='final'":"i.status<>'final'";
                 // JSON_EXTRACT is unavailable on MySQL 5.6, match the encoded assignee id in the raw snapshot instead.
-                if($mine){$where[]='i.snapshot LIKE ?';$args[]='%"assignee":{"id":"'.$uid.'",%';}
+                // The id is a string in snapshots written before PHP 8.1 and an integer after (PDO MySQL returns native ints).
+                if($mine){$where[]='(i.snapshot LIKE ? OR i.snapshot LIKE ?)';array_push($args,...self::assigneeLike($uid));}
                 $result=self::page($w,'i.*','FROM inventory_watch_inspections i WHERE '.implode(' AND ',$where),$args,$page,$history?'i.due_date DESC,i.id DESC':'i.due_date,i.id');
             } else {
                 $where[]=$kind==='review'?"f.status='review'":($history?"f.status='closed'":"f.status IN ('open','working')");
@@ -64,9 +70,8 @@ final class Workspace
             return $result;
         }
         if($resource==='counts') {
-            $mine='%"assignee":{"id":"'.$uid.'",%';
             $count=fn(string $sql,array $args=[])=>(int)$w->query($sql,$args)->fetchColumn();
-            return ['inspections'=>['mine'=>$count("SELECT COUNT(*) FROM inventory_watch_inspections WHERE status<>'final' AND snapshot LIKE ?",[$mine]),'all'=>$count("SELECT COUNT(*) FROM inventory_watch_inspections WHERE status<>'final'")],
+            return ['inspections'=>['mine'=>$count("SELECT COUNT(*) FROM inventory_watch_inspections WHERE status<>'final' AND (snapshot LIKE ? OR snapshot LIKE ?)",self::assigneeLike($uid)),'all'=>$count("SELECT COUNT(*) FROM inventory_watch_inspections WHERE status<>'final'")],
                 'findings'=>['mine'=>$count("SELECT COUNT(*) FROM inventory_watch_findings WHERE status IN ('open','working') AND assignee_id=?",[$uid]),'all'=>$count("SELECT COUNT(*) FROM inventory_watch_findings WHERE status IN ('open','working')")],
                 'review'=>['mine'=>$count("SELECT COUNT(*) FROM inventory_watch_findings f JOIN inventory_watch_inspections i ON i.id=f.inspection_id WHERE f.status='review' AND (i.examiner_id=? OR NOT EXISTS(SELECT 1 FROM user u WHERE u.user_id=i.examiner_id))",[$uid]),'all'=>$count("SELECT COUNT(*) FROM inventory_watch_findings WHERE status='review'")],
                 'history'=>$count("SELECT COUNT(*) FROM inventory_watch_inspections WHERE status='final'"),
@@ -143,8 +148,15 @@ final class Workspace
             $t=$w->row('templates',(int)($g['template_id']??0));return ['items'=>Supervision::decode($t['items']),'assets'=>$w->query('SELECT id,item_name,item_code FROM inventory_items WHERE location_id=? ORDER BY item_name',[$room])->fetchAll(\PDO::FETCH_ASSOC)];
         }
         if($resource==='preview'){
-            $start=(string)($g['start_date']??date('Y-m-d'));$end=(string)($g['end_date']??'');$dates=[];
-            for($n=0;$n<5;$n++){$date=WatchRecurrence::at($start,(string)($g['frequency']??'monthly'),$n);if($end!==''&&$date>$end)break;$dates[]=$date;}return ['dates'=>$dates];
+            // Next occurrences as sync() will form them: moved off SLiMS holidays, skipped for daily schedules.
+            $start=(string)($g['start_date']??date('Y-m-d'));$end=(string)($g['end_date']??'');$frequency=(string)($g['frequency']??'monthly');
+            $dates=[];$moved=[];$holidays=$w->holidays();
+            for($n=0;count($dates)<5&&$n<40;$n++){
+                $raw=WatchRecurrence::at($start,$frequency,$n);if($end!==''&&$raw>$end)break;
+                $date=$holidays->shift($raw,$frequency,$end);if($date===null||in_array($date,$dates,true))continue;
+                $dates[]=$date;if($date!==$raw)$moved[$date]=['from'=>$raw,'reason'=>$holidays->reason($raw)];
+            }
+            return ['dates'=>$dates,'moved'=>(object)$moved];
         }
         if($resource==='reports'){
             $filter=$w->filter($g);$filter['inspection_status']='';$filter['finding_status']='';

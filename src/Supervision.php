@@ -4,6 +4,8 @@ namespace SLiMS\Plugins\Inventory;
 use PDO;
 use RuntimeException;
 
+require_once __DIR__ . '/Holidays.php';
+
 final class Supervision
 {
     public const OUTCOMES = ['good'=>'Baik','action'=>'Perlu tindakan','unchecked'=>'Tidak diperiksa','na'=>'Tidak berlaku'];
@@ -16,6 +18,8 @@ final class Supervision
     public static function json(array $data): string { return json_encode($data, JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR); }
     public static function decode(string $data): array { return json_decode($data,true,512,JSON_THROW_ON_ERROR); }
     public function pdo(): PDO { return $this->db; }
+    private ?Holidays $holidays = null;
+    public function holidays(): Holidays { return $this->holidays ??= new Holidays($this->db); }
     public function query(string $sql, array $args=[]): \PDOStatement { $q=$this->db->prepare($sql); $q->execute($args); return $q; }
     private function text($value, string $label, bool $required=true, int $max=5000): string {
         if (!is_scalar($value) && $value !== null) throw new RuntimeException("$label tidak valid.");
@@ -48,6 +52,7 @@ final class Supervision
                 case 'template': $result=['tab'=>'setup','template_id'=>$this->template($input,$actor)]; break;
                 case 'schedule': $result=['tab'=>'setup','schedule_id'=>$this->schedule($input,$actor)]; break;
                 case 'stop': $this->stop($input); $result=['tab'=>'setup']; break;
+                case 'schedule_assignee': $result=['tab'=>'setup','generated'=>$this->reassign($input)]; break;
                 case 'sync': $result=$this->sync(50); break;
                 case 'incidental': $result=['tab'=>'inspection','record'=>$this->incidental($input,$actor)]; break;
                 case 'inspection': $this->saveInspection($input,$actor); $result=['tab'=>'inspection','record'=>(int)$input['id']]; break;
@@ -126,6 +131,27 @@ final class Supervision
         $this->query('INSERT INTO inventory_watch_schedules (location_id,template_id,snapshot,frequency,start_date,end_date,assignee_id,assignee_name,replaces_id,created_at) VALUES (?,?,?,?,?,?,?,?,?,NOW())',[$scope['room_id'],$scope['template_id'],self::json($scope),$frequency,$start,$end,$assignee['id'],$assignee['name'],$replace?:null]);
         return (int)$this->db->lastInsertId();
     }
+    /**
+     * Changes who carries out a schedule without a new schedule version: future inspections are formed
+     * for the new assignee, and optionally inspections already formed but not yet started move too.
+     * Started or finished inspections keep their original assignee as part of the record.
+     * @return int number of not-yet-started inspections moved
+     */
+    private function reassign(array $input): int {
+        $row=$this->row('schedules',(int)($input['id']??0),true); $this->version($row,$input);
+        if (!$row['active'] || !$row['location_id'] || ($row['end_date'] && $row['end_date']<date('Y-m-d'))) throw new RuntimeException('Jadwal sudah berhenti; petugasnya tidak dapat diganti.');
+        $assignee=$this->user((int)($input['assignee_id']??0));
+        $snapshot=self::decode($row['snapshot']); $snapshot['assignee']=$assignee;
+        $this->query('UPDATE inventory_watch_schedules SET assignee_id=?,assignee_name=?,snapshot=?,version=version+1 WHERE id=?',[$assignee['id'],$assignee['name'],self::json($snapshot),$row['id']]);
+        if (!in_array((string)($input['include_pending']??''),['1','true'],true)) return 0;
+        $moved=0;
+        foreach ($this->query("SELECT id,snapshot FROM inventory_watch_inspections WHERE schedule_id=? AND status='pending' FOR UPDATE",[$row['id']])->fetchAll(PDO::FETCH_ASSOC) as $inspection) {
+            $data=self::decode($inspection['snapshot']); $data['assignee']=$assignee;
+            $this->query('UPDATE inventory_watch_inspections SET snapshot=?,version=version+1 WHERE id=?',[self::json($data),$inspection['id']]);
+            $moved++;
+        }
+        return $moved;
+    }
     private function stop(array $input): void {
         $row=$this->row('schedules',(int)($input['id']??0),true); $this->version($row,$input);
         $effective=WatchRecurrence::date((string)($input['effective']??''))->format('Y-m-d');
@@ -144,8 +170,11 @@ final class Supervision
             $schedule=$this->row('schedules',(int)$row['id'],true);
             if (!$schedule['active']) continue;
             $until=self::end($schedule,date('Y-m-d')); $index=(int)$schedule['next_index'];
-            while (($due=WatchRecurrence::at($schedule['start_date'],$schedule['frequency'],$index))<=$until) {
-                if (!$this->query('SELECT id FROM inventory_watch_inspections WHERE schedule_id=? AND due_date=?',[$schedule['id'],$due])->fetchColumn()) {
+            while (($raw=WatchRecurrence::at($schedule['start_date'],$schedule['frequency'],$index))<=$until) {
+                // Holidays (SLiMS System → Holiday) move an occurrence to the next working day, or skip it for daily schedules.
+                $due=$this->holidays()->shift($raw,$schedule['frequency'],$schedule['end_date']);
+                if ($due!==null && $due>$until) break; // moved past today: formed by a later sync, same index
+                if ($due!==null && !$this->query('SELECT id FROM inventory_watch_inspections WHERE schedule_id=? AND due_date=?',[$schedule['id'],$due])->fetchColumn()) {
                     $this->createInspection(self::decode($schedule['snapshot']),$due,'routine','',(int)$schedule['id'],null);
                 }
                 ++$index; ++$created;
@@ -371,7 +400,7 @@ final class Supervision
             $formed=$this->query('SELECT due_date FROM inventory_watch_inspections WHERE schedule_id=? AND due_date BETWEEN ? AND ?',[$schedule['id'],$filter['from'],$end])->fetchAll(PDO::FETCH_COLUMN);
             $formedCount=count($formed); $schedulePlanned=0;
             $formed=array_fill_keys($formed,true);
-            foreach (WatchRecurrence::dates($schedule['start_date'],$schedule['frequency'],$filter['from'],$end) as $date) {
+            foreach (WatchRecurrence::dates($schedule['start_date'],$schedule['frequency'],$filter['from'],$end,$this->holidays(),$schedule['end_date']) as $date) {
                 $rooms[$snapshot['room_id']]=true; ++$planned; ++$schedulePlanned;
                 if ($date<=$today && !isset($formed[$date])) { ++$unformed; $projectedItems+=count($snapshot['items']); if ($date<$today) ++$projectedLate; }
             }
