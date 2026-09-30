@@ -398,7 +398,7 @@ export function Pager({
   );
 }
 
-type Colorbox = (options: Record<string, unknown>) => void;
+type Colorbox = ((options: Record<string, unknown>) => void) & { resize?: (options: Record<string, unknown>) => void };
 
 /**
  * Opens a PDF in SLiMS's own print preview (the colorbox iframe popup used for catalog and barcode
@@ -412,10 +412,24 @@ export function previewPdf(config: { viewer?: string }, pdf: string, title: stri
   let reason = "fullscreen";
   try {
     // Call colorbox as a method of top's jQuery: it relies on `this` being jQuery (calls this.each).
-    const jq = (window.top as (Window & { jQuery?: { colorbox?: Colorbox } }) | null)?.jQuery;
+    const top = window.top as (Window & { jQuery?: { colorbox?: Colorbox } }) | null;
+    const jq = top?.jQuery;
     if (typeof jq?.colorbox !== "function") reason = "SLiMS colorbox not loaded";
     else if (!document.fullscreenElement) {
-      jq.colorbox({ href, iframe: true, width: "92%", height: "92%", title, fastIframe: false });
+      // Pixel sizes from the real viewport: colorbox's own "92%" sizing came out far too short on
+      // Firefox for Windows. innerHeight leaves room for SLiMS's title bar under the frame.
+      const size = {
+        innerWidth: Math.max(320, Math.round(top!.innerWidth * 0.92 - 20)),
+        innerHeight: Math.max(320, Math.round(top!.innerHeight * 0.92 - 70)),
+      };
+      jq.colorbox({
+        href,
+        iframe: true,
+        ...size,
+        title,
+        fastIframe: false,
+        onComplete: () => jq.colorbox?.resize?.(size),
+      });
       return;
     }
   } catch (e) {
