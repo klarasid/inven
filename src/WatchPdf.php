@@ -1,8 +1,9 @@
 <?php
 namespace SLiMS\Plugins\Inventory;
 
-require_once __DIR__ . '/PdfLayout.php';
+require_once __DIR__ . '/PdfLatex.php';
 
+/** Period report and inspection/damage-report documents, typeset in the LaTeX article style of PdfLatex. */
 final class WatchPdf
 {
     private const KINDS = ['routine' => 'Terjadwal', 'incidental' => 'Insidental', 'historical' => 'Impor riwayat'];
@@ -11,16 +12,12 @@ final class WatchPdf
 
     private static function e($value): string { return PdfLayout::e($value); }
 
-    private static function status(string $status): string
-    {
-        $tone = in_array($status, ['final', 'closed'], true) ? 't-good' : (in_array($status, ['open', 'review'], true) ? 't-warn' : 't-muted');
-        return '<span class="tag ' . $tone . '">' . self::e(Supervision::STATUSES[$status] ?? $status) . '</span>';
-    }
+    private static function status(string $status): string { return self::e(Supervision::STATUSES[$status] ?? $status); }
 
     private static function outcome(string $outcome): string
     {
-        $tone = ['good' => 't-good', 'action' => 't-bad', 'unchecked' => 't-warn', 'na' => 't-muted'][$outcome] ?? 't-muted';
-        return '<span class="tag ' . $tone . '">' . self::e(Supervision::OUTCOMES[$outcome] ?? 'Belum diisi') . '</span>';
+        $label = self::e(Supervision::OUTCOMES[$outcome] ?? 'Belum diisi');
+        return $outcome === 'action' ? '<b>' . $label . '</b>' : ($outcome === 'good' ? $label : '<i>' . $label . '</i>');
     }
 
     private static function percent(int $value, int $total): string
@@ -28,7 +25,15 @@ final class WatchPdf
         return $total > 0 ? round($value / $total * 100) . '%' : '—';
     }
 
-    public static function footer(string $label): string { return PdfLayout::footer($label); }
+    private static function short($value): string { return PdfLayout::shortDate($value); }
+
+    private static function sub(string $main, string $detail): string
+    {
+        return self::e($main) . ($detail !== '' ? '<br><span style="font-size:8.6pt;font-style:italic;">' . self::e($detail) . '</span>' : '');
+    }
+
+    /** Kept for callers that set the footer themselves; the LaTeX style uses a plain page number. */
+    public static function footer(string $label = ''): string { return PdfLatex::footer(); }
 
     /** @param array{library?:string,room?:string,printed_by?:string} $context display names for the filter and the preparer */
     public static function summary(array $filter, array $summary, array $rows, array $context = []): string
@@ -36,91 +41,90 @@ final class WatchPdf
         if (count($rows) > 500) throw new \RuntimeException('Laporan melebihi 500 pemeriksaan. Persempit periode.');
         $c = $summary['counts']; $f = $summary['findings'];
         $late = (int) $c['late'] + (int) $summary['unformed_late'];
-        $h = PdfLayout::css() . PdfLayout::header(
-            'LAPORAN PENGAWASAN DAN PEMELIHARAAN',
-            'Sarana, prasarana, dan lingkungan fisik perpustakaan · Periode ' . PdfLayout::date($filter['from']) . ' – ' . PdfLayout::date($filter['to']),
-            'Laporan periode',
-            date('Ymd', strtotime((string) $filter['from'])) . '–' . date('Ymd', strtotime((string) $filter['to']))
+        $scope = trim(implode(', ', array_filter([($context['library'] ?? '') ?: '', ($context['room'] ?? '') ?: ''])));
+        $period = PdfLayout::date($filter['from']) . ' – ' . PdfLayout::date($filter['to']);
+        $totalFindings = (int) $f['open'] + (int) $f['closed'];
+
+        $h = PdfLatex::begin() . PdfLatex::titleBlock(
+            'Laporan Pengawasan dan Pemeliharaan Sarana, Prasarana, dan Lingkungan Fisik Perpustakaan',
+            ($context['printed_by'] ?? '') !== '' ? self::e($context['printed_by']) : '',
+            'Periode ' . $period
         );
-        $h .= PdfLayout::meta([
-            'Perpustakaan' => self::e(($context['library'] ?? '') ?: 'Semua perpustakaan'),
-            'Ruangan' => self::e(($context['room'] ?? '') ?: 'Semua ruangan'),
-            'Periode' => PdfLayout::date($filter['from']) . ' s.d. ' . PdfLayout::date($filter['to']),
-            'Disusun oleh' => self::e(($context['printed_by'] ?? '') ?: '—'),
-        ]);
-        $h .= PdfLayout::kpis([
-            ['Pemeriksaan selesai', (int) $c['finalized'], $c['incidental'] . ' insidental · ' . ($c['historical'] ?? 0) . ' impor'],
-            ['Pemeriksaan terlambat', $late, $summary['unformed'] . ' jatuh tempo belum dibentuk'],
-            ['Temuan belum selesai', (int) $f['open'], $f['late'] . ' lewat tenggat'],
-            ['Temuan terverifikasi', (int) $f['closed'], 'selesai ditindaklanjuti'],
+        $h .= PdfLatex::abstract(
+            'Laporan ini merangkum kegiatan pengawasan dan pemeliharaan ' . ($scope !== '' ? 'pada ' . self::e($scope) : 'di seluruh perpustakaan dan ruangan')
+            . ' selama periode ' . $period . '. Tercatat <b>' . (int) $c['finalized'] . ' pemeriksaan</b> yang telah difinalisasi, terdiri atas '
+            . (int) $c['routine_final'] . ' pemeriksaan terjadwal, ' . (int) $c['incidental'] . ' pemeriksaan insidental, dan ' . (int) ($c['historical'] ?? 0) . ' riwayat yang diimpor. '
+            . ($late ? 'Sebanyak <b>' . $late . ' pemeriksaan terlambat</b> dari jadwal. ' : 'Tidak ada pemeriksaan yang terlambat dari jadwal. ')
+            . 'Dari pemeriksaan tersebut muncul ' . $totalFindings . ' temuan yang memerlukan tindakan; '
+            . (int) $f['closed'] . ' di antaranya telah selesai dan diverifikasi' . ((int) $f['open'] ? ', sedangkan ' . (int) $f['open'] . ' masih dalam proses' . ((int) $f['late'] ? ' (' . (int) $f['late'] . ' melewati tenggat)' : '') : '') . '.'
+        );
+
+        $h .= PdfLatex::section('Capaian dan Cakupan');
+        $h .= PdfLatex::paragraph('Tabel 1 menyajikan realisasi pemeriksaan terhadap rencana. Cakupan butir menghitung pemeriksaan rutin yang terbentuk dan jadwal yang jatuh tempo; hanya hasil final <i>Baik</i> atau <i>Perlu tindakan</i> dihitung diperiksa, <i>Tidak diperiksa</i> tetap dalam penyebut, dan <i>Tidak berlaku</i> dikeluarkan. Status temuan adalah status pada saat laporan dicetak.');
+        $h .= PdfLatex::table('Capaian pemeriksaan dan tindak lanjut', ['Indikator', ['Realisasi', 'r'], ['Dasar', 'r'], ['Capaian', 'r']], [
+            ['Pemeriksaan rutin difinalisasi', (string) (int) $c['routine_final'], (string) (int) $summary['planned'], self::percent((int) $c['routine_final'], (int) $summary['planned'])],
+            ['Ruangan diperiksa', (string) (int) $summary['room_examined'], (string) (int) $summary['room_total'], self::percent((int) $summary['room_examined'], (int) $summary['room_total'])],
+            ['Butir pemeriksaan diperiksa', (string) (int) $summary['item_examined'], (string) (int) $summary['item_applicable'], self::percent((int) $summary['item_examined'], (int) $summary['item_applicable'])],
+            ['Temuan selesai terverifikasi', (string) (int) $f['closed'], (string) $totalFindings, self::percent((int) $f['closed'], $totalFindings)],
+            ['Pemeriksaan terlambat', (string) $late, '—', '—'],
+            ['Jatuh tempo belum dibentuk', (string) (int) $summary['unformed'], '—', '—'],
+            ['Butir tidak berlaku', (string) (int) $summary['item_na'], '—', '—'],
         ]);
 
-        $h .= '<h2>I. Capaian dan cakupan</h2>' . PdfLayout::table(
-            ['Indikator', ['Realisasi', 'num'], ['Target / dasar', 'num'], ['Capaian', 'num']],
-            [
-                ['Pemeriksaan rutin difinalisasi', (string) (int) $c['routine_final'], (string) (int) $summary['planned'], self::percent((int) $c['routine_final'], (int) $summary['planned'])],
-                ['Ruangan diperiksa', (string) (int) $summary['room_examined'], (string) (int) $summary['room_total'], self::percent((int) $summary['room_examined'], (int) $summary['room_total'])],
-                ['Butir pemeriksaan diperiksa', (string) (int) $summary['item_examined'], (string) (int) $summary['item_applicable'], self::percent((int) $summary['item_examined'], (int) $summary['item_applicable'])],
-                ['Temuan selesai terverifikasi', (string) (int) $f['closed'], (string) ((int) $f['closed'] + (int) $f['open']), self::percent((int) $f['closed'], (int) $f['closed'] + (int) $f['open'])],
-                ['Butir tidak berlaku (dikeluarkan)', (string) (int) $summary['item_na'], '—', '—'],
-                ['Pemeriksaan insidental', (string) (int) $c['incidental'], '—', '—'],
-            ]
-        );
-        $h .= '<div class="note">Cakupan butir menghitung pemeriksaan rutin yang terbentuk dan jadwal yang jatuh tempo. Hanya hasil final <b>Baik</b> atau <b>Perlu tindakan</b> dihitung diperiksa; <b>Tidak diperiksa</b> tetap dalam penyebut, <b>Tidak berlaku</b> dikeluarkan. Status temuan adalah status pada saat laporan dicetak. Laporan ini menyajikan bukti pengawasan dan tidak memberikan nilai akreditasi otomatis.</div>';
-
-        $h .= '<h2>II. Ruangan tanpa jadwal pemeriksaan</h2>';
+        $h .= PdfLatex::section('Ruangan tanpa Jadwal Pemeriksaan');
         $missing = [];
         foreach ($summary['missing_rooms'] as $n => $room) $missing[] = [(string) ($n + 1), self::e($room['room_name']), self::e($room['location_name'] ?? 'Tidak ditentukan')];
-        $h .= PdfLayout::table([['No', 'no'], 'Ruangan', 'Perpustakaan'], $missing, 'Semua ruangan memiliki jadwal pemeriksaan dalam periode ini.');
+        $h .= $missing
+            ? PdfLatex::paragraph('Sebanyak ' . count($missing) . ' ruangan belum memiliki jadwal pemeriksaan rutin dalam periode ini, sebagaimana tercantum pada Tabel 2.')
+                . PdfLatex::table('Ruangan tanpa jadwal pemeriksaan rutin', [['No.', 'r'], 'Ruangan', 'Perpustakaan'], $missing)
+            : PdfLatex::paragraph('Semua ruangan memiliki jadwal pemeriksaan rutin dalam periode ini.');
 
-        $h .= '<h2>III. Rencana jadwal</h2>';
+        $h .= PdfLatex::section('Jadwal versus Realisasi');
         $schedules = [];
-        foreach ($summary['schedules'] ?? [] as $n => $row) $schedules[] = [(string) ($n + 1), '<b>' . self::e($row['room']) . '</b><br><span class="muted small">' . self::e($row['template']) . '</span>', self::e($row['frequency']), (string) (int) $row['planned'], (string) (int) $row['formed'], (string) (int) $row['final']];
-        $h .= PdfLayout::table([['No', 'no'], 'Ruangan / checklist', 'Frekuensi', ['Rencana', 'num'], ['Terbentuk', 'num'], ['Final', 'num']], $schedules, 'Tidak ada jadwal rutin dalam periode ini.');
-
-        $h .= '<h2>IV. Realisasi pemeriksaan</h2>';
+        foreach ($summary['schedules'] ?? [] as $n => $row) $schedules[] = [(string) ($n + 1), self::sub($row['room'], (string) $row['template']), self::e($row['frequency']), (string) (int) $row['planned'], (string) (int) $row['formed'], (string) (int) $row['final']];
+        $h .= PdfLatex::table('Rencana jadwal dan pembentukan pemeriksaan', [['No.', 'r'], 'Ruangan / checklist', 'Frekuensi', ['Rencana', 'r'], ['Terbentuk', 'r'], ['Final', 'r']], $schedules, 'Tidak ada jadwal pemeriksaan rutin dalam periode ini.');
         $list = [];
         foreach ($rows as $n => $row) {
             $s = Supervision::decode($row['snapshot']);
-            $list[] = [(string) ($n + 1), '<b>' . self::e($s['room_name']) . '</b><br><span class="muted small">' . self::e($s['library_name']) . '</span>', self::e(self::KINDS[$row['kind']] ?? 'Pemeriksaan'), PdfLayout::shortDate($row['due_date']), $row['performed_date'] ? PdfLayout::shortDate($row['performed_date']) : '<span class="muted">Belum</span>', self::e($row['examiner_name'] ?? '—'), self::status((string) $row['status'])];
+            // Show the performed date only when it differs from the schedule, keeping the table to one line per row.
+            $performed = $row['performed_date'] ? ($row['performed_date'] === $row['due_date'] ? '' : 'dilaksanakan ' . str_replace('&nbsp;', ' ', self::short($row['performed_date']))) : 'belum dilaksanakan';
+            $list[] = [(string) ($n + 1), self::sub($s['room_name'], (string) $s['library_name']), self::e(self::KINDS[$row['kind']] ?? 'Pemeriksaan'), self::short($row['due_date']) . ($performed !== '' ? '<br><span style="font-size:8.2pt;font-style:italic;">' . $performed . '</span>' : ''), self::e($row['examiner_name'] ?? '—'), self::status((string) $row['status'])];
         }
-        $h .= PdfLayout::table([['No', 'no'], 'Ruangan', 'Jenis', 'Jadwal', 'Pelaksanaan', 'Pemeriksa', 'Status'], $list, 'Tidak ada pemeriksaan dalam periode ini.');
+        $h .= PdfLatex::table('Realisasi pemeriksaan', [['No.', 'r'], 'Ruangan', 'Jenis', 'Tanggal', 'Pemeriksa', 'Status'], $list, 'Tidak ada pemeriksaan dalam periode ini.', '8.8pt');
 
-        $h .= '<h2>V. Temuan dan tindak lanjut</h2>';
+        $h .= PdfLatex::section('Temuan dan Tindak Lanjut');
         $findings = [];
+        $overdueAny = false;
         foreach ($summary['finding_rows'] ?? [] as $n => $row) {
             $overdue = $row['status'] !== 'closed' && $row['deadline'] < date('Y-m-d');
-            $findings[] = [(string) ($n + 1), '<b>' . self::e($row['object']) . '</b><br><span class="muted small">' . self::e($row['room']) . '</span>', self::e($row['assignee_name']), self::e(Supervision::PRIORITIES[$row['priority']] ?? $row['priority']), PdfLayout::shortDate($row['deadline']) . ($overdue ? '<br><span class="tag t-bad">Lewat tenggat</span>' : ''), self::status((string) $row['status'])];
+            $overdueAny = $overdueAny || $overdue;
+            $findings[] = [(string) ($n + 1), self::sub($row['object'], (string) $row['room']), self::e($row['assignee_name']), self::e(Supervision::PRIORITIES[$row['priority']] ?? $row['priority']), self::short($row['deadline']) . ($overdue ? '*' : ''), self::status((string) $row['status'])];
         }
-        $h .= PdfLayout::table([['No', 'no'], 'Temuan / ruangan', 'Penanggung jawab', 'Prioritas', 'Tenggat', 'Status'], $findings, 'Tidak ada temuan dalam periode ini.');
+        $h .= PdfLatex::table('Temuan dan status tindak lanjut', [['No.', 'r'], 'Temuan / ruangan', 'Penanggung jawab', 'Prioritas', 'Tenggat', 'Status'], $findings, 'Tidak ada temuan dalam periode ini.', '8.8pt');
+        if ($overdueAny) $h .= '<p class="small">* Melewati tenggat pada saat laporan dicetak.</p>';
 
-        $h .= PdfLayout::signatures([
-            ['Mengetahui,', 'Kepala Perpustakaan', '', ''],
-            ['Disusun oleh,', 'Petugas Pengelola', (string) ($context['printed_by'] ?? ''), ''],
+        return $h . PdfLatex::signatures([
+            ['Mengetahui,', 'Kepala Perpustakaan', ''],
+            ['Disusun oleh,', 'Petugas Pengelola', (string) ($context['printed_by'] ?? '')],
         ], '...................., ' . PdfLayout::date(new \DateTimeImmutable('now')));
-        return $h;
     }
 
-    /** Photos as a captioned grid, three per row, downscaled so large documents stay light. */
-    private static function photoGrid(array $document, callable $readPhoto, ?int $result, ?int $action, string $caption): string
+    /** Downscaled JPEG data URIs for the photos of one result or one action. */
+    private static function photos(array $document, callable $readPhoto, ?int $result, ?int $action): array
     {
-        $cells = [];
+        $images = [];
         foreach ($document['photos'] as $photo) {
             if (($result !== null && (int) $photo['result_id'] !== $result) || ($action !== null && (int) $photo['action_id'] !== $action)) continue;
             $bytes = $readPhoto($photo);
             $image = $bytes === null ? false : @imagecreatefromstring($bytes);
-            if (!$image) { $cells[] = '<span class="muted">Foto tidak tersedia.</span>'; continue; }
-            $scale = min(1, 480 / max(imagesx($image), imagesy($image)));
+            if (!$image) continue;
+            $scale = min(1, 640 / max(imagesx($image), imagesy($image)));
             $thumb = imagecreatetruecolor(max(1, (int) (imagesx($image) * $scale)), max(1, (int) (imagesy($image) * $scale)));
             imagecopyresampled($thumb, $image, 0, 0, 0, 0, imagesx($thumb), imagesy($thumb), imagesx($image), imagesy($image));
-            ob_start(); imagejpeg($thumb, null, 78); $jpeg = ob_get_clean(); imagedestroy($thumb); imagedestroy($image);
-            $cells[] = '<img src="data:image/jpeg;base64,' . base64_encode($jpeg) . '" style="width:52mm;border:0.2mm solid #d1d5db;"><br>'
-                . '<span style="font-size:6.8pt;color:#6b7280;">Foto ' . (count($cells) + 1) . ($caption !== '' ? ' · ' . $caption : '') . '</span>';
+            ob_start(); imagejpeg($thumb, null, 80); $jpeg = ob_get_clean(); imagedestroy($thumb); imagedestroy($image);
+            $images[] = 'data:image/jpeg;base64,' . base64_encode($jpeg);
         }
-        if (!$cells) return '';
-        $html = '<table class="photos">';
-        foreach (array_chunk($cells, 3) as $row) $html .= '<tr><td style="padding:0 3mm 3mm 0;vertical-align:top;">' . implode('</td><td style="padding:0 3mm 3mm 0;vertical-align:top;">', $row) . '</td></tr>';
-        return $html . '</table>';
+        return $images;
     }
 
     public static function detail(array $document, callable $readPhoto): string
@@ -129,90 +133,84 @@ final class WatchPdf
         if (count($document['photos']) > 500) throw new \RuntimeException('Detail memiliki lebih dari 500 foto. Hubungi administrator untuk ekspor arsip.');
         $report = empty($s['template_id']) && ($s['template_name'] ?? '') === 'Laporan kerusakan';
         $number = ($report ? 'LK-' : 'PMR-') . str_pad((string) (int) $i['id'], 5, '0', STR_PAD_LEFT);
-        $h = PdfLayout::css() . PdfLayout::header(
-            $report ? 'LAPORAN KERUSAKAN DAN TINDAK LANJUT' : 'DOKUMEN PEMERIKSAAN RUANGAN',
-            self::e($s['room_name']) . ' · ' . self::e($s['library_name']),
-            $report ? 'Nomor laporan' : 'Nomor dokumen',
-            $number
+        $h = PdfLatex::begin() . PdfLatex::titleBlock(
+            $report ? 'Laporan Kerusakan dan Tindak Lanjut' : 'Dokumen Pemeriksaan Ruangan',
+            'Nomor ' . self::e($number),
+            self::e($s['room_name']) . ', ' . self::e($s['library_name'])
         );
-        $pairs = [
+        $facts = [
             'Ruangan' => self::e($s['room_name']),
             'Perpustakaan' => self::e($s['library_name']),
             $report ? 'Jenis' : 'Checklist' => self::e($report ? 'Laporan kerusakan' : $s['template_name']),
-            'Jenis kegiatan' => self::e(self::KINDS[$i['kind']] ?? 'Pemeriksaan'),
-            $report ? 'Tanggal laporan' : 'Jadwal' => PdfLayout::date($i['due_date']),
+            'Kegiatan' => self::e(self::KINDS[$i['kind']] ?? 'Pemeriksaan'),
+            $report ? 'Tanggal lapor' : 'Jadwal' => PdfLayout::date($i['due_date']),
             'Pelaksanaan' => PdfLayout::date($i['performed_date']),
             $report ? 'Pelapor' : 'Pemeriksa' => self::e($i['examiner_name'] ?? '—'),
             'Status' => self::status((string) $i['status']),
         ];
-        if ($i['parent_id']) $pairs['Pemeriksaan asal'] = 'PMR-' . str_pad((string) (int) $i['parent_id'], 5, '0', STR_PAD_LEFT);
-        $h .= PdfLayout::meta($pairs);
-        if (trim((string) $i['reason']) !== '' && !$report) $h .= '<div class="note"><b>Alasan pemeriksaan:</b> ' . nl2br(self::e($i['reason'])) . '</div>';
-        if (trim((string) $i['notes']) !== '') $h .= '<div class="note"><b>Catatan pemeriksaan:</b> ' . nl2br(self::e($i['notes'])) . '</div>';
+        if ($i['parent_id']) $facts['Pemeriksaan asal'] = 'PMR-' . str_pad((string) (int) $i['parent_id'], 5, '0', STR_PAD_LEFT);
+        $h .= PdfLatex::facts($facts);
 
         $tally = array_fill_keys(array_keys(Supervision::OUTCOMES), 0);
         foreach ($document['results'] as $r) if (isset($tally[$r['outcome']])) $tally[$r['outcome']]++;
-        if (!$report) {
-            $kpis = [];
-            foreach (Supervision::OUTCOMES as $key => $label) $kpis[] = [$label, $tally[$key]];
-            $h .= PdfLayout::kpis($kpis);
-        }
+        $total = count($document['results']);
+        $findingCount = count($document['findings']);
+        $closed = count(array_filter($document['findings'], fn($f) => $f['status'] === 'closed'));
+        $h .= PdfLatex::abstract($report
+            ? 'Kerusakan dilaporkan oleh ' . self::e($i['examiner_name'] ?? '—') . ' pada ' . PdfLayout::date($i['due_date']) . ' di ' . self::e($s['room_name']) . '. '
+                . ($findingCount && $closed === $findingCount ? 'Kerusakan telah ditangani dan hasilnya diverifikasi.' : 'Tindak lanjut masih dalam proses.')
+            : 'Pemeriksaan ' . strtolower(self::KINDS[$i['kind']] ?? '') . ' ruangan ' . self::e($s['room_name']) . ' dilaksanakan pada ' . PdfLayout::date($i['performed_date'] ?: $i['due_date'])
+                . ' oleh ' . self::e($i['examiner_name'] ?? '—') . ' terhadap ' . $total . ' butir: ' . $tally['good'] . ' baik, ' . $tally['action'] . ' perlu tindakan, '
+                . $tally['unchecked'] . ' tidak diperiksa, dan ' . $tally['na'] . ' tidak berlaku. '
+                . ($findingCount ? $findingCount . ' temuan ditindaklanjuti, ' . $closed . ' di antaranya telah selesai dan diverifikasi.' : 'Tidak ada temuan yang memerlukan tindakan.')
+        );
+        if (trim((string) $i['reason']) !== '' && !$report) $h .= PdfLatex::paragraph('<i>Alasan pemeriksaan.</i> ' . nl2br(self::e($i['reason'])));
+        if (trim((string) $i['notes']) !== '') $h .= PdfLatex::paragraph('<i>Catatan pemeriksaan.</i> ' . nl2br(self::e($i['notes'])));
 
-        $h .= '<h2>' . ($report ? 'I. Kerusakan yang dilaporkan' : 'I. Hasil pemeriksaan') . '</h2>';
-        $rows = []; $photoBlocks = '';
+        $h .= PdfLatex::section($report ? 'Kerusakan yang Dilaporkan' : 'Hasil Pemeriksaan');
+        $rows = []; $figures = [];
         foreach ($document['results'] as $n => $r) {
             $item = Supervision::decode($r['snapshot']);
-            $object = '<b>' . self::e($item['object']) . '</b>'
-                . ($item['item_id'] ? '<br><span class="muted small">' . self::e($item['item_name']) . ($item['item_code'] ? ' · ' . self::e($item['item_code']) : '') . '</span>' : '<br><span class="muted small">Aspek ruangan</span>');
-            $rows[] = [(string) ($n + 1), self::e($item['group']), $object, self::outcome((string) $r['outcome']), nl2br(self::e($r['notes'])) ?: '<span class="muted">—</span>'];
-            $grid = self::photoGrid($document, $readPhoto, (int) $r['id'], null, '');
-            if ($grid !== '') $photoBlocks .= '<h3>Butir ' . ($n + 1) . ' · ' . self::e($item['object']) . '</h3>' . $grid;
+            $rows[] = [(string) ($n + 1), self::e($item['group']), self::sub($item['object'], $item['item_id'] ? $item['item_name'] . ($item['item_code'] ? ' · ' . $item['item_code'] : '') : 'Aspek ruangan'), self::outcome((string) $r['outcome']), nl2br(self::e($r['notes'])) ?: '—'];
+            foreach (self::photos($document, $readPhoto, (int) $r['id'], null) as $src) $figures[] = [$src, 'Butir ' . ($n + 1) . ', ' . $item['object']];
         }
-        $h .= PdfLayout::table([['No', 'no'], 'Kelompok', 'Objek', 'Hasil', 'Catatan'], $rows);
-        if ($photoBlocks !== '') $h .= '<h2>Lampiran foto ' . ($report ? 'kerusakan' : 'pemeriksaan') . '</h2>' . $photoBlocks;
+        $h .= PdfLatex::table($report ? 'Uraian kerusakan' : 'Hasil pemeriksaan per butir', [['No.', 'r'], 'Kelompok', 'Objek', 'Hasil', 'Catatan'], $rows);
+        $h .= PdfLatex::figures($figures);
 
-        $h .= '<h2>II. Temuan dan tindak lanjut</h2>';
-        if (!$document['findings']) $h .= '<p class="muted">Tidak ada temuan yang memerlukan tindakan.</p>';
-        foreach ($document['findings'] as $n => $f) {
+        $h .= PdfLatex::section('Temuan dan Tindak Lanjut');
+        if (!$document['findings']) $h .= PdfLatex::paragraph('Tidak ada temuan yang memerlukan tindakan.');
+        foreach ($document['findings'] as $f) {
             $result = null;
             foreach ($document['results'] as $r) if ((int) $r['id'] === (int) $f['result_id']) $result = Supervision::decode($r['snapshot']);
-            $h .= '<div class="card"><h3 style="margin-top:0">Temuan ' . ($n + 1) . ' · ' . self::e($result['object'] ?? '') . '</h3>'
-                . PdfLayout::meta([
-                    'Penanggung jawab' => self::e($f['assignee_name']),
-                    'Prioritas' => self::e(Supervision::PRIORITIES[$f['priority']] ?? $f['priority']),
-                    'Tenggat' => PdfLayout::date($f['deadline']),
-                    'Status' => self::status((string) $f['status']) . ($f['closed_at'] ? ' <span class="muted small">(' . PdfLayout::date($f['closed_at']) . ')</span>' : ''),
-                ]);
-            $actions = [];
-            foreach ($document['actions'] as $a) {
-                if ((int) $a['finding_id'] !== (int) $f['id']) continue;
-                $actions[] = $a;
-            }
-            $h .= PdfLayout::table(['Tanggal', 'Tindakan', 'Uraian', 'Pelaksana', ['Biaya', 'num']], array_map(fn($a) => [
-                PdfLayout::shortDate($a['performed_date']),
-                self::e(self::ACTIONS[$a['kind']] ?? $a['kind']) . ($a['submitted_at'] ? '' : '<br><span class="muted small">Draf</span>'),
+            $h .= PdfLatex::subsection((string) ($result['object'] ?? 'Temuan'));
+            $h .= PdfLatex::paragraph('Penanggung jawab ' . self::e($f['assignee_name']) . ', prioritas ' . strtolower(self::e(Supervision::PRIORITIES[$f['priority']] ?? $f['priority']))
+                . ', tenggat ' . PdfLayout::date($f['deadline']) . '. Status: <i>' . strtolower(self::status((string) $f['status'])) . '</i>' . ($f['closed_at'] ? ' pada ' . PdfLayout::date($f['closed_at']) : '') . '.');
+            $actions = array_values(array_filter($document['actions'], fn($a) => (int) $a['finding_id'] === (int) $f['id']));
+            $h .= PdfLatex::table('Tindakan atas temuan ' . ($result['object'] ?? ''), ['Tanggal', 'Tindakan', 'Uraian', 'Pelaksana', ['Biaya', 'r']], array_map(fn($a) => [
+                self::short($a['performed_date']),
+                self::e(self::ACTIONS[$a['kind']] ?? $a['kind']) . ($a['submitted_at'] ? '' : ' <i>(draf)</i>'),
                 nl2br(self::e($a['description'])),
                 self::e($a['actor_name']),
                 PdfLayout::money($a['cost']),
             ], $actions), 'Belum ada pekerjaan yang dicatat.');
-            foreach ($actions as $a) $h .= self::photoGrid($document, $readPhoto, null, (int) $a['id'], 'hasil ' . strtolower(self::ACTIONS[$a['kind']] ?? '') . ', ' . str_replace('&nbsp;', ' ', PdfLayout::shortDate($a['performed_date'])));
-            $h .= '</div>';
+            $figures = [];
+            foreach ($actions as $a) foreach (self::photos($document, $readPhoto, null, (int) $a['id']) as $src) $figures[] = [$src, 'Hasil ' . strtolower(self::ACTIONS[$a['kind']] ?? '') . ', ' . PdfLayout::date($a['performed_date'])];
+            $h .= PdfLatex::figures($figures);
         }
 
-        $h .= '<h2>III. Riwayat kegiatan dan verifikasi</h2>';
-        $h .= PdfLayout::table(['Waktu', 'Kegiatan', 'Oleh', 'Catatan'], array_map(fn($e) => [
-            PdfLayout::shortDate($e['created_at']) . '<br><span class="muted small">' . self::e(substr((string) $e['created_at'], 11, 5)) . '</span>',
-            '<b>' . self::e(self::EVENTS[$e['event']] ?? $e['event']) . '</b>',
+        $h .= PdfLatex::section('Riwayat Kegiatan dan Verifikasi');
+        $h .= PdfLatex::table('Riwayat kegiatan', ['Waktu', 'Kegiatan', 'Oleh', 'Catatan'], array_map(fn($e) => [
+            self::short($e['created_at']) . '<br><span style="font-size:8.4pt;">' . self::e(substr((string) $e['created_at'], 11, 5)) . '</span>',
+            self::e(self::EVENTS[$e['event']] ?? $e['event']),
             self::e($e['actor_name']),
             nl2br(self::e($e['notes'])),
-        ], $document['events']), 'Belum ada kegiatan tercatat.');
+        ], $document['events']), 'Belum ada kegiatan tercatat.', '8.8pt');
 
         $verifier = '';
         foreach (array_reverse($document['events']) as $e) if (in_array($e['event'], ['verify', 'import_verification'], true)) { $verifier = $e['actor_name']; break; }
-        $h .= PdfLayout::signatures([
-            [$report ? 'Pelapor,' : 'Pemeriksa,', '', (string) ($i['examiner_name'] ?? ''), ''],
-            [$verifier !== '' ? 'Diverifikasi oleh,' : 'Mengetahui,', $verifier !== '' ? '' : 'Kepala Perpustakaan', $verifier, ''],
+        return $h . PdfLatex::signatures([
+            [$report ? 'Pelapor,' : 'Pemeriksa,', '', (string) ($i['examiner_name'] ?? '')],
+            [$verifier !== '' ? 'Diverifikasi oleh,' : 'Mengetahui,', $verifier !== '' ? '' : 'Kepala Perpustakaan', $verifier],
         ], '...................., ' . PdfLayout::date($i['performed_date'] ?: $i['due_date']));
-        return $h;
     }
 }

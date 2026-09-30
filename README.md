@@ -173,6 +173,10 @@ Untuk kerusakan mendadak (misalnya komputer staf mati), gunakan **Tugas → Lapo
 - Jika penangan adalah pelapor sendiri dan masalah sudah ditangani, aktifkan **Sudah saya tangani sekarang**: pekerjaan dicatat dan laporan langsung selesai dengan verifikasi atas nama pelapor.
 - Di belakang layar laporan disimpan sebagai pemeriksaan insidental satu butir bertanda **Perlu tindakan**, sehingga tetap masuk riwayat, laporan periode, dan PDF.
 
+### Format PDF laporan
+
+Laporan periode dan dokumen pemeriksaan/laporan kerusakan dicetak bergaya artikel LaTeX: huruf Computer Modern, blok judul di tengah, ringkasan, bagian bernomor, tabel *booktabs* dan gambar bernomor, serta nomor halaman di tengah bawah. Huruf **CMU Serif** (Computer Modern Unicode) disertakan di `assets/fonts/cmu` dengan lisensi SIL Open Font License (`OFL.txt`). Kartu Inventaris Ruangan tetap memakai template **Klasik** atau **Modern** yang dipilih dari menu **Cetak KIR**.
+
 ### Versi jadwal dan histori
 
 Template yang disalin/direvisi disimpan sebagai versi baru. Jadwal lama tetap memakai checklist dan cakupan yang sudah disetujui. Gunakan **Ganti jadwal** untuk menerapkan versi baru dengan tanggal efektif setelah awal jadwal lama dan tidak di masa lalu. Jadwal lama berakhir sehari sebelum tanggal tersebut. Jadwal tidak dapat diganti/dihentikan pada tanggal yang pemeriksaannya sudah terbentuk; gunakan tanggal berikutnya. Penghentian tidak menghapus pemeriksaan yang sudah ada.

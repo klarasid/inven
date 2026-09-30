@@ -138,7 +138,7 @@ try {
             $html=\SLiMS\Plugins\Inventory\WatchPdf::summary($filter,$watch->summary($filter,true),$rows,$context);
             $title='Laporan Pengawasan dan Pemeliharaan'; $file='laporan-pengawasan-'.$filter['from'].'-'.$filter['to'].'.pdf';
         }
-        $pdf=\SLiMS\Plugins\Inventory\PdfLayout::mpdf(SB.FLS.DS.'cache',$title,\SLiMS\Plugins\Inventory\WatchPdf::footer($title));
+        $pdf=\SLiMS\Plugins\Inventory\PdfLatex::mpdf(SB.FLS.DS.'cache',$title);
         $pdf->WriteHTML($html);
         watch_log('Print','Laporan pengawasan '.($id?'#'.$id:Supervision::json($filter)));
         $pdf->Output($file,'I'); return;
