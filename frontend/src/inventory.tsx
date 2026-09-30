@@ -66,6 +66,7 @@ import {
   conditions,
   StatCard,
   ActionBar,
+  previewPdf,
 } from "./shared";
 import type { Page, Values, Photo, Route } from "./types";
 
@@ -285,17 +286,19 @@ function KirMenu({ room }: { room: string }) {
       <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuLabel>Pilih template Kartu Inventaris Ruangan</DropdownMenuLabel>
         <DropdownMenuGroup>
-          <DropdownMenuItem asChild>
-            <a href={target("classic")} target="_blank" rel="noopener" className="flex flex-col items-start gap-0.5">
-              <span className="font-medium">Klasik</span>
-              <span className="text-xs text-muted-foreground">Format lama, huruf serif, hitam-putih.</span>
-            </a>
+          <DropdownMenuItem
+            className="flex flex-col items-start gap-0.5"
+            onSelect={() => previewPdf(target("classic"), "Kartu Inventaris Ruangan · Klasik")}
+          >
+            <span className="font-medium">Klasik</span>
+            <span className="text-xs text-muted-foreground">Format lama, huruf serif, hitam-putih.</span>
           </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <a href={target("modern")} target="_blank" rel="noopener" className="flex flex-col items-start gap-0.5">
-              <span className="font-medium">Modern</span>
-              <span className="text-xs text-muted-foreground">Baris jumlah, nomor kolom, dan nomor halaman.</span>
-            </a>
+          <DropdownMenuItem
+            className="flex flex-col items-start gap-0.5"
+            onSelect={() => previewPdf(target("modern"), "Kartu Inventaris Ruangan · Modern")}
+          >
+            <span className="font-medium">Modern</span>
+            <span className="text-xs text-muted-foreground">Baris jumlah, nomor kolom, dan nomor halaman.</span>
           </DropdownMenuItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>

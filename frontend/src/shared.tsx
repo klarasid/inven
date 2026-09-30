@@ -398,6 +398,30 @@ export function Pager({
   );
 }
 
+type Colorbox = (options: Record<string, unknown>) => void;
+
+/**
+ * Opens a PDF in SLiMS's own print preview (the colorbox iframe popup used for catalog and barcode
+ * printing) instead of a download or new tab. Falls back to a new tab where the popup is missing,
+ * e.g. the standalone QR page, or hidden behind this app in fullscreen.
+ */
+export function previewPdf(href: string, title: string) {
+  let reason = "fullscreen";
+  try {
+    // Call colorbox as a method of top's jQuery: it relies on `this` being jQuery (calls this.each).
+    const jq = (window.top as (Window & { jQuery?: { colorbox?: Colorbox } }) | null)?.jQuery;
+    if (typeof jq?.colorbox !== "function") reason = "SLiMS colorbox not loaded";
+    else if (!document.fullscreenElement) {
+      jq.colorbox({ href, iframe: true, width: "92%", height: "92%", title, fastIframe: false });
+      return;
+    }
+  } catch (e) {
+    reason = `colorbox failed: ${(e as Error).message}`;
+  }
+  console.warn(`[inventaris] PDF preview opened in a new tab (${reason}).`);
+  window.open(href, "_blank", "noopener");
+}
+
 export function Pdf({
   record,
   room,
@@ -412,11 +436,12 @@ export function Pdf({
   const { config } = useWorkspace();
   if (room)
     return (
-      <Button variant="outline" asChild>
-        <a href={url(config.inventory, { workspace: "", action: "print_pdf", location_id: room })} target="_blank" rel="noopener">
-          <FileText data-icon="inline-start" />
-          {label}
-        </a>
+      <Button
+        variant="outline"
+        onClick={() => previewPdf(url(config.inventory, { workspace: "", action: "print_pdf", location_id: room }), label)}
+      >
+        <FileText data-icon="inline-start" />
+        {label}
       </Button>
     );
   // Reports and inspection documents come in two typesetting styles.
@@ -438,11 +463,13 @@ export function Pdf({
         <DropdownMenuLabel className="text-xs text-muted-foreground">Pilih format PDF</DropdownMenuLabel>
         <DropdownMenuGroup>
           {styles.map((s) => (
-            <DropdownMenuItem key={s.value} asChild className="px-2 py-2">
-              <a href={target(s.value)} target="_blank" rel="noopener" className="flex flex-col items-start gap-0.5">
-                <span className="font-medium">{s.title}</span>
-                <span className="text-xs leading-snug whitespace-normal text-muted-foreground">{s.text}</span>
-              </a>
+            <DropdownMenuItem
+              key={s.value}
+              className="flex flex-col items-start gap-0.5 px-2 py-2"
+              onSelect={() => previewPdf(target(s.value), `${label} · ${s.title}`)}
+            >
+              <span className="font-medium">{s.title}</span>
+              <span className="text-xs leading-snug whitespace-normal text-muted-foreground">{s.text}</span>
             </DropdownMenuItem>
           ))}
         </DropdownMenuGroup>

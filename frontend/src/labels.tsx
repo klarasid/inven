@@ -14,6 +14,7 @@ import {
 import { cn } from "./lib/utils";
 import { useWorkspace } from "./context";
 import { url } from "./api";
+import { previewPdf } from "./shared";
 
 /** Keep in sync with LabelSheet::PRESETS. */
 const presets = [
@@ -154,11 +155,14 @@ export function LabelDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Batal
           </Button>
-          <Button asChild>
-            <a href={href} target="_blank" rel="noopener" onClick={() => onOpenChange(false)}>
-              <Printer data-icon="inline-start" />
-              Buat PDF label
-            </a>
+          <Button
+            onClick={() => {
+              onOpenChange(false);
+              previewPdf(href, `Label barang · ${p.title}`);
+            }}
+          >
+            <Printer data-icon="inline-start" />
+            Tampilkan label
           </Button>
         </DialogFooter>
       </DialogContent>
