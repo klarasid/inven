@@ -188,6 +188,18 @@ Klik **Cetak label** pada halaman ruangan untuk mencetak label semua barang di r
 
 Fitur ini memerlukan paket `mpdf/qrcode` (sudah tercantum di `composer.json`). Pada instalasi yang sudah berjalan, jalankan kembali `composer install --no-dev` dari direktori plugin.
 
+### Template kop institusi
+
+Untuk laporan yang harus mengikuti kop resmi institusi, buka **Laporan → Template kop**, lalu unggah PDF kop surat (maksimal 5 MB, hingga 20 template). Halaman 1 PDF menjadi latar halaman pertama laporan; halaman 2 (opsional) menjadi latar halaman berikutnya, sehingga kop lengkap dan kop ringkas dapat dibedakan. Ukuran kertas mengikuti template (A4, F4, tegak atau mendatar).
+
+- Aktifkan **Kop hanya di halaman pertama** agar halaman kedua dan seterusnya dicetak di kertas polos, seperti surat dinas yang lebih dari satu halaman. Opsi ini aktif secara bawaan untuk template satu halaman; untuk template dua halaman, plugin memakai salinan halaman 1 saja.
+- Atur **area konten** dengan menarik tepi kotak pada gambar halaman template atau mengisi margin dalam mm. Area atas dan bawah halaman pertama dan halaman berikutnya diatur terpisah; kiri dan kanan berlaku untuk semua halaman.
+- Pilih **font isi** dari daftar yang setiap namanya tampil dengan font itu sendiri: Computer Modern, FreeSerif (mirip Times New Roman), DejaVu Serif, FreeSans (mirip Arial/Helvetica), DejaVu Sans, versi *condensed*, FreeMono (mirip Courier New), dan DejaVu Sans Mono. Hanya font yang memiliki huruf tebal dan miring yang ditawarkan. Gambar pratinjau dibuat dengan `php tools/font-previews.php`.
+- Pilih **gaya isi** LaTeX atau ISO. Judul dicetak sederhana di tengah beserta nomor dan revisi dokumen; kop dan footer berasal dari template.
+- Klik **Coba cetak** untuk melihat laporan bulan berjalan dengan template tersebut. Template tersedia sebagai pilihan **Kop: …** di menu **Cetak PDF** laporan dan dokumen pemeriksaan.
+- Berkas disimpan di `images/inventaris-barang/kop` dengan nama acak; data template tersimpan di tabel `setting` (`inventory_pdf_letterheads`).
+- PDF 1.5+ yang memakai *object stream* belum dapat dibaca parser FPDI gratis. Simpan ulang sebagai **PDF/A** (di Word: *Simpan sebagai PDF* → *Opsi* → *Sesuai ISO 19005-1*) atau cetak ulang melalui *Microsoft Print to PDF*, lalu unggah kembali. PDF terenkripsi juga ditolak.
+
 ### Pratinjau PDF
 
 Semua cetakan PDF (KIR, laporan, dokumen pemeriksaan, dan label) tampil lebih dulu di popup pratinjau SLiMS. Popup memuat penampil PDF milik plugin (`assets/viewer`, berbasis [PDF.js](https://mozilla.github.io/pdf.js/), lisensi Apache-2.0) dengan tombol zoom, **Cetak**, dan **Unduh**. Karena dokumen diambil dan digambar oleh penampil itu sendiri, pengaturan browser yang mengunduh PDF atau membukanya di Adobe Acrobat, serta pengelola unduhan seperti IDM, tidak memengaruhi pratinjau. Tombol **Cetak** mencetak halaman pada sekitar 300 dpi dengan ukuran kertas sesuai dokumen. File PDF.js disalin ke `assets/viewer` oleh `npm run build`.

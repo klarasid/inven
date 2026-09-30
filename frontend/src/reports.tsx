@@ -9,6 +9,7 @@ import { useWorkspace, useData } from "./context";
 import { PageHeader, Pdf, RoomFilter, Panel, Loading, ErrorBox, Pager, Status, Blank, StatCard } from "./shared";
 import { dateLabel } from "./api";
 import { DocumentSettings } from "./documents";
+import { LetterheadSettings } from "./letterheads";
 import type { Summary, Page, TaskRow } from "./types";
 
 function Coverage({ label, value, total, hint }: { label: string; value: number; total: number; hint?: string }) {
@@ -61,6 +62,7 @@ export function Reports() {
         description="Capaian pemeriksaan dan tindak lanjut dalam periode yang dipilih."
         actions={
           <>
+            <LetterheadSettings />
             <DocumentSettings />
             <Pdf period={{ ...w.route, from, to }} label="Cetak laporan PDF" />
           </>

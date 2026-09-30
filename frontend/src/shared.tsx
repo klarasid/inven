@@ -55,7 +55,7 @@ import {
 } from "./components/ui/breadcrumb";
 import { cn } from "./lib/utils";
 import { useWorkspace } from "./context";
-import { dateLabel, statuses, url } from "./api";
+import { dateLabel, statuses, url, read } from "./api";
 import type { Event, Photo, Route } from "./types";
 
 export function ErrorBox({ message }: { message: string }) {
@@ -451,6 +451,7 @@ export function Pdf({
   label?: string;
 }) {
   const { config } = useWorkspace();
+  const [letterheads, setLetterheads] = useState<{ id: string; name: string }[]>();
   if (room)
     return (
       <Button
@@ -461,14 +462,22 @@ export function Pdf({
         {label}
       </Button>
     );
-  // Reports and inspection documents come in two typesetting styles.
+  // Reports and inspection documents come in two typesetting styles, plus any institution letterheads.
   const target = (style: string) => url(config.watch, { ...period, tab: "pdf", record: record ?? "", style });
   const styles = [
     { value: "latex", title: "Gaya LaTeX", text: "Huruf serif, tabel booktabs, ringkas dan formal." },
     { value: "iso", title: "Dokumen ISO", text: "Kepala dokumen terkendali, tabel bergaris, lembar pengesahan." },
+    ...(letterheads || []).map((t) => ({ value: `kop:${t.id}`, title: `Kop: ${t.name}`, text: "Template kop institusi." })),
   ];
   return (
-    <DropdownMenu>
+    <DropdownMenu
+      onOpenChange={(open) => {
+        if (open && !letterheads)
+          read<{ templates: { id: string; name: string }[] }>(config, "letterheads")
+            .then((d) => setLetterheads(d.templates))
+            .catch(() => setLetterheads([]));
+      }}
+    >
       <DropdownMenuTrigger asChild>
         <Button variant="outline">
           <FileText data-icon="inline-start" />

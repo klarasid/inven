@@ -70,6 +70,16 @@ try {
             watch_log('Import','Impor riwayat pemeriksaan: '.Supervision::json($data['ids']));
             echo json_encode(\SLiMS\Plugins\Inventory\WorkspaceRequests::remember('watch',['ok'=>true,'message'=>'Riwayat berhasil diimpor.','data'=>$data])); return;
         }
+        if (in_array($action,['letterhead_upload','letterhead_save','letterhead_delete'],true)) {
+            $autoload=dirname(__DIR__).'/vendor/autoload.php'; if (is_file($autoload)) require_once $autoload;
+            require_once __DIR__ . '/Letterheads.php';
+            $letterheadId=(string)($_POST['id']??'');
+            if ($action==='letterhead_upload') $template=\SLiMS\Plugins\Inventory\Letterheads::upload($db,$_FILES['template']??[],(string)($_POST['name']??''),SB.FLS.DS.'cache');
+            elseif ($action==='letterhead_save') $template=\SLiMS\Plugins\Inventory\Letterheads::update($db,$letterheadId,$_POST);
+            else { \SLiMS\Plugins\Inventory\Letterheads::delete($db,$letterheadId); $template=null; }
+            watch_log('Update','Template kop '.$action.' '.($template['id']??$letterheadId));
+            echo json_encode(\SLiMS\Plugins\Inventory\WorkspaceRequests::remember('watch',['ok'=>true,'message'=>'Template kop tersimpan.','data'=>$template])); return;
+        }
         $result=$watch->mutate($action,$_POST,$_FILES['photos']??[],(int)($_SESSION['uid']??0),$_FILES['fix_photos']??[]);
         watch_log('Update','Aksi '.$action.'; '.Supervision::json($result));
         $navigation=array_intersect_key($_GET,array_flip(['library','room','from','to','inspection_status','finding_status','return_tab','list_page']));
@@ -108,6 +118,15 @@ try {
         header('Content-Type: application/json; charset=utf-8'); header('Cache-Control: private, no-store');
         echo json_encode(['ok'=>true,'data'=>\SLiMS\Plugins\Inventory\Workspace::read($watch,$_GET,(int)($_SESSION['uid']??0))]); return;
     }
+    if ($tab==='letterhead') {
+        // Template file for the content-area editor preview; staff only, never listed publicly.
+        // The parameter is not "id": plugin_container.php uses ?id= to pick the plugin.
+        require_once __DIR__ . '/Letterheads.php';
+        $path=\SLiMS\Plugins\Inventory\Letterheads::path(\SLiMS\Plugins\Inventory\Letterheads::find($db,(string)($_GET['template']??'')));
+        header('Content-Type: application/pdf'); header('Content-Disposition: inline; filename="template-kop.pdf"');
+        header('Cache-Control: private, no-store'); header('X-Content-Type-Options: nosniff'); header('Content-Length: '.filesize($path));
+        readfile($path); return;
+    }
     if (!in_array($tab,['pdf'],true)) {
         $view=$inventoryWorkspaceView??'tasks';
         \SLiMS\Plugins\Inventory\Workspace::shell($view,$canWrite); return;
@@ -124,7 +143,12 @@ try {
         if (!class_exists(\Mpdf\Mpdf::class)) throw new RuntimeException('Dependensi mPDF belum tersedia. Jalankan composer install di direktori plugin.');
         require_once __DIR__ . '/WatchPdf.php';
         $id=(int)($_GET['record']??0);
-        $style=isset(\SLiMS\Plugins\Inventory\WatchPdf::STYLES[$_GET['style']??''])?(string)$_GET['style']:'latex';
+        $style=(string)($_GET['style']??'latex');
+        if (str_starts_with($style,'kop:')) {
+            require_once __DIR__ . '/Letterheads.php';
+            \SLiMS\Plugins\Inventory\PdfLetterhead::configure(\SLiMS\Plugins\Inventory\Letterheads::find($db,substr($style,4)));
+            $style='kop';
+        } elseif ($style==='kop' || !isset(\SLiMS\Plugins\Inventory\WatchPdf::STYLES[$style])) $style='latex';
         if ($id) {
             $html=\SLiMS\Plugins\Inventory\WatchPdf::detail($watch->document($id),fn($photo)=>$watch->photo($id,(int)$photo['id']),$style,\SLiMS\Plugins\Inventory\PdfDocuments::load($db));
             $title='Dokumen Pemeriksaan #'.$id; $file='pemeriksaan-'.$id.'.pdf';

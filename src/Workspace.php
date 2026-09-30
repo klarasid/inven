@@ -126,6 +126,12 @@ final class Workspace
             require_once __DIR__.'/PdfDocuments.php';
             return ['settings'=>PdfDocuments::load($w->pdo()),'types'=>PdfDocuments::TYPES,'placeholders'=>PdfDocuments::PLACEHOLDERS];
         }
+        if($resource==='letterheads') {
+            require_once __DIR__.'/Letterheads.php';
+            $list=array_values(Letterheads::all($w->pdo()));
+            usort($list,fn($a,$b)=>strcasecmp($a['name'],$b['name']));
+            return ['templates'=>$list,'bodies'=>Letterheads::BODIES,'maxBytes'=>Letterheads::MAX_BYTES,'fonts'=>PdfFonts::catalog()];
+        }
         if($resource==='assets') {
             return $w->query('SELECT id,item_name,item_code,item_condition FROM inventory_items WHERE location_id=? ORDER BY item_name,id',[$room])->fetchAll(\PDO::FETCH_ASSOC);
         }

@@ -3,6 +3,7 @@ namespace SLiMS\Plugins\Inventory;
 
 require_once __DIR__ . '/PdfLatex.php';
 require_once __DIR__ . '/PdfIso.php';
+require_once __DIR__ . '/PdfLetterhead.php';
 require_once __DIR__ . '/PdfDocuments.php';
 
 /**
@@ -15,7 +16,8 @@ final class WatchPdf
     private const ACTIONS = ['repair' => 'Perbaikan', 'maintenance' => 'Pemeliharaan', 'none' => 'Tanpa pekerjaan'];
     private const EVENTS = ['report' => 'Kerusakan dilaporkan', 'progress' => 'Catatan perkembangan', 'import_history' => 'Riwayat diimpor', 'import_action' => 'Pekerjaan historis diimpor', 'import_verification' => 'Verifikasi historis', 'verify' => 'Verifikasi diterima', 'reject' => 'Dikembalikan', 'correction' => 'Catatan koreksi', 'finalize' => 'Pemeriksaan difinalisasi', 'start' => 'Pekerjaan dimulai', 'submit' => 'Diajukan untuk verifikasi', 'save_draft' => 'Draf disimpan', 'save_action' => 'Pekerjaan disimpan'];
 
-    public const STYLES = ['latex' => PdfLatex::class, 'iso' => PdfIso::class];
+    /** 'kop' typesets on an institution letterhead; PdfLetterhead::configure() must receive the template first. */
+    public const STYLES = ['latex' => PdfLatex::class, 'iso' => PdfIso::class, 'kop' => PdfLetterhead::class];
 
     /** @return class-string<PdfLatex>|class-string<PdfIso> */
     private static function style(string $style): string { return self::STYLES[$style] ?? PdfLatex::class; }
