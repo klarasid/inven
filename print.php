@@ -84,8 +84,15 @@ try {
         die('Lokasi memuat lebih dari 500 barang. Pecah data ke beberapa lokasi sebelum mencetak PDF.');
     }
 
-    require_once __DIR__ . '/src/PdfTemplate.php';
-    $html = \SLiMS\Plugins\Inventory\PdfTemplate::render($location, $items);
+    // Two KIR layouts: the classic form (default) and the modern one, chosen from the print menu.
+    $modern = ($_GET['template'] ?? '') === 'modern';
+    if ($modern) {
+        require_once __DIR__ . '/src/PdfTemplateModern.php';
+        $html = \SLiMS\Plugins\Inventory\PdfTemplateModern::render($location, $items);
+    } else {
+        require_once __DIR__ . '/src/PdfTemplate.php';
+        $html = \SLiMS\Plugins\Inventory\PdfTemplate::render($location, $items);
+    }
 
     $tempDir = SB . FLS . DS . 'cache';
     if (!is_dir($tempDir) || !is_writable($tempDir)) {
@@ -93,18 +100,27 @@ try {
         die('Direktori cache PDF tidak dapat ditulis.');
     }
 
-    $pdf = new \Mpdf\Mpdf([
-        'mode' => 'utf-8',
-        'format' => [330, 216],
-        'margin_left' => 10,
-        'margin_right' => 10,
-        'margin_top' => 4,
-        'margin_bottom' => 7,
-        'tempDir' => $tempDir,
-        'exposeVersion' => false,
-    ]);
-    $pdf->SetTitle('Kartu Inventaris Ruangan - ' . $location['room_name']);
-    $pdf->SetAuthor((string) ($sysconf['library_name'] ?? 'SLiMS'));
+    if ($modern) {
+        $pdf = \SLiMS\Plugins\Inventory\PdfLayout::mpdf(
+            $tempDir,
+            'Kartu Inventaris Ruangan - ' . $location['room_name'],
+            \SLiMS\Plugins\Inventory\PdfTemplateModern::footer($location),
+            ['format' => [330, 216], 'margin_left' => 10, 'margin_right' => 10, 'margin_top' => 9, 'margin_bottom' => 13, 'margin_footer' => 6, 'exposeVersion' => false]
+        );
+    } else {
+        $pdf = new \Mpdf\Mpdf([
+            'mode' => 'utf-8',
+            'format' => [330, 216],
+            'margin_left' => 10,
+            'margin_right' => 10,
+            'margin_top' => 4,
+            'margin_bottom' => 7,
+            'tempDir' => $tempDir,
+            'exposeVersion' => false,
+        ]);
+        $pdf->SetTitle('Kartu Inventaris Ruangan - ' . $location['room_name']);
+        $pdf->SetAuthor((string) ($sysconf['library_name'] ?? 'SLiMS'));
+    }
     $pdf->WriteHTML($html);
 
     $safeRoom = preg_replace('/[^A-Za-z0-9_-]+/', '-', (string) $location['room_name']);

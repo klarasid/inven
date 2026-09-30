@@ -39,7 +39,7 @@ final class Supervision
     private function event(int $inspection, ?int $finding, string $event, string $notes, array $actor): void {
         $this->query('INSERT INTO inventory_watch_events (inspection_id,finding_id,event,notes,actor_id,actor_name,created_at) VALUES (?,?,?,?,?,?,NOW())',[$inspection,$finding,$event,$notes,$actor['id'],$actor['name']]);
     }
-    public function mutate(string $action, array $input, array $uploads, int $uid): array {
+    public function mutate(string $action, array $input, array $uploads, int $uid, array $fixUploads=[]): array {
         $actor=$this->user($uid); $this->created=[]; $this->removed=[];
         $this->db->beginTransaction();
         try {
@@ -57,6 +57,7 @@ final class Supervision
                     $this->event((int)$inspection['id'],null,'correction',$this->text($input['notes']??'','Catatan koreksi'),$actor);
                     $result=['tab'=>'inspection','record'=>(int)$inspection['id']]; break;
                 case 'finding': $this->finding($input,$uploads,$actor); $result=['tab'=>'finding','record'=>(int)$input['id']]; break;
+                case 'report': $result=['tab'=>'finding','record'=>$this->report($input,$uploads,$fixUploads,$actor)]; break;
                 default: throw new RuntimeException('Aksi pengawasan tidak dikenal.');
             }
             if (in_array($action, ['inspection','result_photos'], true)) {
@@ -230,9 +231,15 @@ final class Supervision
             $this->event($inspection,$id,'start','Pekerjaan dimulai.',$actor); return;
         }
         if (in_array($mode,['verify','reject'],true) && $status==='review') {
+            $this->assertReporter($inspection,$actor);
             $notes=$this->text($input['notes']??'','Catatan verifikasi');
             $this->query('UPDATE inventory_watch_findings SET status=?,closed_at=?,version=version+1 WHERE id=?',[$mode==='verify'?'closed':'working',$mode==='verify'?date('Y-m-d H:i:s'):null,$id]);
             $this->event($inspection,$id,$mode,$notes,$actor); return;
+        }
+        if ($mode==='note' && in_array($status,['open','working'],true)) {
+            $this->query("UPDATE inventory_watch_findings SET status='working',version=version+1 WHERE id=?",[$id]);
+            if ($status==='open') $this->event($inspection,$id,'start','Pekerjaan dimulai.',$actor);
+            $this->event($inspection,$id,'progress',$this->text($input['notes']??'','Catatan perkembangan'),$actor); return;
         }
         if (!in_array($mode,['draft','submit'],true) || !in_array($status,['open','working'],true)) throw new RuntimeException('Transisi status tidak tersedia. Muat ulang halaman.');
         // Opening a form is read-only. Start is recorded with the first successful save.
@@ -259,6 +266,53 @@ final class Supervision
         }
         $this->query('UPDATE inventory_watch_findings SET status=?,version=version+1 WHERE id=?',[$mode==='submit'?'review':'working',$id]);
         $this->event($inspection,$id,$mode==='submit'?'submit':'save_action',$description,$actor);
+    }
+    /** The person who raised the finding verifies it; any writer may step in once that account is gone. */
+    private function assertReporter(int $inspection,array $actor): void {
+        $reporter=$this->query('SELECT i.examiner_id,i.examiner_name,u.user_id FROM inventory_watch_inspections i LEFT JOIN user u ON u.user_id=i.examiner_id WHERE i.id=?',[$inspection])->fetch(PDO::FETCH_ASSOC);
+        if ($reporter && $reporter['user_id']!==null && (int)$reporter['examiner_id']!==(int)$actor['id']) throw new RuntimeException('Hanya pelapor ('.$reporter['examiner_name'].') yang dapat memverifikasi hasil ini.');
+    }
+    /**
+     * Damage report: one incidental inspection with a single "action" result, finalized at once
+     * so the handler gets a finding. When the reporter fixed it personally, the repair is submitted
+     * and self-verified in the same transaction.
+     */
+    private function report(array $input,array $uploads,array $fixUploads,array $actor): int {
+        $roomId=(int)($input['location_id']??0);
+        $room=$this->query('SELECT l.*,ml.location_id AS library_code,ml.location_name AS library_name FROM inventory_locations l LEFT JOIN mst_location ml ON ml.location_id=l.slims_location_id WHERE l.id=? FOR UPDATE',[$roomId])->fetch(PDO::FETCH_ASSOC);
+        if (!$room) throw new RuntimeException('Ruangan tidak ditemukan.');
+        $item=['group'=>'Sarana','object'=>'','instruction'=>'','item_id'=>null,'item_name'=>'','item_code'=>''];
+        $assetId=(int)($input['item_id']??0);
+        if ($assetId) {
+            $asset=$this->query('SELECT id,item_name,item_code FROM inventory_items WHERE id=? AND location_id=?',[$assetId,$roomId])->fetch(PDO::FETCH_ASSOC);
+            if (!$asset) throw new RuntimeException('Barang harus berada di ruangan yang dipilih.');
+            $item=array_merge($item,['object'=>$asset['item_name'],'item_id'=>(int)$asset['id'],'item_name'=>$asset['item_name'],'item_code'=>$asset['item_code']]);
+        } else {
+            $item['object']=$this->text($input['object']??'','Objek yang rusak',true,255);
+            $item['group']=in_array($input['group']??'',['Sarana','Prasarana','Lingkungan Fisik'],true)?$input['group']:'Prasarana';
+        }
+        $problem=$this->text($input['problem']??'','Uraian kerusakan');
+        $handler=$this->user((int)($input['handler_id']??0));
+        $priority=(string)($input['priority']??'medium');
+        if (!isset(self::PRIORITIES[$priority])) throw new RuntimeException('Prioritas tidak valid.');
+        $deadline=WatchRecurrence::date((string)($input['deadline']??''))->format('Y-m-d');
+        if ($deadline<date('Y-m-d')) throw new RuntimeException('Tenggat tidak boleh di masa lalu.');
+        $fixed=($input['fixed']??'')==='1';
+        if ($fixed && (int)$handler['id']!==(int)$actor['id']) throw new RuntimeException('Hanya bisa ditandai selesai bila Anda sendiri yang menangani.');
+        $scope=['room_id'=>$roomId,'room_name'=>$room['room_name'],'location_code'=>$room['location_code'],'library_code'=>$room['library_code']??'','library_name'=>$room['library_name']??'Tidak ditentukan','template_id'=>null,'template_name'=>'Laporan kerusakan','assignee'=>$actor,'items'=>[$item]];
+        $inspectionId=$this->createInspection($scope,date('Y-m-d'),'incidental',$problem,null,null);
+        $result=$this->query('SELECT id FROM inventory_watch_results WHERE inspection_id=?',[$inspectionId])->fetchColumn();
+        $this->query("UPDATE inventory_watch_results SET outcome='action',notes=?,assignee_id=?,assignee_name=?,priority=?,deadline=? WHERE id=?",[$problem,$handler['id'],$handler['name'],$priority,$deadline,$result]);
+        $this->query("UPDATE inventory_watch_inspections SET status='final',performed_date=?,examiner_id=?,examiner_name=?,version=version+1,finalized_at=NOW() WHERE id=?",[date('Y-m-d'),$actor['id'],$actor['name'],$inspectionId]);
+        $this->photos($inspectionId,(int)$result,null,ItemPhotos::uploads($uploads),[]);
+        $this->query('INSERT INTO inventory_watch_findings (inspection_id,result_id,assignee_id,assignee_name,priority,deadline,created_at) VALUES (?,?,?,?,?,?,NOW())',[$inspectionId,$result,$handler['id'],$handler['name'],$priority,$deadline]);
+        $finding=(int)$this->db->lastInsertId();
+        $this->event($inspectionId,$finding,'report','Dilaporkan kepada '.$handler['name'].': '.$problem,$actor);
+        if ($fixed) {
+            $this->finding(['id'=>$finding,'version'=>1,'mode'=>'submit']+array_intersect_key($input,array_flip(['kind','description','performed_date','cost'])),$fixUploads,$actor);
+            $this->finding(['id'=>$finding,'version'=>2,'mode'=>'verify','notes'=>'Ditangani dan diverifikasi sendiri oleh pelapor.'],[],$actor);
+        }
+        return $finding;
     }
     public function document(int $id): array {
         $inspection=$this->row('inspections',$id);

@@ -132,6 +132,46 @@
     /* @property's initial-value doesn't register inside this Shadow DOM, so border-* utilities lose their style without this */
     --tw-border-style: solid;
     }
+  /*
+   * Same Shadow DOM gap for every other Tailwind @property: utilities such as translate and box-shadow
+   * compose several variables, and one undefined variable voids the whole declaration
+   * (e.g. -translate-y-1/2 did nothing, so search icons sat below centre; shadow/ring never drew).
+   * These mirror Tailwind's own fallback for browsers without @property.
+   */
+  *, ::before, ::after, ::backdrop {
+    --tw-translate-x: 0;
+    --tw-translate-y: 0;
+    --tw-translate-z: 0;
+    --tw-divide-y-reverse: 0;
+    --tw-outline-style: solid;
+    --tw-shadow: 0 0 #0000;
+    --tw-shadow-alpha: 100%;
+    --tw-inset-shadow: 0 0 #0000;
+    --tw-inset-shadow-alpha: 100%;
+    --tw-ring-shadow: 0 0 #0000;
+    --tw-inset-ring-shadow: 0 0 #0000;
+    --tw-ring-offset-width: 0px;
+    --tw-ring-offset-color: #fff;
+    --tw-ring-offset-shadow: 0 0 #0000;
+    --tw-drop-shadow-alpha: 100%;
+    --tw-content: "";
+    --tw-animation-delay: 0s;
+    --tw-animation-direction: normal;
+    --tw-animation-fill-mode: none;
+    --tw-animation-iteration-count: 1;
+    --tw-enter-blur: 0;
+    --tw-enter-opacity: 1;
+    --tw-enter-rotate: 0;
+    --tw-enter-scale: 1;
+    --tw-enter-translate-x: 0;
+    --tw-enter-translate-y: 0;
+    --tw-exit-blur: 0;
+    --tw-exit-opacity: 1;
+    --tw-exit-rotate: 0;
+    --tw-exit-scale: 1;
+    --tw-exit-translate-x: 0;
+    --tw-exit-translate-y: 0;
+  }
   body {
     @apply bg-background text-foreground;
     }

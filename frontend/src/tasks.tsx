@@ -17,7 +17,7 @@ import {
   CalendarClock,
   User,
   Undo2,
-  MoreHorizontal,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
@@ -40,6 +40,8 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuGroup,
 } from "./components/ui/dropdown-menu";
 import { cn } from "./lib/utils";
 import { useData, useWorkspace } from "./context";
@@ -151,9 +153,8 @@ export function Tasks() {
   const { data: counts } = useData<Counts>("counts");
   const count = (k: string) => {
     if (!counts) return undefined;
-    if (k === "review") return counts.review;
     if (k === "history") return undefined;
-    const c = counts[k as "inspections" | "findings"];
+    const c = counts[k as "inspections" | "findings" | "review"];
     return owner === "all" ? c.all : c.mine;
   };
   const tabs = [
@@ -163,7 +164,8 @@ export function Tasks() {
     { value: "history", label: "Riwayat", icon: HistoryIcon },
   ];
   const switchTab = (kind: string) => go({ view: "tasks", kind, q: route.q, room: route.room, page: 1 }, true);
-  const otherCount = counts && !history && tab !== "review" && owner === "mine" ? counts[tab as "inspections" | "findings"].all : 0;
+  const otherCount =
+    counts && !history && owner === "mine" ? counts[tab as "inspections" | "findings" | "review"].all - (count(tab) || 0) : 0;
   const findingRows = kind !== "inspections";
 
   return (
@@ -176,20 +178,44 @@ export function Tasks() {
             <>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon" aria-label="Tindakan lainnya">
-                    <MoreHorizontal />
+                  <Button variant="outline">
+                    Lainnya
+                    <ChevronDown data-icon="inline-end" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onSelect={() => go({ view: "history-import" })}>
-                    <UploadIcon />
-                    Impor riwayat dari Excel
-                  </DropdownMenuItem>
+                <DropdownMenuContent align="end" className="w-80 p-1.5">
+                  <DropdownMenuLabel className="text-xs text-muted-foreground">Cara lain mencatat</DropdownMenuLabel>
+                  <DropdownMenuGroup>
+                    {[
+                      {
+                        icon: ClipboardCheck,
+                        title: "Pemeriksaan insidental",
+                        text: "Periksa satu ruangan di luar jadwal memakai checklist.",
+                        run: () => go({ view: "new-inspection" }),
+                      },
+                      {
+                        icon: UploadIcon,
+                        title: "Impor riwayat dari Excel",
+                        text: "Masukkan pemeriksaan dan perbaikan yang sudah berlalu.",
+                        run: () => go({ view: "history-import" }),
+                      },
+                    ].map(({ icon: Icon, title, text, run }) => (
+                      <DropdownMenuItem key={title} onSelect={run} className="items-start gap-3 px-2 py-2">
+                        <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md border bg-muted/50">
+                          <Icon className="size-4" />
+                        </span>
+                        <span className="flex min-w-0 flex-col gap-0.5">
+                          <span className="font-medium">{title}</span>
+                          <span className="text-xs leading-snug text-muted-foreground whitespace-normal">{text}</span>
+                        </span>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuGroup>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button onClick={() => go({ view: "new-inspection" })}>
+              <Button onClick={() => go({ view: "report" })}>
                 <Plus data-icon="inline-start" />
-                Pemeriksaan insidental
+                Lapor kerusakan
               </Button>
             </>
           )
@@ -228,7 +254,7 @@ export function Tasks() {
             <ToggleGroupItem value="findings">Tindak lanjut</ToggleGroupItem>
           </ToggleGroup>
         )}
-        {tab !== "review" && (
+        {(
           <ToggleGroup
             type="single"
             variant="outline"
@@ -239,7 +265,7 @@ export function Tasks() {
           >
             <ToggleGroupItem value="mine">
               <User />
-              Tugas saya
+              {tab === "review" ? "Perlu saya verifikasi" : "Tugas saya"}
             </ToggleGroupItem>
             <ToggleGroupItem value="all">Semua petugas</ToggleGroupItem>
           </ToggleGroup>
@@ -255,7 +281,9 @@ export function Tasks() {
             history
               ? "Belum ada riwayat"
               : tab === "review"
-                ? "Tidak ada yang perlu diverifikasi"
+                ? owner === "mine"
+                  ? "Tidak ada yang perlu Anda verifikasi"
+                  : "Tidak ada yang menunggu verifikasi"
                 : owner === "mine"
                   ? "Tidak ada tugas untuk Anda"
                   : "Semua tugas sudah selesai"
@@ -263,8 +291,8 @@ export function Tasks() {
           description={
             history
               ? "Pemeriksaan dan tindak lanjut yang selesai akan tercatat di sini."
-              : tab === "review"
-                ? "Pekerjaan yang diajukan petugas akan muncul di sini."
+              : tab === "review" && !otherCount
+                ? "Laporan Anda yang sudah ditangani petugas muncul di sini untuk Anda periksa dan terima."
                 : otherCount
                   ? `Ada ${otherCount} tugas milik petugas lain.`
                   : "Tugas baru muncul sesuai jadwal pemeriksaan atau dari temuan yang perlu tindakan."
@@ -273,7 +301,7 @@ export function Tasks() {
           <div className="flex flex-wrap justify-center gap-2">
             {otherCount > 0 && (
               <Button onClick={() => go({ ...route, owner: "all", page: 1 }, true)}>
-                Lihat semua tugas ({otherCount})
+                Lihat semua ({otherCount})
               </Button>
             )}
             {!history && (
@@ -310,6 +338,7 @@ export function Tasks() {
                         <div className="font-medium">{r.result_snapshot?.object || r.snapshot.room_name}</div>
                         <div className="text-xs text-muted-foreground">
                           {findingRows ? r.snapshot.room_name : r.snapshot.library_name}
+                          {findingRows && r.reporter_name && ` · Pelapor ${r.reporter_name}`}
                           {r.kind === "incidental" && " · Insidental"}
                           {r.kind === "historical" && " · Impor riwayat"}
                         </div>
@@ -1003,12 +1032,12 @@ function FindingEditor({ document: d }: { document: Document }) {
     cost: draft?.cost || "",
     notes: "",
   });
+  const [progress, setProgress] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [removed, setRemoved] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
   const [error, setError] = useState("");
-  const [tab, setTab] = useState("work");
   const update = (key: string, value: string) => {
     setValues((v) => ({ ...v, [key]: value }));
     w.dirty(true);
@@ -1020,17 +1049,24 @@ function FindingEditor({ document: d }: { document: Document }) {
     setError("");
     try {
       const body = new FormData();
-      files.forEach((file) => body.append("photos[]", file));
-      await w.mutate({ watch_action: "finding", id: f.id, version: f.version, mode, ...values, remove: removed }, body);
+      if (mode !== "note") files.forEach((file) => body.append("photos[]", file));
+      await w.mutate(
+        mode === "note"
+          ? { watch_action: "finding", id: f.id, version: f.version, mode, notes: progress }
+          : { watch_action: "finding", id: f.id, version: f.version, mode, ...values, remove: removed },
+        body,
+      );
       w.dirty(false);
       toast.success(
         mode === "submit"
-          ? "Pekerjaan diajukan untuk verifikasi."
+          ? `Diajukan. Menunggu verifikasi dari ${reporter}.`
           : mode === "verify"
-            ? "Hasil diterima."
+            ? "Hasil diterima. Laporan selesai."
             : mode === "reject"
-              ? "Pekerjaan dikembalikan."
-              : "Draf pekerjaan tersimpan.",
+              ? "Pekerjaan dikembalikan ke petugas."
+              : mode === "note"
+                ? "Catatan perkembangan tersimpan."
+                : "Draf pekerjaan tersimpan.",
       );
       w.refresh();
     } catch (e) {
@@ -1042,12 +1078,17 @@ function FindingEditor({ document: d }: { document: Document }) {
   }
   const workPhotos = d.photos.filter((p) => draft && String(p.action_id) === String(draft.id));
   const late = f.deadline < w.config.today && f.status !== "closed";
+  const reporter = d.inspection.examiner_name || "pelapor";
+  // The reporter verifies; the server also lets anyone step in when the reporter account no longer exists.
+  const isReporter = !d.inspection.examiner_id || Number(d.inspection.examiner_id) === w.config.uid;
+  const isHandler = Number(f.assignee_id) === w.config.uid;
   const editable = w.config.write && ["open", "working"].includes(f.status);
-  const reviewing = w.config.write && f.status === "review";
+  const reviewing = w.config.write && f.status === "review" && isReporter;
+  const events = d.events.filter((e) => String(e.finding_id) === String(f.id));
   const steps = [
-    { key: "open", label: "Temuan dibuat" },
-    { key: "working", label: "Pekerjaan dicatat" },
-    { key: "review", label: "Verifikasi" },
+    { key: "open", label: "Dilaporkan" },
+    { key: "working", label: "Ditangani" },
+    { key: "review", label: `Verifikasi ${reporter}` },
     { key: "closed", label: "Selesai" },
   ];
   const stepIndex = steps.findIndex((s) => s.key === f.status);
@@ -1073,15 +1114,16 @@ function FindingEditor({ document: d }: { document: Document }) {
               <CalendarClock />
               Tenggat {dateLabel(f.deadline)}
             </Badge>
+            <Badge variant="outline">Pelapor: {reporter}</Badge>
             <Badge variant="outline">
               <User />
-              {f.assignee_name}
+              Ditangani: {f.assignee_name}
             </Badge>
           </>
         }
         actions={
-          <Button variant="outline" onClick={() => w.go({ view: "inspection", record: f.inspection_id })}>
-            Pemeriksaan asal
+          <Button variant="ghost" onClick={() => w.go({ view: "inspection", record: f.inspection_id })}>
+            {d.snapshot.template_id ? "Pemeriksaan asal" : "Lihat laporan"}
           </Button>
         }
       />
@@ -1103,163 +1145,193 @@ function FindingEditor({ document: d }: { document: Document }) {
           </li>
         ))}
       </ol>
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList variant="line" className="w-full justify-start border-b">
-          <TabsTrigger value="work" className="flex-none">
-            Pekerjaan
-          </TabsTrigger>
-          <TabsTrigger value="history" className="flex-none">
-            Riwayat kegiatan
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
       <ErrorBox message={error} />
-      {tab === "history" && <History events={d.events.filter((e) => String(e.finding_id) === String(f.id))} />}
-      {tab === "work" && (
-        <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
-          <div className="flex min-w-0 flex-col gap-6">
-            {editable ? (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  save("submit");
-                }}
-              >
-                <fieldset disabled={busy} className="flex min-w-0 flex-col gap-6">
-                  <Panel title="Catat pekerjaan" description="Isi tindakan dan bukti, lalu ajukan untuk diverifikasi.">
-                    <FieldGroup>
-                      <ToggleGroup
-                        type="single"
-                        variant="outline"
-                        value={values.kind}
-                        onValueChange={(v) => v && update("kind", v)}
-                        className="w-full"
-                        aria-label="Jenis tindakan"
-                      >
-                        {Object.entries(actionKinds).map(([value, label]) => (
-                          <ToggleGroupItem key={value} value={value} className="flex-1">
-                            {label}
-                          </ToggleGroupItem>
-                        ))}
-                      </ToggleGroup>
+      <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
+        <div className="flex min-w-0 flex-col gap-6">
+          {reviewing && (
+            <Panel
+              title="Verifikasi hasil"
+              description="Anda pelapor. Periksa hasil pekerjaan di bawah, lalu terima atau kembalikan ke petugas."
+            >
+              <fieldset disabled={busy}>
+                <FieldGroup>
+                  <TextField
+                    label="Catatan verifikasi"
+                    description="Wajib diisi, termasuk alasan bila dikembalikan."
+                    multiline
+                    rows={2}
+                    required
+                    placeholder="Contoh: Komputer sudah menyala normal."
+                    value={values.notes}
+                    onChange={(v) => update("notes", v)}
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <Button disabled={!values.notes.trim()} onClick={() => save("verify")}>
+                      <Check data-icon="inline-start" />
+                      Terima hasil
+                    </Button>
+                    <Button variant="outline" disabled={!values.notes.trim()} onClick={() => save("reject")}>
+                      <Undo2 data-icon="inline-start" />
+                      Kembalikan untuk perbaikan
+                    </Button>
+                  </div>
+                </FieldGroup>
+              </fieldset>
+            </Panel>
+          )}
+          {f.status === "review" && !isReporter && (
+            <Blank
+              icon={ShieldCheck}
+              title={`Menunggu verifikasi dari ${reporter}`}
+              description="Pelapor akan memeriksa hasil pekerjaan lalu menerimanya atau mengembalikannya."
+            />
+          )}
+          {editable ? (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                save("submit");
+              }}
+            >
+              <fieldset disabled={busy} className="flex min-w-0 flex-col gap-6">
+                <Panel
+                  title={isHandler ? "Catat hasil penanganan" : `Catat hasil penanganan (ditugaskan ke ${f.assignee_name})`}
+                  description={`Setelah selesai, ajukan agar ${reporter} memverifikasi.`}
+                >
+                  <FieldGroup>
+                    <ToggleGroup
+                      type="single"
+                      variant="outline"
+                      value={values.kind}
+                      onValueChange={(v) => v && update("kind", v)}
+                      className="w-full"
+                      aria-label="Jenis tindakan"
+                    >
+                      {Object.entries(actionKinds).map(([value, label]) => (
+                        <ToggleGroupItem key={value} value={value} className="flex-1">
+                          {label}
+                        </ToggleGroupItem>
+                      ))}
+                    </ToggleGroup>
+                    <TextField
+                      label={values.kind === "none" ? "Alasan tanpa pekerjaan" : "Uraian pekerjaan"}
+                      required
+                      multiline
+                      value={values.description}
+                      onChange={(v) => update("description", v)}
+                    />
+                    <FieldGroup className="grid sm:grid-cols-2">
                       <TextField
-                        label={values.kind === "none" ? "Alasan tanpa pekerjaan" : "Uraian pekerjaan"}
+                        label="Tanggal pekerjaan"
+                        type="date"
                         required
-                        multiline
-                        value={values.description}
-                        onChange={(v) => update("description", v)}
+                        max={w.config.today}
+                        value={values.performed_date}
+                        onChange={(v) => update("performed_date", v)}
                       />
-                      <FieldGroup className="grid sm:grid-cols-2">
-                        <TextField
-                          label="Tanggal pekerjaan"
-                          type="date"
-                          required
-                          max={w.config.today}
-                          value={values.performed_date}
-                          onChange={(v) => update("performed_date", v)}
-                        />
-                        <TextField
-                          label="Biaya (Rp, opsional)"
-                          type="number"
-                          min="0"
-                          value={values.cost}
-                          onChange={(v) => update("cost", v)}
-                        />
-                      </FieldGroup>
-                      <Photos
-                        photos={workPhotos}
-                        size="sm"
-                        removed={removed}
-                        onToggle={(p) => {
-                          setRemoved((prev) =>
-                            prev.includes(String(p.id)) ? prev.filter((id) => id !== String(p.id)) : [...prev, String(p.id)],
-                          );
-                          w.dirty(true);
-                        }}
-                      />
-                      <Upload
-                        label={values.kind === "none" ? "Foto hasil (opsional)" : "Foto hasil pekerjaan"}
-                        files={files}
-                        onChange={(f) => {
-                          setFiles(f);
-                          w.dirty(true);
-                        }}
-                        count={workPhotos.length - removed.length}
-                        hint={
-                          values.kind === "none"
-                            ? "Foto opsional untuk tindakan tanpa pekerjaan."
-                            : "Minimal satu foto diperlukan untuk pengajuan. Maksimal 5 foto, 2 MB per foto."
-                        }
+                      <TextField
+                        label="Biaya (Rp, opsional)"
+                        type="number"
+                        min="0"
+                        value={values.cost}
+                        onChange={(v) => update("cost", v)}
                       />
                     </FieldGroup>
-                  </Panel>
-                  <ActionBar status={busy ? "Menyimpan…" : undefined}>
-                    <Button type="button" variant="outline" onClick={() => save("draft")}>
-                      Simpan draf
-                    </Button>
-                    <Button type="submit">
-                      Ajukan verifikasi
-                      <ArrowRight data-icon="inline-end" />
-                    </Button>
-                  </ActionBar>
-                </fieldset>
-              </form>
-            ) : (
-              draft && (
-                <Panel title="Draf pekerjaan">
-                  <p className="mb-3 whitespace-pre-wrap">{draft.description}</p>
-                  <Photos photos={workPhotos} size="sm" />
-                </Panel>
-              )
-            )}
-            {actions
-              .filter((a) => a.submitted_at)
-              .reverse()
-              .map((a) => (
-                <Panel
-                  key={a.id}
-                  title={`${actionKinds[a.kind] || a.kind} · ${dateLabel(a.performed_date)}`}
-                  description={`${a.actor_name}${a.cost ? ` · ${money(a.cost)}` : ""}`}
-                >
-                  <p className="mb-3 whitespace-pre-wrap">{a.description}</p>
-                  <Photos photos={d.photos.filter((p) => String(p.action_id) === String(a.id))} size="sm" />
-                </Panel>
-              ))}
-            {reviewing && (
-              <Panel title="Verifikasi hasil" description="Periksa pekerjaan di atas, lalu terima atau kembalikan.">
-                <fieldset disabled={busy}>
-                  <FieldGroup>
-                    <TextField
-                      label="Catatan verifikasi"
-                      description="Wajib diisi, termasuk alasan bila dikembalikan."
-                      multiline
-                      required
-                      value={values.notes}
-                      onChange={(v) => update("notes", v)}
+                    <Photos
+                      photos={workPhotos}
+                      size="sm"
+                      removed={removed}
+                      onToggle={(p) => {
+                        setRemoved((prev) =>
+                          prev.includes(String(p.id)) ? prev.filter((id) => id !== String(p.id)) : [...prev, String(p.id)],
+                        );
+                        w.dirty(true);
+                      }}
                     />
-                    <div className="flex flex-wrap gap-2">
-                      <Button disabled={!values.notes.trim()} onClick={() => save("verify")}>
-                        <Check data-icon="inline-start" />
-                        Terima hasil
-                      </Button>
-                      <Button variant="outline" disabled={!values.notes.trim()} onClick={() => save("reject")}>
-                        <Undo2 data-icon="inline-start" />
-                        Kembalikan untuk perbaikan
-                      </Button>
-                    </div>
+                    <Upload
+                      label={values.kind === "none" ? "Foto hasil (opsional)" : "Foto hasil pekerjaan"}
+                      files={files}
+                      onChange={(f) => {
+                        setFiles(f);
+                        w.dirty(true);
+                      }}
+                      count={workPhotos.length - removed.length}
+                      hint={
+                        values.kind === "none"
+                          ? "Foto opsional untuk tindakan tanpa pekerjaan."
+                          : "Minimal satu foto diperlukan untuk pengajuan. Maksimal 5 foto, 2 MB per foto."
+                      }
+                    />
                   </FieldGroup>
-                </fieldset>
+                </Panel>
+                <ActionBar status={busy ? "Menyimpan…" : undefined}>
+                  <Button type="button" variant="outline" onClick={() => save("draft")}>
+                    Simpan draf
+                  </Button>
+                  <Button type="submit">
+                    Selesai, minta verifikasi
+                    <ArrowRight data-icon="inline-end" />
+                  </Button>
+                </ActionBar>
+              </fieldset>
+            </form>
+          ) : (
+            draft && (
+              <Panel title="Draf pekerjaan">
+                <p className="mb-3 whitespace-pre-wrap">{draft.description}</p>
+                <Photos photos={workPhotos} size="sm" />
               </Panel>
-            )}
-          </div>
-          <Panel title="Temuan awal" className="lg:sticky lg:top-4 lg:self-start">
+            )
+          )}
+          {actions
+            .filter((a) => a.submitted_at)
+            .reverse()
+            .map((a) => (
+              <Panel
+                key={a.id}
+                title={`${actionKinds[a.kind] || a.kind} · ${dateLabel(a.performed_date)}`}
+                description={`${a.actor_name}${a.cost ? ` · ${money(a.cost)}` : ""}`}
+              >
+                <p className="mb-3 whitespace-pre-wrap">{a.description}</p>
+                <Photos photos={d.photos.filter((p) => String(p.action_id) === String(a.id))} size="sm" />
+              </Panel>
+            ))}
+        </div>
+        <div className="flex flex-col gap-6 lg:sticky lg:top-4 lg:self-start">
+          <Panel title="Kerusakan yang dilaporkan">
             <p className="text-sm whitespace-pre-wrap">{result.notes || "—"}</p>
             <div className="mt-3">
               <Photos photos={d.photos.filter((p) => String(p.result_id) === String(f.result_id))} size="sm" />
             </div>
           </Panel>
+          <Panel title="Perkembangan">
+            <div className="flex flex-col gap-4">
+              {editable && (
+                <div className="flex flex-col gap-2">
+                  <TextField
+                    label="Tambah catatan perkembangan"
+                    multiline
+                    rows={2}
+                    placeholder="Contoh: Sudah dilaporkan ke unit IT, menunggu suku cadang."
+                    value={progress}
+                    onChange={setProgress}
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="self-start"
+                    disabled={busy || !progress.trim()}
+                    onClick={() => save("note")}
+                  >
+                    Simpan catatan
+                  </Button>
+                </div>
+              )}
+              <History events={[...events].reverse()} />
+            </div>
+          </Panel>
         </div>
-      )}
+      </div>
     </>
   );
 }

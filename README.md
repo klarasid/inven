@@ -162,8 +162,16 @@ Jalankan migrasi plugin **hingga versi 7** melalui **System → Plugins**, lalu 
 4. **Pemeriksaan:** isi tanggal pelaksanaan sebenarnya, catatan, dan hasil setiap butir. Hasil selain **Baik** wajib memiliki alasan saat finalisasi. **Perlu tindakan** juga wajib memiliki penanggung jawab, prioritas, dan tenggat. Foto dapat dipilih langsung pada setiap butir. **Simpan foto butir** menyimpan draf terlebih dahulu, kemudian memperbarui foto tanpa memuat ulang dokumen. **Simpan draf** menyimpan isian dan semua foto yang dipilih secara berurutan. Finalisasi dilakukan setelah seluruh penyimpanan berhasil.
 5. Finalisasi mengunci checklist dan foto, serta membuat satu temuan per butir yang perlu tindakan. Hasil baik juga disimpan sebagai dokumen. Koreksi berikutnya berupa catatan tambahan; gunakan **Pemeriksaan ulang** untuk kegiatan baru yang terhubung ke dokumen asal. Pemeriksaan insidental membutuhkan alasan dan dilaporkan terpisah dari kegiatan rutin.
 6. **Tindak Lanjut:** mulai pekerjaan, catat perbaikan/pemeliharaan, tanggal, dan biaya opsional. Pengguna yang menyimpan tercatat sebagai pelaksana. Pengajuan membutuhkan catatan serta minimal satu foto hasil. **Tanpa pekerjaan** membutuhkan alasan tetapi tidak mewajibkan foto.
-7. Verifikator mengisi catatan hasil, lalu menerima atau mengembalikan pekerjaan untuk perbaikan. Verifikasi sendiri diperbolehkan. Bukti yang pernah diajukan tidak dapat dihapus; setelah penolakan, pengajuan berikutnya menjadi catatan tindakan baru.
+7. **Pelapor** memverifikasi: pengguna yang memfinalkan pemeriksaan atau mengirim laporan kerusakan mengisi catatan hasil, lalu menerima atau mengembalikan pekerjaan untuk perbaikan. Jika pelapor dan pelaksana orang yang sama, ia memverifikasi sendiri. Bila akun pelapor sudah dihapus, pengguna dengan hak tulis dapat menggantikannya. Tab **Verifikasi → Perlu saya verifikasi** menampilkan antrean milik pengguna yang sedang masuk. Bukti yang pernah diajukan tidak dapat dihapus; setelah penolakan, pengajuan berikutnya menjadi catatan tindakan baru.
 8. **Laporan:** pilih perpustakaan, ruangan, dan periode. Cetak PDF periode atau PDF detail pemeriksaan yang berisi checklist, foto, temuan, dan riwayat verifikasi. Ekspor periode menolak lebih dari 500 pemeriksaan tanpa memotong data. PDF detail dibatasi 500 foto dan memakai thumbnail untuk menjaga penggunaan memori. Persempit periode jika laporan besar.
+
+### Lapor kerusakan
+
+Untuk kerusakan mendadak (misalnya komputer staf mati), gunakan **Tugas → Lapor kerusakan** atau tombol **Laporkan kerusakan** pada detail barang. Satu form mencatat ruangan, barang (atau objek lain non-inventaris), uraian dan foto kerusakan, penangan, prioritas, serta tenggat.
+
+- Laporan masuk ke tab **Tindak lanjut** milik penangan. Penangan dapat menambah **catatan perkembangan** (misalnya "sudah dilaporkan ke unit IT") sebelum mencatat hasil, lalu mengajukan verifikasi ke pelapor.
+- Jika penangan adalah pelapor sendiri dan masalah sudah ditangani, aktifkan **Sudah saya tangani sekarang**: pekerjaan dicatat dan laporan langsung selesai dengan verifikasi atas nama pelapor.
+- Di belakang layar laporan disimpan sebagai pemeriksaan insidental satu butir bertanda **Perlu tindakan**, sehingga tetap masuk riwayat, laporan periode, dan PDF.
 
 ### Versi jadwal dan histori
 

@@ -53,8 +53,10 @@ final class Workspace
                 $result=self::page($w,'i.*','FROM inventory_watch_inspections i WHERE '.implode(' AND ',$where),$args,$page,$history?'i.due_date DESC,i.id DESC':'i.due_date,i.id');
             } else {
                 $where[]=$kind==='review'?"f.status='review'":($history?"f.status='closed'":"f.status IN ('open','working')");
-                if($mine&&$kind!=='review'){$where[]='f.assignee_id=?';$args[]=$uid;}
-                $result=self::page($w,'f.*,r.snapshot AS result_snapshot,r.notes,i.snapshot','FROM inventory_watch_findings f JOIN inventory_watch_results r ON r.id=f.result_id JOIN inventory_watch_inspections i ON i.id=f.inspection_id WHERE '.implode(' AND ',$where),$args,$page,'f.deadline,f.id');
+                // "Mine" means assigned to me, or for the review queue, reported by me (the reporter verifies).
+                if($mine&&$kind==='review'){$where[]='(i.examiner_id=? OR NOT EXISTS(SELECT 1 FROM user u WHERE u.user_id=i.examiner_id))';$args[]=$uid;}
+                elseif($mine){$where[]='f.assignee_id=?';$args[]=$uid;}
+                $result=self::page($w,'f.*,r.snapshot AS result_snapshot,r.notes,i.snapshot,i.kind,i.examiner_id AS reporter_id,i.examiner_name AS reporter_name','FROM inventory_watch_findings f JOIN inventory_watch_results r ON r.id=f.result_id JOIN inventory_watch_inspections i ON i.id=f.inspection_id WHERE '.implode(' AND ',$where),$args,$page,'f.deadline,f.id');
             }
             foreach($result['rows'] as &$row){$row['snapshot']=Supervision::decode($row['snapshot']);if(isset($row['result_snapshot']))$row['result_snapshot']=Supervision::decode($row['result_snapshot']);}
             return $result;
@@ -64,7 +66,7 @@ final class Workspace
             $count=fn(string $sql,array $args=[])=>(int)$w->query($sql,$args)->fetchColumn();
             return ['inspections'=>['mine'=>$count("SELECT COUNT(*) FROM inventory_watch_inspections WHERE status<>'final' AND snapshot LIKE ?",[$mine]),'all'=>$count("SELECT COUNT(*) FROM inventory_watch_inspections WHERE status<>'final'")],
                 'findings'=>['mine'=>$count("SELECT COUNT(*) FROM inventory_watch_findings WHERE status IN ('open','working') AND assignee_id=?",[$uid]),'all'=>$count("SELECT COUNT(*) FROM inventory_watch_findings WHERE status IN ('open','working')")],
-                'review'=>$count("SELECT COUNT(*) FROM inventory_watch_findings WHERE status='review'"),
+                'review'=>['mine'=>$count("SELECT COUNT(*) FROM inventory_watch_findings f JOIN inventory_watch_inspections i ON i.id=f.inspection_id WHERE f.status='review' AND (i.examiner_id=? OR NOT EXISTS(SELECT 1 FROM user u WHERE u.user_id=i.examiner_id))",[$uid]),'all'=>$count("SELECT COUNT(*) FROM inventory_watch_findings WHERE status='review'")],
                 'history'=>$count("SELECT COUNT(*) FROM inventory_watch_inspections WHERE status='final'"),
                 'templates'=>$count('SELECT COUNT(*) FROM inventory_watch_templates'),
                 'schedules'=>$count("SELECT COUNT(*) FROM inventory_watch_schedules WHERE active=1 AND location_id IS NOT NULL AND (end_date IS NULL OR end_date>=CURRENT_DATE)"),
@@ -117,6 +119,9 @@ final class Workspace
         }
         if($resource==='template'||$resource==='schedule'){
             $row=$w->row($resource==='template'?'templates':'schedules',$id);$key=$resource==='template'?'items':'snapshot';$row[$key]=Supervision::decode($row[$key]);return $row;
+        }
+        if($resource==='assets') {
+            return $w->query('SELECT id,item_name,item_code,item_condition FROM inventory_items WHERE location_id=? ORDER BY item_name,id',[$room])->fetchAll(\PDO::FETCH_ASSOC);
         }
         if($resource==='scope') {
             $t=$w->row('templates',(int)($g['template_id']??0));return ['items'=>Supervision::decode($t['items']),'assets'=>$w->query('SELECT id,item_name,item_code FROM inventory_items WHERE location_id=? ORDER BY item_name',[$room])->fetchAll(\PDO::FETCH_ASSOC)];

@@ -3,8 +3,10 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../src/PdfTemplate.php';
+require_once __DIR__ . '/../src/PdfTemplateModern.php';
 
 use SLiMS\Plugins\Inventory\PdfTemplate;
+use SLiMS\Plugins\Inventory\PdfTemplateModern;
 
 $location = [
     'location_code' => 'SMG-01',
@@ -51,6 +53,14 @@ $checks = [
     'minimal 13 baris' => substr_count($html, '<td class="center">') >= 13,
 ];
 
+$modern = PdfTemplateModern::render($location, $items, new DateTimeImmutable('2026-02-12'));
+$checks += [
+    'modern: judul kartu' => str_contains($modern, 'KARTU INVENTARIS RUANGAN'),
+    'modern: tanpa kop nama perpustakaan' => !str_contains($modern, 'class="letterhead"'),
+    'modern: kolom kondisi gabungan' => str_contains($modern, 'colspan="3">KEADAAN BARANG'),
+    'modern: baris jumlah' => str_contains($modern, 'JUMLAH ('),
+    'modern: nama barang di-escape' => str_contains($modern, '&lt;Meja baca&gt;'),
+];
 $failed = false;
 foreach ($checks as $label => $passed) {
     echo ($passed ? 'ok   ' : 'FAIL ') . $label . PHP_EOL;

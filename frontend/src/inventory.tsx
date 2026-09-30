@@ -14,6 +14,8 @@ import {
   CircleAlert,
   CircleX,
   Boxes,
+  FileText,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
@@ -32,15 +34,22 @@ import {
   DialogFooter,
 } from "./components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from "./components/ui/sheet";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuGroup,
+} from "./components/ui/dropdown-menu";
 import { useData, useWorkspace } from "./context";
-import { money } from "./api";
+import { money, url } from "./api";
 import {
   PageHeader,
   Panel,
   SearchBox,
   LibraryFilter,
   Pager,
-  Pdf,
   Loading,
   ErrorBox,
   Blank,
@@ -255,6 +264,41 @@ function RoomGrid() {
   );
 }
 
+/** KIR print menu: the classic form stays available next to the modern layout. */
+function KirMenu({ room }: { room: string }) {
+  const { config } = useWorkspace();
+  const target = (template: string) =>
+    url(config.inventory, { workspace: "", action: "print_pdf", location_id: room, template });
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline">
+          <FileText data-icon="inline-start" />
+          Cetak KIR
+          <ChevronDown data-icon="inline-end" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-64">
+        <DropdownMenuLabel>Pilih template Kartu Inventaris Ruangan</DropdownMenuLabel>
+        <DropdownMenuGroup>
+          <DropdownMenuItem asChild>
+            <a href={target("classic")} target="_blank" rel="noopener" className="flex flex-col items-start gap-0.5">
+              <span className="font-medium">Klasik</span>
+              <span className="text-xs text-muted-foreground">Format lama, huruf serif, hitam-putih.</span>
+            </a>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <a href={target("modern")} target="_blank" rel="noopener" className="flex flex-col items-start gap-0.5">
+              <span className="font-medium">Modern</span>
+              <span className="text-xs text-muted-foreground">Baris jumlah, nomor kolom, dan nomor halaman.</span>
+            </a>
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function RoomItems() {
   const w = useWorkspace();
   const room = String(w.route.room);
@@ -286,7 +330,7 @@ function RoomItems() {
         }
         actions={
           <>
-            <Pdf room={room} label="Cetak KIR" />
+            <KirMenu room={room} />
             {w.config.write && (
               <>
                 <Button onClick={() => w.go({ view: "item-edit", room })}>
@@ -500,13 +544,21 @@ function ItemSheetBody({ record, onDelete }: { record: string; onDelete: (r: Val
         {data ? <ItemDetails record={data.record} photos={data.photos} /> : !error && <Loading />}
       </div>
       {item && w.config.write && (
-        <SheetFooter className="flex-row border-t">
+        <SheetFooter className="flex-row flex-wrap border-t">
           <Button
+            variant="outline"
             className="flex-1"
+            onClick={() => w.go({ view: "report", room: String(item.location_id), item_id: String(item.id) })}
+          >
+            <TriangleAlert data-icon="inline-start" />
+            Laporkan kerusakan
+          </Button>
+          <Button
+            variant="outline"
             onClick={() => w.go({ view: "item-edit", record: String(item.id), room: String(item.location_id) })}
           >
             <Pencil data-icon="inline-start" />
-            Ubah barang
+            Ubah
           </Button>
           <Button variant="destructive" onClick={() => onDelete(item)}>
             <Trash2 data-icon="inline-start" />

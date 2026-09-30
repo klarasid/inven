@@ -70,7 +70,7 @@ try {
             watch_log('Import','Impor riwayat pemeriksaan: '.Supervision::json($data['ids']));
             echo json_encode(\SLiMS\Plugins\Inventory\WorkspaceRequests::remember('watch',['ok'=>true,'message'=>'Riwayat berhasil diimpor.','data'=>$data])); return;
         }
-        $result=$watch->mutate($action,$_POST,$_FILES['photos']??[],(int)($_SESSION['uid']??0));
+        $result=$watch->mutate($action,$_POST,$_FILES['photos']??[],(int)($_SESSION['uid']??0),$_FILES['fix_photos']??[]);
         watch_log('Update','Aksi '.$action.'; '.Supervision::json($result));
         $navigation=array_intersect_key($_GET,array_flip(['library','room','from','to','inspection_status','finding_status','return_tab','list_page']));
         $navigation=array_merge($navigation,array_intersect_key($result,array_flip(['tab','record','template_id','schedule_id'])));
@@ -124,17 +124,24 @@ try {
         if (!class_exists(\Mpdf\Mpdf::class)) throw new RuntimeException('Dependensi mPDF belum tersedia. Jalankan composer install di direktori plugin.');
         require_once __DIR__ . '/WatchPdf.php';
         $id=(int)($_GET['record']??0);
-        if ($id) $html=\SLiMS\Plugins\Inventory\WatchPdf::detail($watch->document($id),fn($photo)=>$watch->photo($id,(int)$photo['id']));
-        else {
+        if ($id) {
+            $html=\SLiMS\Plugins\Inventory\WatchPdf::detail($watch->document($id),fn($photo)=>$watch->photo($id,(int)$photo['id']));
+            $title='Dokumen Pemeriksaan #'.$id; $file='pemeriksaan-'.$id.'.pdf';
+        } else {
             $rows=$watch->inspections($filter,1,501);
             if (count($rows)>500) { http_response_code(413); throw new RuntimeException('Laporan melebihi 500 pemeriksaan. Persempit periode atau pilih ruangan.'); }
-            $html=\SLiMS\Plugins\Inventory\WatchPdf::summary($filter,$watch->summary($filter,true),$rows);
+            $context=[
+                'library'=>$filter['library']!==''?(string)$watch->query('SELECT location_name FROM mst_location WHERE location_id=?',[$filter['library']])->fetchColumn():'',
+                'room'=>$filter['room']?(string)$watch->query('SELECT room_name FROM inventory_locations WHERE id=?',[$filter['room']])->fetchColumn():'',
+                'printed_by'=>(string)($_SESSION['realname']??''),
+            ];
+            $html=\SLiMS\Plugins\Inventory\WatchPdf::summary($filter,$watch->summary($filter,true),$rows,$context);
+            $title='Laporan Pengawasan dan Pemeliharaan'; $file='laporan-pengawasan-'.$filter['from'].'-'.$filter['to'].'.pdf';
         }
-        $temp=SB.FLS.DS.'cache';
-        $pdf=new \Mpdf\Mpdf(['tempDir'=>$temp,'exposeVersion'=>false]);
-        $pdf->SetTitle('Pengawasan dan Pemeliharaan Perpustakaan'); $pdf->WriteHTML($html);
+        $pdf=\SLiMS\Plugins\Inventory\PdfLayout::mpdf(SB.FLS.DS.'cache',$title,\SLiMS\Plugins\Inventory\WatchPdf::footer($title));
+        $pdf->WriteHTML($html);
         watch_log('Print','Laporan pengawasan '.($id?'#'.$id:Supervision::json($filter)));
-        $pdf->Output('pengawasan-pemeliharaan.pdf','I'); return;
+        $pdf->Output($file,'I'); return;
     }
     WatchView::render($watch,$base,$tab,$filter,$canWrite,$csrf,$_GET);
 } catch (Throwable $e) {

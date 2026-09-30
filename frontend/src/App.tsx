@@ -20,6 +20,7 @@ import { SetupList, TemplatePage, SchedulePage } from "./setup";
 import { InventoryList, InventoryForm } from "./inventory";
 import { Reports } from "./reports";
 import { HistoryImportPage } from "./history-import";
+import { ReportPage } from "./report";
 import type { Config, Options, Route } from "./types";
 
 export function initialRoute(config: Config): Route {
@@ -177,6 +178,9 @@ export function App({ config, host }: { config: Config; host: HTMLElement }) {
   switch (route.view) {
     case "history-import":
       page = <HistoryImportPage />;
+      break;
+    case "report":
+      page = <ReportPage />;
       break;
     case "tasks":
       page = <Tasks />;

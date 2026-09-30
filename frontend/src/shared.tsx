@@ -435,10 +435,10 @@ export function Actions({
           <MoreHorizontal />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+      <DropdownMenuContent align="end" className="w-auto min-w-44 p-1.5" onClick={(e) => e.stopPropagation()}>
         <DropdownMenuGroup>
           {items.map(({ label, run, destructive, icon: Icon }) => (
-            <DropdownMenuItem key={label} variant={destructive ? "destructive" : "default"} onSelect={run}>
+            <DropdownMenuItem key={label} variant={destructive ? "destructive" : "default"} onSelect={run} className="gap-2 px-2 py-1.5">
               {Icon && <Icon />}
               {label}
             </DropdownMenuItem>
@@ -517,6 +517,8 @@ const eventLabels: Record<string, string> = {
   verify: "Hasil diterima",
   reject: "Dikembalikan",
   correction: "Catatan koreksi",
+  report: "Kerusakan dilaporkan",
+  progress: "Catatan perkembangan",
 };
 export function History({ events }: { events: Event[] }) {
   if (!events.length) return <Blank title="Belum ada kegiatan" description="Kegiatan akan tercatat di sini." />;
