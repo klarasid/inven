@@ -21,3 +21,6 @@ Plugins::group('Inventaris Barang', function() {
         ['Laporan','report.php','Tinjau capaian dan cetak laporan periode.'],
     ] as [$label,$file,$description]) Plugins::registerMenu('stock_take',$label,__DIR__.'/'.$file,$description);
 });
+
+// Public item page for label QR codes: index.php?p=info_barang (not listed in OPAC navigation).
+Plugins::registerMenu('opac', 'Info Barang', __DIR__ . '/opac.php', 'Informasi barang inventaris dari label QR.');

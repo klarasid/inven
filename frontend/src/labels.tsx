@@ -41,18 +41,20 @@ export function LabelDialog({
   const { config } = useWorkspace();
   const [preset, setPreset] = useState("a4-3x8");
   const [start, setStart] = useState(1);
+  const [target, setTarget] = useState("public");
   const p = presets.find((x) => x.value === preset)!;
   const [cols, rows] = p.grid;
   const perSheet = cols * rows;
   const count = items ? items.length : total;
   const sheets = perSheet > 1 ? Math.ceil((start - 1 + count) / perSheet) : count;
-  const target = url(config.inventory, {
+  const href = url(config.inventory, {
     workspace: "",
     action: "print_labels",
     location_id: room,
     ids: items?.map((i) => i.id).join(",") || undefined,
     preset,
     start: perSheet > 1 ? start : 1,
+    target,
   });
 
   return (
@@ -69,7 +71,7 @@ export function LabelDialog({
               : items
                 ? `Label untuk ${count} barang terpilih.`
                 : `Label untuk semua ${count} barang di ruangan ini.`}{" "}
-            QR code membuka detail barang di aplikasi setelah petugas masuk.
+
           </DialogDescription>
         </DialogHeader>
         <Field>
@@ -91,6 +93,29 @@ export function LabelDialog({
                 <span className="text-xs font-normal text-muted-foreground">{x.text}</span>
               </ToggleGroupItem>
             ))}
+          </ToggleGroup>
+        </Field>
+        <Field>
+          <FieldLabel>Isi QR code</FieldLabel>
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            className="grid w-full grid-cols-2"
+            value={target}
+            onValueChange={(v) => v && setTarget(v)}
+          >
+            <ToggleGroupItem value="public" className="h-auto flex-col items-start gap-0 px-3 py-2 text-left">
+              <span className="font-medium">Halaman publik</span>
+              <span className="text-xs font-normal whitespace-normal text-muted-foreground">
+                Siapa pun dapat memindai dan melihat info barang, tanpa login.
+              </span>
+            </ToggleGroupItem>
+            <ToggleGroupItem value="staff" className="h-auto flex-col items-start gap-0 px-3 py-2 text-left">
+              <span className="font-medium">Khusus petugas</span>
+              <span className="text-xs font-normal whitespace-normal text-muted-foreground">
+                Membuka pengelolaan barang, wajib login SLiMS.
+              </span>
+            </ToggleGroupItem>
           </ToggleGroup>
         </Field>
         {perSheet > 1 && (
@@ -130,7 +155,7 @@ export function LabelDialog({
             Batal
           </Button>
           <Button asChild>
-            <a href={target} target="_blank" rel="noopener" onClick={() => onOpenChange(false)}>
+            <a href={href} target="_blank" rel="noopener" onClick={() => onOpenChange(false)}>
               <Printer data-icon="inline-start" />
               Buat PDF label
             </a>

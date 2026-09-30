@@ -62,6 +62,7 @@ try {
         throw new RuntimeException('Dependensi mPDF/QR belum terpasang. Jalankan Composer dari direktori plugin.');
     }
     require_once __DIR__ . '/src/LabelSheet.php';
+    require_once __DIR__ . '/src/PublicLink.php';
     $preset = isset(\SLiMS\Plugins\Inventory\LabelSheet::PRESETS[$_GET['preset'] ?? '']) ? (string) $_GET['preset'] : 'a4-3x8';
     $start = max(1, (int) ($_GET['start'] ?? 1));
 
@@ -92,22 +93,26 @@ try {
         die('Ruangan memuat lebih dari 500 barang. Pilih barang yang akan dicetak.');
     }
 
-    // The QR holds a short link; index.php resolves ?qr=<item id> to the item's room and details.
+    // QR target: the signed public OPAC page (default), or the staff page that requires login,
+    // where index.php resolves ?qr=<item id> to the item's room and details.
+    $public = ($_GET['target'] ?? 'public') !== 'staff';
     $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
-    $base = ($https ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . AWB . 'plugin_container.php?';
+    $origin = ($https ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
     $pluginId = md5((string) realpath(__DIR__ . '/index.php'));
     $labels = array_map(static fn(array $item): array => [
         'item' => $item,
         'room' => (string) $room['room_name'],
         'library' => (string) ($room['location_name'] ?? ''),
-        'url' => $base . http_build_query(['mod' => 'stock_take', 'id' => $pluginId, 'qr' => (int) $item['id']]),
+        'url' => $public
+            ? $origin . SWB . 'index.php?' . \SLiMS\Plugins\Inventory\PublicLink::query($db, (int) $item['id'])
+            : $origin . AWB . 'plugin_container.php?' . http_build_query(['mod' => 'stock_take', 'id' => $pluginId, 'qr' => (int) $item['id']]),
     ], $items);
 
     $pdf = \SLiMS\Plugins\Inventory\LabelSheet::mpdf(SB . FLS . DS . 'cache', $preset, 'Label inventaris - ' . $room['room_name']);
     $pdf->WriteHTML(\SLiMS\Plugins\Inventory\LabelSheet::render($labels, $preset, $start));
     $contents = $pdf->Output('', 'S');
 
-    inventory_label_log('Label inventaris lokasi #' . $locationId . ' dicetak (' . count($items) . ' label, ' . $preset . ').', 'Print');
+    inventory_label_log('Label inventaris lokasi #' . $locationId . ' dicetak (' . count($items) . ' label, ' . $preset . ', QR ' . ($public ? 'publik' : 'petugas') . ').', 'Print');
     $safeRoom = trim((string) preg_replace('/[^A-Za-z0-9_-]+/', '-', (string) $room['room_name']), '-') ?: 'lokasi';
     header('Content-Type: application/pdf');
     header('Content-Disposition: inline; filename="label-' . strtolower($safeRoom) . '.pdf"');
