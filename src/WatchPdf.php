@@ -3,6 +3,7 @@ namespace SLiMS\Plugins\Inventory;
 
 require_once __DIR__ . '/PdfLatex.php';
 require_once __DIR__ . '/PdfIso.php';
+require_once __DIR__ . '/PdfDocuments.php';
 
 /**
  * Period report and inspection/damage-report documents. The content is written once and typeset by a
@@ -47,7 +48,10 @@ final class WatchPdf
     /** Kept for callers that set the footer themselves; the LaTeX style uses a plain page number. */
     public static function footer(string $label = ''): string { return PdfLatex::footer(); }
 
-    /** @param array{library?:string,room?:string,printed_by?:string} $context display names for the filter and the preparer */
+    /**
+     * @param array{library?:string,room?:string,printed_by?:string,documents?:array} $context display names for the filter and the preparer;
+     *        documents = PdfDocuments settings (defaults when absent)
+     */
     public static function summary(array $filter, array $summary, array $rows, array $context = [], string $style = 'latex'): string
     {
         $t = self::style($style);
@@ -62,7 +66,7 @@ final class WatchPdf
             'Laporan Pengawasan dan Pemeliharaan Sarana, Prasarana, dan Lingkungan Fisik Perpustakaan',
             ($context['printed_by'] ?? '') !== '' ? self::e($context['printed_by']) : '',
             'Periode ' . $period,
-            ['number' => 'LAP-SARPRAS/' . date('Ymd', strtotime((string) $filter['from'])) . '-' . date('Ymd', strtotime((string) $filter['to'])), 'revision' => '00', 'date' => PdfLayout::date(new \DateTimeImmutable('now'))]
+            PdfDocuments::identity($context['documents'] ?? PdfDocuments::DEFAULTS, 'period', ['date' => $filter['to'], 'from' => $filter['from'], 'to' => $filter['to']], date('Y-m-d'))
         );
         $h .= $t::abstract(
             'Laporan ini merangkum kegiatan pengawasan dan pemeliharaan ' . ($scope !== '' ? 'pada ' . self::e($scope) : 'di seluruh perpustakaan dan ruangan')
@@ -141,18 +145,20 @@ final class WatchPdf
         return $images;
     }
 
-    public static function detail(array $document, callable $readPhoto, string $style = 'latex'): string
+    /** @param array|null $documents PdfDocuments settings (defaults when null) */
+    public static function detail(array $document, callable $readPhoto, string $style = 'latex', ?array $documents = null): string
     {
         $t = self::style($style);
         $i = $document['inspection']; $s = $document['snapshot'];
         if (count($document['photos']) > 500) throw new \RuntimeException('Detail memiliki lebih dari 500 foto. Hubungi administrator untuk ekspor arsip.');
         $report = empty($s['template_id']) && ($s['template_name'] ?? '') === 'Laporan kerusakan';
-        $number = ($report ? 'LK-' : 'PMR-') . str_pad((string) (int) $i['id'], 5, '0', STR_PAD_LEFT);
+        $identity = PdfDocuments::identity($documents ?? PdfDocuments::DEFAULTS, $report ? 'report' : 'inspection', ['id' => $i['id'], 'date' => $i['performed_date'] ?: $i['due_date']], (string) ($i['finalized_at'] ?? $i['performed_date'] ?? $i['due_date']));
+        $number = $identity['number'];
         $h = $t::begin() . $t::titleBlock(
             $report ? 'Laporan Kerusakan dan Tindak Lanjut' : 'Dokumen Pemeriksaan Ruangan',
             'Nomor ' . self::e($number),
             self::e($s['room_name']) . ', ' . self::e($s['library_name']),
-            ['number' => $number, 'revision' => '00', 'date' => PdfLayout::date($i['finalized_at'] ?? $i['performed_date'] ?? $i['due_date'])]
+            $identity
         );
         $facts = [
             'Ruangan' => self::e($s['room_name']),

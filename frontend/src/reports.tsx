@@ -8,6 +8,7 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from ".
 import { useWorkspace, useData } from "./context";
 import { PageHeader, Pdf, RoomFilter, Panel, Loading, ErrorBox, Pager, Status, Blank, StatCard } from "./shared";
 import { dateLabel } from "./api";
+import { DocumentSettings } from "./documents";
 import type { Summary, Page, TaskRow } from "./types";
 
 function Coverage({ label, value, total, hint }: { label: string; value: number; total: number; hint?: string }) {
@@ -58,7 +59,12 @@ export function Reports() {
       <PageHeader
         title="Laporan"
         description="Capaian pemeriksaan dan tindak lanjut dalam periode yang dipilih."
-        actions={<Pdf period={{ ...w.route, from, to }} label="Cetak laporan PDF" />}
+        actions={
+          <>
+            <DocumentSettings />
+            <Pdf period={{ ...w.route, from, to }} label="Cetak laporan PDF" />
+          </>
+        }
       />
       <div className="flex flex-col gap-3 rounded-xl border p-3 sm:flex-row sm:flex-wrap sm:items-center">
         <div className="flex items-center gap-2">

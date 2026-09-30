@@ -120,6 +120,10 @@ final class Workspace
         if($resource==='template'||$resource==='schedule'){
             $row=$w->row($resource==='template'?'templates':'schedules',$id);$key=$resource==='template'?'items':'snapshot';$row[$key]=Supervision::decode($row[$key]);return $row;
         }
+        if($resource==='pdf_documents') {
+            require_once __DIR__.'/PdfDocuments.php';
+            return ['settings'=>PdfDocuments::load($w->pdo()),'types'=>PdfDocuments::TYPES,'placeholders'=>PdfDocuments::PLACEHOLDERS];
+        }
         if($resource==='assets') {
             return $w->query('SELECT id,item_name,item_code,item_condition FROM inventory_items WHERE location_id=? ORDER BY item_name,id',[$room])->fetchAll(\PDO::FETCH_ASSOC);
         }

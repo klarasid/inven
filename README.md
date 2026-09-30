@@ -178,7 +178,9 @@ Untuk kerusakan mendadak (misalnya komputer staf mati), gunakan **Tugas → Lapo
 Laporan periode dan dokumen pemeriksaan/laporan kerusakan dapat dicetak dalam dua format melalui menu **Cetak PDF**:
 
 - **Gaya LaTeX**: huruf Computer Modern, blok judul di tengah, ringkasan, bagian bernomor, tabel *booktabs* dan gambar bernomor, serta nomor halaman di tengah bawah.
-- **Dokumen ISO**: kotak kepala dokumen terkendali di setiap halaman (institusi, judul, nomor dokumen, revisi, tanggal terbit, halaman), bagian bernomor, tabel bergaris penuh, dan tabel pengesahan (nama, jabatan, tanda tangan, tanggal). Nomor dokumen: `LAP-SARPRAS/<awal>-<akhir>` untuk laporan periode, `PMR-<id>` untuk pemeriksaan, dan `LK-<id>` untuk laporan kerusakan; revisi awal `00`. Huruf **CMU Serif** (Computer Modern Unicode) disertakan di `assets/fonts/cmu` dengan lisensi SIL Open Font License (`OFL.txt`). Kartu Inventaris Ruangan tetap memakai template **Klasik** atau **Modern** yang dipilih dari menu **Cetak KIR**.
+- **Dokumen ISO**: kotak kepala dokumen terkendali di setiap halaman (institusi, judul, nomor dokumen, revisi, tanggal terbit, halaman), bagian bernomor, tabel bergaris penuh, dan tabel pengesahan (nama, jabatan, tanda tangan, tanggal).
+
+Nomor dokumen, revisi, dan tanggal terbit diatur per jenis dokumen melalui **Laporan → Pengaturan dokumen** (memerlukan hak tulis) dan disimpan di tabel `setting` SLiMS (`inventory_pdf_documents`). Format nomor dapat memuat penanda `{id}` (5 digit), `{tahun}`, `{bulan}`, `{romawi}` (bulan dalam angka Romawi), serta `{dari}` dan `{sampai}` untuk laporan periode, misalnya `FRM-SARPRAS-03/{romawi}/{tahun}/{id}`. Tanggal terbit yang dikosongkan memakai tanggal dokumen. Bawaan: `LAP-SARPRAS/{dari}-{sampai}`, `PMR-{id}`, `LK-{id}`, revisi `00`. Huruf **CMU Serif** (Computer Modern Unicode) disertakan di `assets/fonts/cmu` dengan lisensi SIL Open Font License (`OFL.txt`). Kartu Inventaris Ruangan tetap memakai template **Klasik** atau **Modern** yang dipilih dari menu **Cetak KIR**.
 
 ### Versi jadwal dan histori
 

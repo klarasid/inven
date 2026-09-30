@@ -15,6 +15,7 @@ final class Supervision
     public function __construct(PDO $db, PhotoStorage $storage) { $this->db=$db; $this->storage=$storage; }
     public static function json(array $data): string { return json_encode($data, JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR); }
     public static function decode(string $data): array { return json_decode($data,true,512,JSON_THROW_ON_ERROR); }
+    public function pdo(): PDO { return $this->db; }
     public function query(string $sql, array $args=[]): \PDOStatement { $q=$this->db->prepare($sql); $q->execute($args); return $q; }
     private function text($value, string $label, bool $required=true, int $max=5000): string {
         if (!is_scalar($value) && $value !== null) throw new RuntimeException("$label tidak valid.");
@@ -58,6 +59,7 @@ final class Supervision
                     $result=['tab'=>'inspection','record'=>(int)$inspection['id']]; break;
                 case 'finding': $this->finding($input,$uploads,$actor); $result=['tab'=>'finding','record'=>(int)$input['id']]; break;
                 case 'report': $result=['tab'=>'finding','record'=>$this->report($input,$uploads,$fixUploads,$actor)]; break;
+                case 'pdf_documents': require_once __DIR__.'/PdfDocuments.php'; PdfDocuments::save($this->db,(array)($input['documents']??[])); $result=['tab'=>'reports']; break;
                 default: throw new RuntimeException('Aksi pengawasan tidak dikenal.');
             }
             if (in_array($action, ['inspection','result_photos'], true)) {

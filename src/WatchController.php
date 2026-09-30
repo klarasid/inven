@@ -126,7 +126,7 @@ try {
         $id=(int)($_GET['record']??0);
         $style=isset(\SLiMS\Plugins\Inventory\WatchPdf::STYLES[$_GET['style']??''])?(string)$_GET['style']:'latex';
         if ($id) {
-            $html=\SLiMS\Plugins\Inventory\WatchPdf::detail($watch->document($id),fn($photo)=>$watch->photo($id,(int)$photo['id']),$style);
+            $html=\SLiMS\Plugins\Inventory\WatchPdf::detail($watch->document($id),fn($photo)=>$watch->photo($id,(int)$photo['id']),$style,\SLiMS\Plugins\Inventory\PdfDocuments::load($db));
             $title='Dokumen Pemeriksaan #'.$id; $file='pemeriksaan-'.$id.'.pdf';
         } else {
             $rows=$watch->inspections($filter,1,501);
@@ -135,6 +135,7 @@ try {
                 'library'=>$filter['library']!==''?(string)$watch->query('SELECT location_name FROM mst_location WHERE location_id=?',[$filter['library']])->fetchColumn():'',
                 'room'=>$filter['room']?(string)$watch->query('SELECT room_name FROM inventory_locations WHERE id=?',[$filter['room']])->fetchColumn():'',
                 'printed_by'=>(string)($_SESSION['realname']??''),
+                'documents'=>\SLiMS\Plugins\Inventory\PdfDocuments::load($db),
             ];
             $html=\SLiMS\Plugins\Inventory\WatchPdf::summary($filter,$watch->summary($filter,true),$rows,$context,$style);
             $title='Laporan Pengawasan dan Pemeliharaan'; $file='laporan-pengawasan-'.$filter['from'].'-'.$filter['to'].'.pdf';
