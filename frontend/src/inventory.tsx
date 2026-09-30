@@ -288,14 +288,14 @@ function KirMenu({ room }: { room: string }) {
         <DropdownMenuGroup>
           <DropdownMenuItem
             className="flex flex-col items-start gap-0.5"
-            onSelect={() => previewPdf(target("classic"), "Kartu Inventaris Ruangan · Klasik")}
+            onSelect={() => previewPdf(config, target("classic"), "Kartu Inventaris Ruangan · Klasik")}
           >
             <span className="font-medium">Klasik</span>
             <span className="text-xs text-muted-foreground">Format lama, huruf serif, hitam-putih.</span>
           </DropdownMenuItem>
           <DropdownMenuItem
             className="flex flex-col items-start gap-0.5"
-            onSelect={() => previewPdf(target("modern"), "Kartu Inventaris Ruangan · Modern")}
+            onSelect={() => previewPdf(config, target("modern"), "Kartu Inventaris Ruangan · Modern")}
           >
             <span className="font-medium">Modern</span>
             <span className="text-xs text-muted-foreground">Baris jumlah, nomor kolom, dan nomor halaman.</span>

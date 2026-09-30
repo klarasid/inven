@@ -158,7 +158,7 @@ export function LabelDialog({
           <Button
             onClick={() => {
               onOpenChange(false);
-              previewPdf(href, `Label barang · ${p.title}`);
+              previewPdf(config, href, `Label barang · ${p.title}`);
             }}
           >
             <Printer data-icon="inline-start" />

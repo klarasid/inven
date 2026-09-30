@@ -188,6 +188,10 @@ Klik **Cetak label** pada halaman ruangan untuk mencetak label semua barang di r
 
 Fitur ini memerlukan paket `mpdf/qrcode` (sudah tercantum di `composer.json`). Pada instalasi yang sudah berjalan, jalankan kembali `composer install --no-dev` dari direktori plugin.
 
+### Pratinjau PDF
+
+Semua cetakan PDF (KIR, laporan, dokumen pemeriksaan, dan label) tampil lebih dulu di popup pratinjau SLiMS. Popup memuat penampil PDF milik plugin (`assets/viewer`, berbasis [PDF.js](https://mozilla.github.io/pdf.js/), lisensi Apache-2.0) dengan tombol zoom, **Cetak**, dan **Unduh**. Karena dokumen diambil dan digambar oleh penampil itu sendiri, pengaturan browser yang mengunduh PDF atau membukanya di Adobe Acrobat, serta pengelola unduhan seperti IDM, tidak memengaruhi pratinjau. Tombol **Cetak** mencetak halaman pada sekitar 300 dpi dengan ukuran kertas sesuai dokumen. File PDF.js disalin ke `assets/viewer` oleh `npm run build`.
+
 ### Format PDF laporan
 
 Laporan periode dan dokumen pemeriksaan/laporan kerusakan dapat dicetak dalam dua format melalui menu **Cetak PDF**:

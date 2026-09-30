@@ -402,10 +402,13 @@ type Colorbox = (options: Record<string, unknown>) => void;
 
 /**
  * Opens a PDF in SLiMS's own print preview (the colorbox iframe popup used for catalog and barcode
- * printing) instead of a download or new tab. Falls back to a new tab where the popup is missing,
- * e.g. the standalone QR page, or hidden behind this app in fullscreen.
+ * printing) instead of a download or new tab. The popup loads the plugin's PDF.js viewer, which fetches
+ * and draws the file itself, so browser PDF settings (e.g. Firefox set to save or hand PDFs to Acrobat)
+ * and download managers cannot turn the preview into a download. Falls back to a new tab where the
+ * popup is missing, e.g. the standalone QR page, or hidden behind this app in fullscreen.
  */
-export function previewPdf(href: string, title: string) {
+export function previewPdf(config: { viewer?: string }, pdf: string, title: string) {
+  const href = config.viewer ? url(config.viewer, { file: pdf, title }) : pdf;
   let reason = "fullscreen";
   try {
     // Call colorbox as a method of top's jQuery: it relies on `this` being jQuery (calls this.each).
@@ -438,7 +441,7 @@ export function Pdf({
     return (
       <Button
         variant="outline"
-        onClick={() => previewPdf(url(config.inventory, { workspace: "", action: "print_pdf", location_id: room }), label)}
+        onClick={() => previewPdf(config, url(config.inventory, { workspace: "", action: "print_pdf", location_id: room }), label)}
       >
         <FileText data-icon="inline-start" />
         {label}
@@ -466,7 +469,7 @@ export function Pdf({
             <DropdownMenuItem
               key={s.value}
               className="flex flex-col items-start gap-0.5 px-2 py-2"
-              onSelect={() => previewPdf(target(s.value), `${label} · ${s.title}`)}
+              onSelect={() => previewPdf(config, target(s.value), `${label} · ${s.title}`)}
             >
               <span className="font-medium">{s.title}</span>
               <span className="text-xs leading-snug whitespace-normal text-muted-foreground">{s.text}</span>

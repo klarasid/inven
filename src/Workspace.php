@@ -17,6 +17,7 @@ final class Workspace
             'today'=>date('Y-m-d')];
         $asset=SWB.'plugins/inventaris-barang/assets/app/';
         $version=(string)(@filemtime(dirname(__DIR__).'/assets/app/inventory-app.js')?:'2');
+        $config['viewer']=SWB.'plugins/inventaris-barang/assets/viewer/index.html?v='.(string)(@filemtime(dirname(__DIR__).'/assets/viewer/viewer.js')?:'1');
         // data-version ties the host to one bundle build; a newer bundle never reuses an older runtime.
         echo '<div data-inventory-app data-version="'.htmlspecialchars($version,ENT_QUOTES,'UTF-8').'" data-config="'.htmlspecialchars(json_encode($config,JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT),ENT_QUOTES,'UTF-8').'" data-css="'.htmlspecialchars($asset.'inventory-app.css?v='.$version,ENT_QUOTES,'UTF-8').'"><p role="status">Memuat inventaris…</p></div>';
         echo '<script>(function(){var s=document.createElement("script");s.src='.json_encode($asset.'inventory-app.js?v='.$version).';document.head.appendChild(s);s.onload=function(){s.remove()};s.onerror=function(){document.querySelectorAll("[data-inventory-app]").forEach(function(e){if(!e.shadowRoot)e.textContent="Aplikasi gagal dimuat. Muat ulang halaman."})}})();</script>';

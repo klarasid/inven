@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Pratinjau PDF</title>
+  <style>
+    :root { --bg:#e5e7eb; --bar:#ffffff; --fg:#111827; --muted:#6b7280; --line:#e5e7eb; --primary:#171717; }
+    * { box-sizing:border-box; }
+    html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:14px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+    .bar { position:sticky; top:0; z-index:2; display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--bar); border-bottom:1px solid var(--line); }
+    .title { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+    .info { color:var(--muted); font-size:13px; white-space:nowrap; }
+    .group { display:flex; align-items:center; gap:4px; }
+    button { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--fg); font:inherit; font-weight:500; cursor:pointer; }
+    button:hover:not(:disabled) { background:#f3f4f6; }
+    button:disabled { opacity:.5; cursor:default; }
+    button.primary { background:var(--primary); border-color:var(--primary); color:#fff; }
+    button.primary:hover:not(:disabled) { background:#333; }
+    button.icon { width:32px; padding:0; justify-content:center; }
+    svg { width:16px; height:16px; }
+    .pages { display:flex; flex-direction:column; align-items:center; gap:14px; padding:16px; }
+    .pages canvas { display:block; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.12), 0 1px 2px rgba(0,0,0,.08); }
+    .state { margin:48px auto; max-width:520px; padding:20px; text-align:center; color:var(--muted); }
+    .state.error { background:#fff; border:1px solid #fecaca; border-radius:12px; color:#991b1b; text-align:left; white-space:pre-wrap; }
+    @media (max-width:560px) { .info, .label { display:none; } }
+  </style>
+</head>
+<body>
+  <div class="bar">
+    <div class="title" id="title">Pratinjau PDF</div>
+    <span class="info" id="info"></span>
+    <div class="group">
+      <button class="icon" id="zoom-out" title="Perkecil" aria-label="Perkecil" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/></svg></button>
+      <button id="zoom-fit" title="Sesuaikan lebar" disabled>100%</button>
+      <button class="icon" id="zoom-in" title="Perbesar" aria-label="Perbesar" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5v14"/></svg></button>
+    </div>
+    <button id="download" title="Unduh PDF" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14"/></svg><span class="label">Unduh</span></button>
+    <button class="primary" id="print" title="Cetak" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V3h12v6M6 18H4a1 1 0 0 1-1-1v-6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6a1 1 0 0 1-1 1h-2M6 14h12v7H6z"/></svg><span class="label">Cetak</span></button>
+  </div>
+  <div id="pages" class="pages"><p class="state">Memuat dokumen…</p></div>
+  <script type="module" src="viewer.js"></script>
+</body>
+</html>
