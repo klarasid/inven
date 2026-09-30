@@ -1,0 +1,7 @@
+# Development files left out of release archives (git archive / tools/release.sh).
+/frontend export-ignore
+/tests export-ignore
+/tools export-ignore
+/.github export-ignore
+/.gitignore export-ignore
+/.gitattributes export-ignore

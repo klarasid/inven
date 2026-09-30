@@ -21,6 +21,23 @@ Dependensi PDF dideklarasikan sebagai `mpdf/mpdf: ^8.3.1`; `composer install` me
 
 Pada versi 1.3.1, jalankan migrasi hingga versi 5 melalui **System → Plugins**. Migrasi ini mengganti indeks unik kode lokasi kartu dengan indeks biasa sehingga beberapa ruangan dapat memakai kode lokasi yang sama, tanpa mengubah data ruangan atau barang. Rollback versi 5 hanya dapat dilakukan jika kode lokasi yang terisi tidak lagi duplikat.
 
+## Memperbarui plugin
+
+Unduh `inventaris-barang-<versi>.zip` dari halaman [Releases](https://github.com/idoalit/slims-inventarisasi-barang-plugin/releases), cadangkan database, lalu ekstrak dan timpa folder `plugins/inventaris-barang`. Paket rilis sudah berisi dependensi PHP (tanpa perlu Composer) dan aset yang sudah dibangun. Buka **System → Plugins** untuk menjalankan migrasi bila ada.
+
+Aplikasi memeriksa rilis terbaru di GitHub dan menampilkan **Versi X tersedia** di kepala aplikasi bagi pengguna dengan hak tulis, lengkap dengan catatan rilis dan tautan unduh. Hasil pemeriksaan disimpan 12 jam di tabel `setting` (`inventory_update_check`); jika GitHub tidak dapat dihubungi, pemeriksaan diulang setelah 1 jam tanpa mengganggu aplikasi. Rilis *pre-release* tidak ditawarkan. Server memerlukan ekstensi PHP cURL dan akses keluar ke `api.github.com`.
+
+## Membuat rilis (pengembang)
+
+Versi hanya tercatat di baris `Version:` pada `inventory.plugin.php`.
+
+```sh
+tools/release.sh 2.0.0                 # set versi, build frontend, commit "Release v2.0.0", tag v2.0.0
+git push origin main --follow-tags     # GitHub Actions membangun zip dan membuat rilis
+```
+
+Workflow `.github/workflows/release.yml` menjalankan `tools/release.sh package` pada setiap tag `v*`: mengambil isi commit tanpa berkas pengembangan (`.gitattributes` export-ignore), membangun frontend, memasang dependensi PHP produksi, membuang font mPDF yang tidak dipakai (paket ±15 MB), menjalankan uji asap `tools/smoke.php` untuk semua jenis PDF dan font, lalu melampirkan zip dan checksum SHA-256 ke rilis dengan catatan rilis otomatis. Tag berakhiran `-rc.1`, `-beta.1`, dan sejenisnya diterbitkan sebagai *pre-release*. Paket juga dapat dibangun lokal dengan `tools/release.sh package` (hasil di `dist/`).
+
 ## Penggunaan
 
 ### Daftar lokasi/ruangan

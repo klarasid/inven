@@ -126,6 +126,10 @@ final class Workspace
             require_once __DIR__.'/PdfDocuments.php';
             return ['settings'=>PdfDocuments::load($w->pdo()),'types'=>PdfDocuments::TYPES,'placeholders'=>PdfDocuments::PLACEHOLDERS];
         }
+        if($resource==='update') {
+            require_once __DIR__.'/UpdateCheck.php';
+            return UpdateCheck::status($w->pdo(),($g['refresh']??'')==='1');
+        }
         if($resource==='letterheads') {
             require_once __DIR__.'/Letterheads.php';
             $list=array_values(Letterheads::all($w->pdo()));

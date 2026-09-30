@@ -20,6 +20,7 @@ import { SetupList, TemplatePage, SchedulePage } from "./setup";
 import { InventoryList, InventoryForm } from "./inventory";
 import { Reports } from "./reports";
 import { HistoryImportPage } from "./history-import";
+import { UpdateNotice } from "./updates";
 import { ReportPage } from "./report";
 import type { Config, Options, Route } from "./types";
 
@@ -251,6 +252,7 @@ export function App({ config, host }: { config: Config; host: HTMLElement }) {
                 Menyinkronkan jadwal…
               </span>
             )}
+            <UpdateNotice />
             {config.write ? (
               <span className="text-xs text-muted-foreground">{me}</span>
             ) : (
