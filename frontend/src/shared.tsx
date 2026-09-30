@@ -10,6 +10,7 @@ import {
   X,
   Search as SearchIcon,
   Undo2,
+  ChevronDown,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "./components/ui/button";
@@ -41,6 +42,7 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
 } from "./components/ui/dropdown-menu";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardAction } from "./components/ui/card";
 import {
@@ -408,16 +410,44 @@ export function Pdf({
   label?: string;
 }) {
   const { config } = useWorkspace();
-  const target = room
-    ? url(config.inventory, { workspace: "", action: "print_pdf", location_id: room })
-    : url(config.watch, { ...period, tab: "pdf", record: record ?? "" });
+  if (room)
+    return (
+      <Button variant="outline" asChild>
+        <a href={url(config.inventory, { workspace: "", action: "print_pdf", location_id: room })} target="_blank" rel="noopener">
+          <FileText data-icon="inline-start" />
+          {label}
+        </a>
+      </Button>
+    );
+  // Reports and inspection documents come in two typesetting styles.
+  const target = (style: string) => url(config.watch, { ...period, tab: "pdf", record: record ?? "", style });
+  const styles = [
+    { value: "latex", title: "Gaya LaTeX", text: "Huruf serif, tabel booktabs, ringkas dan formal." },
+    { value: "iso", title: "Dokumen ISO", text: "Kepala dokumen terkendali, tabel bergaris, lembar pengesahan." },
+  ];
   return (
-    <Button variant="outline" asChild>
-      <a href={target} target="_blank" rel="noopener">
-        <FileText data-icon="inline-start" />
-        {label}
-      </a>
-    </Button>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline">
+          <FileText data-icon="inline-start" />
+          {label}
+          <ChevronDown data-icon="inline-end" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-72 p-1.5">
+        <DropdownMenuLabel className="text-xs text-muted-foreground">Pilih format PDF</DropdownMenuLabel>
+        <DropdownMenuGroup>
+          {styles.map((s) => (
+            <DropdownMenuItem key={s.value} asChild className="px-2 py-2">
+              <a href={target(s.value)} target="_blank" rel="noopener" className="flex flex-col items-start gap-0.5">
+                <span className="font-medium">{s.title}</span>
+                <span className="text-xs leading-snug whitespace-normal text-muted-foreground">{s.text}</span>
+              </a>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

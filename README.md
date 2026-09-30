@@ -175,7 +175,10 @@ Untuk kerusakan mendadak (misalnya komputer staf mati), gunakan **Tugas → Lapo
 
 ### Format PDF laporan
 
-Laporan periode dan dokumen pemeriksaan/laporan kerusakan dicetak bergaya artikel LaTeX: huruf Computer Modern, blok judul di tengah, ringkasan, bagian bernomor, tabel *booktabs* dan gambar bernomor, serta nomor halaman di tengah bawah. Huruf **CMU Serif** (Computer Modern Unicode) disertakan di `assets/fonts/cmu` dengan lisensi SIL Open Font License (`OFL.txt`). Kartu Inventaris Ruangan tetap memakai template **Klasik** atau **Modern** yang dipilih dari menu **Cetak KIR**.
+Laporan periode dan dokumen pemeriksaan/laporan kerusakan dapat dicetak dalam dua format melalui menu **Cetak PDF**:
+
+- **Gaya LaTeX**: huruf Computer Modern, blok judul di tengah, ringkasan, bagian bernomor, tabel *booktabs* dan gambar bernomor, serta nomor halaman di tengah bawah.
+- **Dokumen ISO**: kotak kepala dokumen terkendali di setiap halaman (institusi, judul, nomor dokumen, revisi, tanggal terbit, halaman), bagian bernomor, tabel bergaris penuh, dan tabel pengesahan (nama, jabatan, tanda tangan, tanggal). Nomor dokumen: `LAP-SARPRAS/<awal>-<akhir>` untuk laporan periode, `PMR-<id>` untuk pemeriksaan, dan `LK-<id>` untuk laporan kerusakan; revisi awal `00`. Huruf **CMU Serif** (Computer Modern Unicode) disertakan di `assets/fonts/cmu` dengan lisensi SIL Open Font License (`OFL.txt`). Kartu Inventaris Ruangan tetap memakai template **Klasik** atau **Modern** yang dipilih dari menu **Cetak KIR**.
 
 ### Versi jadwal dan histori
 

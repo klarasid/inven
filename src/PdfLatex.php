@@ -41,7 +41,8 @@ final class PdfLatex
             . '</style>';
     }
 
-    public static function titleBlock(string $title, string $author = '', string $date = ''): string
+    /** $meta (document number etc.) is used by the ISO style's control header; the article style shows none. */
+    public static function titleBlock(string $title, string $author = '', string $date = '', array $meta = []): string
     {
         $institution = PdfLayout::institution();
         return '<div style="text-align:center;margin-bottom:8mm;">'
@@ -85,7 +86,8 @@ final class PdfLatex
     {
         if (!$rows) return $empty !== '' ? self::paragraph($empty) : '';
         $align = [];
-        $html = '<div style="text-align:center;font-size:10pt;margin:4mm 0 1.6mm 0;">Tabel ' . (++self::$table) . ': ' . self::e($caption) . '</div>'
+        // Caption as <h6>: mPDF's keep-with-table (use_kwt) only binds headings to the table that follows.
+        $html = '<h6 style="text-align:center;font-size:10pt;font-weight:normal;margin:4mm 0 1.6mm 0;">Tabel ' . (++self::$table) . ': ' . self::e($caption) . '</h6>'
             . '<table style="width:100%;border-collapse:collapse;font-size:' . $size . ';margin-bottom:4mm;" autosize="1"><thead><tr>';
         foreach ($headers as $i => $header) {
             [$label, $a] = is_array($header) ? $header : [$header, 'l'];

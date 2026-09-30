@@ -124,8 +124,9 @@ try {
         if (!class_exists(\Mpdf\Mpdf::class)) throw new RuntimeException('Dependensi mPDF belum tersedia. Jalankan composer install di direktori plugin.');
         require_once __DIR__ . '/WatchPdf.php';
         $id=(int)($_GET['record']??0);
+        $style=isset(\SLiMS\Plugins\Inventory\WatchPdf::STYLES[$_GET['style']??''])?(string)$_GET['style']:'latex';
         if ($id) {
-            $html=\SLiMS\Plugins\Inventory\WatchPdf::detail($watch->document($id),fn($photo)=>$watch->photo($id,(int)$photo['id']));
+            $html=\SLiMS\Plugins\Inventory\WatchPdf::detail($watch->document($id),fn($photo)=>$watch->photo($id,(int)$photo['id']),$style);
             $title='Dokumen Pemeriksaan #'.$id; $file='pemeriksaan-'.$id.'.pdf';
         } else {
             $rows=$watch->inspections($filter,1,501);
@@ -135,10 +136,10 @@ try {
                 'room'=>$filter['room']?(string)$watch->query('SELECT room_name FROM inventory_locations WHERE id=?',[$filter['room']])->fetchColumn():'',
                 'printed_by'=>(string)($_SESSION['realname']??''),
             ];
-            $html=\SLiMS\Plugins\Inventory\WatchPdf::summary($filter,$watch->summary($filter,true),$rows,$context);
+            $html=\SLiMS\Plugins\Inventory\WatchPdf::summary($filter,$watch->summary($filter,true),$rows,$context,$style);
             $title='Laporan Pengawasan dan Pemeliharaan'; $file='laporan-pengawasan-'.$filter['from'].'-'.$filter['to'].'.pdf';
         }
-        $pdf=\SLiMS\Plugins\Inventory\PdfLatex::mpdf(SB.FLS.DS.'cache',$title);
+        $pdf=\SLiMS\Plugins\Inventory\WatchPdf::mpdf(SB.FLS.DS.'cache',$title,$style);
         $pdf->WriteHTML($html);
         watch_log('Print','Laporan pengawasan '.($id?'#'.$id:Supervision::json($filter)));
         $pdf->Output($file,'I'); return;
