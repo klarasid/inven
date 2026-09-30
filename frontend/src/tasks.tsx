@@ -1,36 +1,58 @@
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { Plus, ArrowRight, Check } from "lucide-react";
+import {
+  Plus,
+  ArrowRight,
+  Check,
+  CheckCheck,
+  ClipboardCheck,
+  Wrench,
+  ShieldCheck,
+  History as HistoryIcon,
+  Upload as UploadIcon,
+  ListChecks,
+  CalendarDays,
+  CircleCheck,
+  Circle,
+  CalendarClock,
+  User,
+  Undo2,
+  MoreHorizontal,
+} from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "./components/ui/tabs";
-import {
-  Table,
-  TableHeader,
-  TableHead,
-  TableRow,
-  TableBody,
-  TableCell,
-} from "./components/ui/table";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./components/ui/card";
+import { Tabs, TabsList, TabsTrigger } from "./components/ui/tabs";
+import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "./components/ui/table";
 import { FieldGroup } from "./components/ui/field";
 import { Progress } from "./components/ui/progress";
+import { ToggleGroup, ToggleGroupItem } from "./components/ui/toggle-group";
 import {
-  Accordion,
-  AccordionItem,
-  AccordionTrigger,
-  AccordionContent,
-} from "./components/ui/accordion";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "./components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "./components/ui/dropdown-menu";
+import { cn } from "./lib/utils";
 import { useData, useWorkspace } from "./context";
 import { dateLabel, groups, inspectionErrors, money } from "./api";
 import {
-  Heading,
+  PageHeader,
   ErrorBox,
   Loading,
   Blank,
   Status,
   Pager,
-  Filters,
-  Search,
+  RoomFilter,
+  SearchBox,
   Panel,
   Choice,
   TextField,
@@ -39,154 +61,287 @@ import {
   Photos,
   History,
   Pdf,
-  Actions,
+  ActionBar,
 } from "./shared";
-import type {
-  Document,
-  Result,
-  Page,
-  TaskRow,
-  Photo,
-  WorkAction,
-  Options,
-} from "./types";
+import type { Document, Result, Page, TaskRow, Photo, Options, Counts, Route } from "./types";
+
+const tasksCrumb = { label: "Tugas", route: { view: "tasks" } as Route };
+
+const outcomeTone: Record<string, string> = {
+  good: "data-[state=on]:bg-success/15 data-[state=on]:text-success data-[state=on]:border-success/40",
+  action: "data-[state=on]:bg-destructive/10 data-[state=on]:text-destructive data-[state=on]:border-destructive/40",
+  unchecked: "data-[state=on]:bg-warning/15 data-[state=on]:text-warning data-[state=on]:border-warning/40",
+  na: "data-[state=on]:bg-muted data-[state=on]:text-foreground",
+};
+const outcomeBadge: Record<string, "success" | "destructive" | "warning" | "secondary"> = {
+  good: "success",
+  action: "destructive",
+  unchecked: "warning",
+  na: "secondary",
+};
+
+function SetupGuide({ counts }: { counts: Counts }) {
+  const { go } = useWorkspace();
+  if (counts.templates > 0 && counts.schedules > 0) return null;
+  const steps = [
+    {
+      done: counts.templates > 0,
+      icon: ListChecks,
+      title: "Buat checklist",
+      text: "Daftar butir yang diperiksa di setiap ruangan.",
+      run: () => go({ view: "template-edit" }),
+    },
+    {
+      done: counts.schedules > 0,
+      icon: CalendarDays,
+      title: "Buat jadwal",
+      text: "Pilih ruangan, checklist, frekuensi, dan petugas.",
+      run: () => go({ view: "schedule-edit" }),
+    },
+  ];
+  return (
+    <Card className="border-dashed bg-muted/30">
+      <CardHeader>
+        <CardTitle>Siapkan pemeriksaan rutin</CardTitle>
+        <CardDescription>
+          Dua langkah agar tugas pemeriksaan muncul otomatis di halaman ini sesuai jadwal.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3 sm:grid-cols-2">
+        {steps.map((s, i) => {
+          const locked = i > 0 && !steps[0].done;
+          return (
+            <div key={s.title} className="flex items-start gap-3 rounded-lg border bg-background p-3">
+              <span
+                className={cn(
+                  "flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-medium",
+                  s.done ? "bg-success/15 text-success" : "bg-muted",
+                )}
+              >
+                {s.done ? <Check className="size-4" /> : i + 1}
+              </span>
+              <div className="flex flex-1 flex-col gap-2">
+                <div>
+                  <p className="font-medium">{s.title}</p>
+                  <p className="text-sm text-muted-foreground">{s.text}</p>
+                </div>
+                {!s.done && (
+                  <Button size="sm" className="self-start" disabled={locked} onClick={s.run}>
+                    <s.icon data-icon="inline-start" />
+                    {locked ? "Setelah langkah 1" : s.title}
+                  </Button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function Tasks() {
   const { route, go, config } = useWorkspace();
-  const kind = route.kind || "inspections";
-  const { data, error, loading } = useData<Page<TaskRow>>("tasks", route);
+  const tab = route.kind || "inspections";
+  const history = tab === "history";
+  const owner = String(route.owner || (history ? "all" : "mine"));
+  const kind = history ? String(route.subject || "inspections") : tab;
+  const params = { ...route, kind, owner, history: history ? "1" : "0" };
+  const { data, error, loading } = useData<Page<TaskRow>>("tasks", params);
+  const { data: counts } = useData<Counts>("counts");
+  const count = (k: string) => {
+    if (!counts) return undefined;
+    if (k === "review") return counts.review;
+    if (k === "history") return undefined;
+    const c = counts[k as "inspections" | "findings"];
+    return owner === "all" ? c.all : c.mine;
+  };
+  const tabs = [
+    { value: "inspections", label: "Pemeriksaan", icon: ClipboardCheck },
+    { value: "findings", label: "Tindak lanjut", icon: Wrench },
+    { value: "review", label: "Verifikasi", icon: ShieldCheck },
+    { value: "history", label: "Riwayat", icon: HistoryIcon },
+  ];
+  const switchTab = (kind: string) => go({ view: "tasks", kind, q: route.q, room: route.room, page: 1 }, true);
+  const otherCount = counts && !history && tab !== "review" && owner === "mine" ? counts[tab as "inspections" | "findings"].all : 0;
+  const findingRows = kind !== "inspections";
+
   return (
     <>
-      <Heading
+      <PageHeader
         title="Tugas"
-        description="Selesaikan pemeriksaan dan tindak lanjut, satu pekerjaan pada satu waktu."
-        action={
+        description="Pemeriksaan ruangan, tindak lanjut temuan, dan verifikasi hasil pekerjaan."
+        actions={
           config.write && (
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                onClick={() => go({ view: "history-import" })}
-              >
-                Impor riwayat
-              </Button>
+            <>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon" aria-label="Tindakan lainnya">
+                    <MoreHorizontal />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => go({ view: "history-import" })}>
+                    <UploadIcon />
+                    Impor riwayat dari Excel
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Button onClick={() => go({ view: "new-inspection" })}>
                 <Plus data-icon="inline-start" />
                 Pemeriksaan insidental
               </Button>
-            </div>
+            </>
           )
         }
       />
-      <Tabs
-        value={kind}
-        onValueChange={(kind) =>
-          go({ ...route, kind, page: 1, history: "0" }, true)
-        }
-      >
-        <TabsList>
-          <TabsTrigger value="inspections">Pemeriksaan</TabsTrigger>
-          <TabsTrigger value="findings">Tindak lanjut</TabsTrigger>
-          <TabsTrigger value="review">Verifikasi</TabsTrigger>
+      {config.write && counts && <SetupGuide counts={counts} />}
+      <Tabs value={tab} onValueChange={switchTab}>
+        <TabsList variant="line" className="w-full justify-start overflow-x-auto border-b">
+          {tabs.map(({ value, label, icon: Icon }) => {
+            const n = count(value);
+            return (
+              <TabsTrigger key={value} value={value} className="flex-none">
+                <Icon />
+                {label}
+                {n !== undefined && n > 0 && (
+                  <Badge variant={value === "review" ? "info" : "secondary"} className="ml-1 tabular-nums">
+                    {n}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            );
+          })}
         </TabsList>
       </Tabs>
-      <div className="flex items-end gap-3 flex-wrap">
-        <Search />
-        {kind !== "review" && (
-          <div className="w-44">
-            <Choice
-              label="Penugasan"
-              value={route.owner || "mine"}
-              onChange={(owner) => go({ ...route, owner, page: 1 }, true)}
-              items={[
-                { value: "mine", label: "Tugas saya" },
-                { value: "all", label: "Semua tugas" },
-              ]}
-            />
-          </div>
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        <SearchBox placeholder="Cari ruangan…" />
+        <RoomFilter />
+        {history && (
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            value={kind}
+            onValueChange={(subject) => subject && go({ ...route, subject, page: 1 }, true)}
+          >
+            <ToggleGroupItem value="inspections">Pemeriksaan</ToggleGroupItem>
+            <ToggleGroupItem value="findings">Tindak lanjut</ToggleGroupItem>
+          </ToggleGroup>
         )}
-        <Filters showHistory={kind !== "review"} />
+        {tab !== "review" && (
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            className="sm:ml-auto"
+            value={owner}
+            onValueChange={(owner) => owner && go({ ...route, owner, page: 1 }, true)}
+            aria-label="Penugasan"
+          >
+            <ToggleGroupItem value="mine">
+              <User />
+              Tugas saya
+            </ToggleGroupItem>
+            <ToggleGroupItem value="all">Semua petugas</ToggleGroupItem>
+          </ToggleGroup>
+        )}
       </div>
-      {kind === "review" && (
-        <p className="text-sm text-muted-foreground">
-          Antrean verifikasi bersama. Semua pengguna dengan hak tulis dapat
-          memeriksa hasil.
-        </p>
-      )}
       <ErrorBox message={error} />
-      {loading ? (
+      {loading && !data ? (
         <Loading />
       ) : data && !data.rows.length ? (
         <Blank
-          title="Tidak ada tugas dalam daftar ini"
-          description={
-            kind === "review"
-              ? "Pekerjaan yang diajukan akan muncul di sini."
-              : "Coba Semua tugas atau ubah filter untuk melihat pekerjaan lainnya."
+          icon={history ? HistoryIcon : tab === "review" ? ShieldCheck : CircleCheck}
+          title={
+            history
+              ? "Belum ada riwayat"
+              : tab === "review"
+                ? "Tidak ada yang perlu diverifikasi"
+                : owner === "mine"
+                  ? "Tidak ada tugas untuk Anda"
+                  : "Semua tugas sudah selesai"
           }
-        />
+          description={
+            history
+              ? "Pemeriksaan dan tindak lanjut yang selesai akan tercatat di sini."
+              : tab === "review"
+                ? "Pekerjaan yang diajukan petugas akan muncul di sini."
+                : otherCount
+                  ? `Ada ${otherCount} tugas milik petugas lain.`
+                  : "Tugas baru muncul sesuai jadwal pemeriksaan atau dari temuan yang perlu tindakan."
+          }
+        >
+          <div className="flex flex-wrap justify-center gap-2">
+            {otherCount > 0 && (
+              <Button onClick={() => go({ ...route, owner: "all", page: 1 }, true)}>
+                Lihat semua tugas ({otherCount})
+              </Button>
+            )}
+            {!history && (
+              <Button variant="outline" onClick={() => switchTab("history")}>
+                <HistoryIcon data-icon="inline-start" />
+                Buka riwayat
+              </Button>
+            )}
+          </div>
+        </Blank>
       ) : (
         data && (
-          <>
+          <div className="overflow-hidden rounded-xl border">
             <Table>
-              <TableHeader>
+              <TableHeader className="bg-muted/50">
                 <TableRow>
-                  <TableHead>
-                    {kind === "inspections" ? "Ruangan" : "Temuan"}
-                  </TableHead>
-                  <TableHead>
-                    {kind === "inspections" ? "Jadwal" : "Tenggat"}
-                  </TableHead>
+                  <TableHead>{findingRows ? "Temuan" : "Ruangan"}</TableHead>
+                  <TableHead className="hidden sm:table-cell">Petugas</TableHead>
+                  <TableHead>{findingRows ? "Tenggat" : "Jadwal"}</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>
+                  <TableHead className="w-28">
                     <span className="sr-only">Tindakan</span>
                   </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {data.rows.map((r) => {
-                  const date = r.deadline || r.due_date;
+                  const date = String(r.deadline || r.due_date || "");
+                  const late = date && date < config.today && !["final", "closed"].includes(r.status);
+                  const open = () => go({ view: findingRows ? "finding" : "inspection", record: r.id });
                   return (
-                    <TableRow key={r.id}>
-                      <TableCell>
-                        <div className="font-medium">
-                          {r.result_snapshot?.object || r.snapshot.room_name}
-                        </div>
+                    <TableRow key={r.id} className="cursor-pointer" onClick={open}>
+                      <TableCell className="max-w-72 whitespace-normal">
+                        <div className="font-medium">{r.result_snapshot?.object || r.snapshot.room_name}</div>
                         <div className="text-xs text-muted-foreground">
-                          {kind === "inspections"
-                            ? r.snapshot.library_name
-                            : r.snapshot.room_name}{" "}
-                          · {r.assignee_name || r.snapshot.assignee?.name}
+                          {findingRows ? r.snapshot.room_name : r.snapshot.library_name}
+                          {r.kind === "incidental" && " · Insidental"}
+                          {r.kind === "historical" && " · Impor riwayat"}
                         </div>
                       </TableCell>
+                      <TableCell className="hidden text-muted-foreground sm:table-cell">
+                        {r.assignee_name || r.snapshot.assignee?.name}
+                      </TableCell>
                       <TableCell>
-                        {dateLabel(date)}
-                        {date < config.today &&
-                          !["final", "closed"].includes(r.status) && (
-                            <div>
-                              <Badge variant="destructive">Lewat tenggat</Badge>
-                            </div>
-                          )}
+                        <div className="flex flex-col items-start gap-1">
+                          <span className="tabular-nums">{dateLabel(date)}</span>
+                          {late && <Badge variant="destructive">Lewat tenggat</Badge>}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <Status value={r.status} />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="text-right">
                         <Button
-                          variant="outline"
-                          onClick={() =>
-                            go({
-                              view:
-                                kind === "inspections"
-                                  ? "inspection"
-                                  : "finding",
-                              record: r.id,
-                            })
-                          }
+                          size="sm"
+                          variant={["final", "closed"].includes(r.status) ? "ghost" : "outline"}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            open();
+                          }}
                         >
                           {r.status === "pending"
-                            ? "Periksa"
+                            ? "Mulai"
                             : r.status === "review"
                               ? "Verifikasi"
-                              : "Buka"}
+                              : ["final", "closed"].includes(r.status)
+                                ? "Lihat"
+                                : "Lanjutkan"}
                           <ArrowRight data-icon="inline-end" />
                         </Button>
                       </TableCell>
@@ -195,276 +350,169 @@ export function Tasks() {
                 })}
               </TableBody>
             </Table>
-          </>
+          </div>
         )
       )}
-      {data && (
-        <Pager {...data} onChange={(page) => go({ ...route, page }, true)} />
-      )}
+      {data && <Pager {...data} onChange={(page) => go({ ...route, page }, true)} />}
     </>
   );
 }
 
-function InspectionResultsTable({
-  results,
-  options,
-  photos,
-}: {
-  results: Result[];
-  options: Options;
-  photos: Photo[];
-}) {
+function itemLabel(r: Result) {
+  return r.snapshot.item_name
+    ? `${r.snapshot.item_name}${r.snapshot.item_code ? ` (${r.snapshot.item_code})` : ""}`
+    : "Aspek ruangan";
+}
+
+function InspectionResultsTable({ results, options, photos }: { results: Result[]; options: Options; photos: Photo[] }) {
   return (
-    <Panel
-      title="Hasil pemeriksaan"
-      description="Ringkasan seluruh butir pemeriksaan."
-    >
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Kelompok / Butir</TableHead>
-            <TableHead>Objek</TableHead>
-            <TableHead>Hasil</TableHead>
-            <TableHead>Catatan</TableHead>
-            <TableHead>Foto</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {results.map((r) => {
-            const photoCount = photos.filter(
-              (p) => String(p.result_id) === String(r.id),
-            ).length;
-            return (
-              <TableRow key={r.id}>
-                <TableCell>
-                  <div className="font-medium">{r.snapshot.group}</div>
-                  <div className="text-xs text-muted-foreground">
-                    Butir #{r.id}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="font-medium">{r.snapshot.object}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {r.snapshot.item_name
-                      ? `${r.snapshot.item_name}${r.snapshot.item_code ? ` (${r.snapshot.item_code})` : ""}`
-                      : "Aspek ruangan"}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <Badge variant="secondary">
-                    {options.outcomes[r.outcome] || "Belum diisi"}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <p className="text-sm whitespace-pre-wrap">
-                    {r.notes || "-"}
-                  </p>
-                </TableCell>
-                <TableCell>
-                  <span className="text-sm">{photoCount} foto</span>
-                  {photoCount > 0 && (
-                    <Photos
-                      photos={photos.filter(
-                        (p) => String(p.result_id) === String(r.id),
-                      )}
-                    />
-                  )}
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
-    </Panel>
+    <div className="flex flex-col gap-3">
+      {results.map((r) => {
+        const resultPhotos = photos.filter((p) => String(p.result_id) === String(r.id));
+        return (
+          <div key={r.id} className="flex flex-col gap-2 rounded-xl border p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="font-medium">{r.snapshot.object}</div>
+                <div className="text-xs text-muted-foreground">
+                  {r.snapshot.group} · {itemLabel(r)}
+                </div>
+              </div>
+              <Badge variant={outcomeBadge[r.outcome] || "outline"}>{options.outcomes[r.outcome] || "Belum diisi"}</Badge>
+            </div>
+            {r.notes && <p className="text-sm whitespace-pre-wrap">{r.notes}</p>}
+            {resultPhotos.length > 0 && <Photos photos={resultPhotos} size="sm" />}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
-function InspectionResultsEditableTable({
-  results,
+function ResultEditor({
+  r,
   options,
   photos,
-  files,
+  pending,
   removed,
-  errors,
+  error,
   update,
-  setRemoved,
-  setFiles,
-  markDirty,
+  toggleRemove,
+  setPending,
 }: {
-  results: Result[];
+  r: Result;
   options: Options;
   photos: Photo[];
-  files: Record<string, File[]>;
-  removed: Record<string, string[]>;
-  errors: Record<string, string>;
-  update: (id: Result["id"], patch: Partial<Result>) => void;
-  setRemoved: React.Dispatch<React.SetStateAction<Record<string, string[]>>>;
-  setFiles: React.Dispatch<React.SetStateAction<Record<string, File[]>>>;
-  markDirty: () => void;
+  pending: File[];
+  removed: string[];
+  error?: string;
+  update: (patch: Partial<Result>) => void;
+  toggleRemove: (p: Photo) => void;
+  setPending: (f: File[]) => void;
 }) {
+  const [showPhotos, setShowPhotos] = useState(photos.length > 0 || pending.length > 0);
   return (
-    <Panel
-      title="Hasil pemeriksaan"
-      description="Isi hasil, catatan, dan bukti langsung per butir dalam tabel."
+    <div
+      data-result={r.id}
+      className={cn(
+        "flex flex-col gap-4 rounded-xl border bg-card p-4",
+        error && "border-destructive/60 ring-1 ring-destructive/30",
+      )}
     >
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Butir</TableHead>
-            <TableHead>Hasil</TableHead>
-            <TableHead>Catatan</TableHead>
-            <TableHead>Tindak lanjut</TableHead>
-            <TableHead>Foto</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {results.map((r) => {
-            const resultPhotos = photos.filter(
-              (p) => String(p.result_id) === String(r.id),
-            );
-            const key = String(r.id);
-            const removedIds = removed[key] || [];
-            const visiblePhotos = resultPhotos.filter(
-              (p) => !removedIds.includes(String(p.id)),
-            );
-            const pending = files[key] || [];
-            return (
-              <TableRow key={r.id}>
-                <TableCell>
-                  <div className="font-medium">{r.snapshot.object}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {r.snapshot.group} · {r.snapshot.item_name || "Aspek ruangan"}
-                  </div>
-                  <ErrorBox message={errors[key] || ""} />
-                </TableCell>
-                <TableCell>
-                  <Choice
-                    label=""
-                    value={r.outcome}
-                    onChange={(outcome) => update(r.id, { outcome })}
-                    items={entries(options.outcomes)}
-                    error={errors[key]}
-                  />
-                </TableCell>
-                <TableCell>
-                  <TextField
-                    label=""
-                    multiline
-                    required={r.outcome !== "good"}
-                    value={r.notes}
-                    onChange={(notes) => update(r.id, { notes })}
-                  />
-                </TableCell>
-                <TableCell>
-                  {r.outcome === "action" ? (
-                    <div className="grid gap-2 min-w-60">
-                      <Choice
-                        label="Penanggung jawab"
-                        value={r.assignee_id}
-                        onChange={(assignee_id) => update(r.id, { assignee_id })}
-                        items={options.users.map((x) => ({
-                          value: x.user_id,
-                          label: x.realname,
-                        }))}
-                      />
-                      <Choice
-                        label="Prioritas"
-                        value={r.priority}
-                        onChange={(priority) => update(r.id, { priority })}
-                        items={entries(options.priorities)}
-                      />
-                      <TextField
-                        label="Tenggat"
-                        type="date"
-                        value={r.deadline}
-                        onChange={(deadline) => update(r.id, { deadline })}
-                      />
-                    </div>
-                  ) : (
-                    <span className="text-sm text-muted-foreground">-</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <Accordion type="single" collapsible>
-                    <AccordionItem value={`evidence-${r.id}`}>
-                      <AccordionTrigger>
-                        {visiblePhotos.length + pending.length} foto
-                      </AccordionTrigger>
-                      <AccordionContent>
-                        <FieldGroup>
-                          <Photos photos={visiblePhotos} />
-                          {resultPhotos.map((p) => (
-                            <Button
-                              key={p.id}
-                              variant="ghost"
-                              type="button"
-                              onClick={() => {
-                                setRemoved((prev) => ({
-                                  ...prev,
-                                  [key]: (prev[key] || []).includes(String(p.id))
-                                    ? (prev[key] || []).filter(
-                                        (id) => id !== String(p.id),
-                                      )
-                                    : [...(prev[key] || []), String(p.id)],
-                                }));
-                                markDirty();
-                              }}
-                            >
-                              {(removedIds || []).includes(String(p.id))
-                                ? "Batalkan penghapusan"
-                                : "Hapus"}{" "}
-                              foto #{p.id}
-                            </Button>
-                          ))}
-                          <Upload
-                            files={pending}
-                            count={visiblePhotos.length}
-                            onChange={(picked) => {
-                              setFiles((prev) => ({ ...prev, [key]: picked }));
-                              markDirty();
-                            }}
-                          />
-                        </FieldGroup>
-                      </AccordionContent>
-                    </AccordionItem>
-                  </Accordion>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
-    </Panel>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="font-medium">{r.snapshot.object}</div>
+          <div className="text-xs text-muted-foreground">{itemLabel(r)}</div>
+          {r.snapshot.instruction && <p className="mt-1 text-sm text-muted-foreground">{r.snapshot.instruction}</p>}
+        </div>
+      </div>
+      <ToggleGroup
+        type="single"
+        variant="outline"
+        value={r.outcome}
+        onValueChange={(outcome) => outcome && update({ outcome })}
+        className="w-full flex-wrap"
+        aria-label={`Hasil ${r.snapshot.object}`}
+      >
+        {entries(options.outcomes).map((o) => (
+          <ToggleGroupItem key={o.value} value={o.value} className={cn("flex-1", outcomeTone[o.value])}>
+            {o.value === "good" && <Check />}
+            {o.label}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      {(r.outcome && r.outcome !== "good") || r.notes ? (
+        <TextField
+          label={r.outcome && r.outcome !== "good" ? "Catatan / alasan" : "Catatan"}
+          multiline
+          rows={2}
+          required={!!r.outcome && r.outcome !== "good"}
+          value={r.notes}
+          onChange={(notes) => update({ notes })}
+        />
+      ) : null}
+      {r.outcome === "action" && (
+        <div className="flex flex-col gap-3 rounded-lg bg-destructive/5 p-3">
+          <p className="text-sm font-medium">Tindak lanjut yang akan dibuat</p>
+          <FieldGroup className="grid gap-3 sm:grid-cols-3">
+            <Choice
+              label="Penanggung jawab"
+              value={r.assignee_id}
+              onChange={(assignee_id) => update({ assignee_id })}
+              items={options.users.map((x) => ({ value: x.user_id, label: x.realname }))}
+            />
+            <Choice
+              label="Prioritas"
+              value={r.priority}
+              onChange={(priority) => update({ priority })}
+              items={entries(options.priorities)}
+            />
+            <TextField label="Tenggat" type="date" value={r.deadline} onChange={(deadline) => update({ deadline })} />
+          </FieldGroup>
+        </div>
+      )}
+      {showPhotos ? (
+        <div className="flex flex-col gap-2">
+          <Photos photos={photos} size="sm" removed={removed} onToggle={toggleRemove} />
+          <Upload
+            files={pending}
+            count={photos.length - removed.length}
+            onChange={setPending}
+            label="Foto bukti (opsional)"
+          />
+        </div>
+      ) : (
+        <Button type="button" variant="ghost" size="sm" className="self-start" onClick={() => setShowPhotos(true)}>
+          <Plus data-icon="inline-start" />
+          Tambah foto bukti
+        </Button>
+      )}
+    </div>
   );
 }
 
 export function InspectionPage() {
   const { route } = useWorkspace();
-  const { data, error } = useData<Document>("inspection", {
-    record: route.record,
-  });
+  const { data, error } = useData<Document>("inspection", { record: route.record });
   return (
     <>
       <ErrorBox message={error} />
       {data ? (
-        <InspectionEditor
-          key={`${data.inspection.id}-${data.inspection.version}`}
-          document={data}
-        />
+        <InspectionEditor key={`${data.inspection.id}-${data.inspection.version}`} document={data} />
       ) : (
         !error && <Loading />
       )}
     </>
   );
 }
+
 function InspectionEditor({ document: d }: { document: Document }) {
   const w = useWorkspace();
   const { config, options } = w;
   const editable = config.write && d.inspection.status !== "final";
   const [results, setResults] = useState(d.results);
-  const [performed, setPerformed] = useState(
-    d.inspection.performed_date || config.today,
-  );
+  const [performed, setPerformed] = useState(d.inspection.performed_date || config.today);
   const [notes, setNotes] = useState(d.inspection.notes || "");
   const [step, setStep] = useState(0);
   const [tab, setTab] = useState("results");
@@ -477,44 +525,55 @@ function InspectionEditor({ document: d }: { document: Document }) {
   const [files, setFiles] = useState<Record<string, File[]>>({});
   const [removed, setRemoved] = useState<Record<string, string[]>>({});
   const [correction, setCorrection] = useState("");
+  const [finishing, setFinishing] = useState(false);
   const version = useRef(Number(d.inspection.version));
-  const available = groups.filter((group) =>
-    results.some((r) => r.snapshot.group === group),
-  );
-  const review = step === available.length;
+  const available = groups.filter((group) => results.some((r) => r.snapshot.group === group));
+  const current = available[step];
   const root = useRef<HTMLDivElement>(null);
   const uploadKeys = useRef(new WeakMap<File, string>());
+  const filled = results.filter((r) => r.outcome).length;
   const update = (id: Result["id"], patch: Partial<Result>) => {
-    setResults((rows) =>
-      rows.map((r) => (String(r.id) === String(id) ? { ...r, ...patch } : r)),
-    );
+    setResults((rows) => rows.map((r) => (String(r.id) === String(id) ? { ...r, ...patch } : r)));
+    setErrors((e) => {
+      if (!e[String(id)]) return e;
+      const { [String(id)]: _, ...rest } = e;
+      return rest;
+    });
+    w.dirty(true);
+  };
+  const markGood = () => {
+    setResults((rows) => rows.map((r) => (r.snapshot.group === current && !r.outcome ? { ...r, outcome: "good" } : r)));
     w.dirty(true);
   };
   const jump = (id: string) => {
-    const index = available.indexOf(
-      results.find((r) => String(r.id) === id)?.snapshot.group || "",
-    );
+    const index = available.indexOf(results.find((r) => String(r.id) === id)?.snapshot.group || "");
     setStep(Math.max(0, index));
     setTimeout(() => {
-      const el = root.current?.querySelector<HTMLElement>(
-        `[data-result="${id}"]`,
-      );
+      const el = root.current?.querySelector<HTMLElement>(`[data-result="${id}"]`);
       el?.scrollIntoView({ block: "center", behavior: "smooth" });
       el?.querySelector<HTMLElement>("button,input,textarea")?.focus();
     }, 50);
   };
+  function finish() {
+    const errors = inspectionErrors(results, performed, config.today);
+    delete errors.performed_date;
+    setErrors(errors);
+    const id = Object.keys(errors)[0];
+    if (id) {
+      setError(`${Object.keys(errors).length} butir belum lengkap. Lengkapi butir yang ditandai merah.`);
+      jump(id);
+      return;
+    }
+    setError("");
+    setFinishing(true);
+  }
   async function save(final: boolean) {
     if (busyRef.current) return;
     if (final) {
       const errors = inspectionErrors(results, performed, config.today);
       setErrors(errors);
       if (Object.keys(errors).length) {
-        setError(
-          "Lengkapi butir yang ditandai sebelum menyelesaikan pemeriksaan.",
-        );
-        const id = Object.keys(errors).find((x) => x !== "performed_date");
-        if (id) jump(id);
-        else setStep(available.length);
+        setError("Lengkapi butir yang ditandai sebelum menyelesaikan pemeriksaan.");
         return;
       }
     }
@@ -524,29 +583,17 @@ function InspectionEditor({ document: d }: { document: Document }) {
     setMessage("Menyimpan draf…");
     try {
       const answers = Object.fromEntries(
-        results.map(
-          ({ id, outcome, notes, assignee_id, priority, deadline }) => [
-            id,
-            { outcome, notes, assignee_id, priority, deadline },
-          ],
-        ),
+        results.map(({ id, outcome, notes, assignee_id, priority, deadline }) => [
+          id,
+          { outcome, notes, assignee_id, priority, deadline },
+        ]),
       );
-      const values = {
-        watch_action: "inspection",
-        id: d.inspection.id,
-        performed_date: performed,
-        notes,
-        results: answers,
-      };
-      const draft = await w.mutate({
-        ...values,
-        version: version.current,
-        submit_mode: "draft",
-      });
+      const values = { watch_action: "inspection", id: d.inspection.id, performed_date: performed, notes, results: answers };
+      const draft = await w.mutate({ ...values, version: version.current, submit_mode: "draft" });
       version.current = Number(draft.document!.version);
       for (const r of results) {
         const key = String(r.id);
-        let removes = removed[key] || [];
+        const removes = removed[key] || [];
         const pending = files[key] || [];
         if (removes.length) {
           const reply = await w.mutate({
@@ -559,7 +606,6 @@ function InspectionEditor({ document: d }: { document: Document }) {
           version.current = Number(reply.document!.version);
           setPhotos(reply.document!.photos);
           setRemoved((prev) => ({ ...prev, [key]: [] }));
-          removes = [];
         }
         for (const file of pending) {
           setMessage(`Mengunggah foto ${r.snapshot.object}: ${file.name}`);
@@ -583,14 +629,9 @@ function InspectionEditor({ document: d }: { document: Document }) {
             );
             version.current = Number(reply.document!.version);
             setPhotos(reply.document!.photos);
-            setFiles((prev) => ({
-              ...prev,
-              [key]: (prev[key] || []).filter((f) => f !== file),
-            }));
+            setFiles((prev) => ({ ...prev, [key]: (prev[key] || []).filter((f) => f !== file) }));
           } catch (e) {
-            setErrors({
-              [key]: `Foto ${file.name} belum tersimpan. Coba simpan kembali.`,
-            });
+            setErrors({ [key]: `Foto ${file.name} belum tersimpan. Coba simpan kembali.` });
             jump(key);
             throw e;
           }
@@ -598,15 +639,10 @@ function InspectionEditor({ document: d }: { document: Document }) {
       }
       if (final) {
         setMessage("Menyelesaikan pemeriksaan…");
-        await w.mutate({
-          ...values,
-          version: version.current,
-          submit_mode: "final",
-        });
+        await w.mutate({ ...values, version: version.current, submit_mode: "final" });
         w.dirty(false);
-        toast.success(
-          "Pemeriksaan selesai. Temuan yang perlu tindakan sudah dibuat.",
-        );
+        setFinishing(false);
+        toast.success("Pemeriksaan selesai. Temuan yang perlu tindakan sudah dibuat.");
         w.refresh();
       } else {
         w.dirty(false);
@@ -614,306 +650,351 @@ function InspectionEditor({ document: d }: { document: Document }) {
         toast.success("Draf tersimpan.");
       }
     } catch (e) {
+      setFinishing(false);
       setError((e as Error).message);
-      setMessage("Pemeriksaan belum diselesaikan. Periksa pesan di atas.");
+      setMessage("Belum tersimpan. Periksa pesan di atas.");
     } finally {
       busyRef.current = false;
       setBusy(false);
     }
   }
+  const tally = (outcome: string) => results.filter((r) => r.outcome === outcome).length;
+  const kindLabel =
+    d.inspection.kind === "historical" ? "Impor riwayat" : d.inspection.kind === "routine" ? "Terjadwal" : "Insidental";
+
   return (
     <div ref={root} className="flex flex-col gap-6">
-      <Heading
-        back
-        title={`Pemeriksaan · ${d.snapshot.room_name}`}
-        description={`${d.snapshot.library_name} · ${d.snapshot.template_name} · ${dateLabel(d.inspection.due_date)}`}
-        action={<Pdf record={d.inspection.id} />}
+      <PageHeader
+        crumbs={[
+          tasksCrumb,
+          {
+            label: d.inspection.status === "final" ? "Riwayat" : "Pemeriksaan",
+            route: { view: "tasks", kind: d.inspection.status === "final" ? "history" : "inspections" },
+          },
+        ]}
+        title={d.snapshot.room_name}
+        description={`${d.snapshot.library_name} · ${d.snapshot.template_name}`}
+        meta={
+          <>
+            <Status value={d.inspection.status} />
+            <Badge variant="outline">{kindLabel}</Badge>
+            <Badge variant="outline">
+              <CalendarClock />
+              {dateLabel(d.inspection.due_date)}
+            </Badge>
+            <Badge variant="outline">
+              <User />
+              {d.snapshot.assignee?.name}
+            </Badge>
+            {d.inspection.reason && <span className="text-sm text-muted-foreground">Alasan: {d.inspection.reason}</span>}
+          </>
+        }
+        actions={
+          <>
+            {d.inspection.parent_id && (
+              <Button variant="ghost" onClick={() => w.go({ view: "inspection", record: d.inspection.parent_id! })}>
+                Pemeriksaan asal
+              </Button>
+            )}
+            <Pdf record={d.inspection.id} />
+          </>
+        }
       />
-      <div className="flex items-center gap-3">
-        <Status value={d.inspection.status} />
-        <span className="text-sm text-muted-foreground">
-          {d.inspection.kind === "historical"
-            ? "Impor riwayat"
-            : d.inspection.kind === "routine"
-              ? "Terjadwal"
-              : "Insidental"}
-          {d.inspection.reason && ` · ${d.inspection.reason}`}
-        </span>
-        {d.inspection.parent_id && (
-          <Button
-            variant="link"
-            onClick={() =>
-              w.go({ view: "inspection", record: d.inspection.parent_id! })
-            }
-          >
-            Pemeriksaan asal
-          </Button>
-        )}
-      </div>
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
-          <TabsTrigger value="results">Hasil pemeriksaan</TabsTrigger>
-          <TabsTrigger value="history">Riwayat</TabsTrigger>
+        <TabsList variant="line" className="w-full justify-start border-b">
+          <TabsTrigger value="results" className="flex-none">
+            Hasil pemeriksaan
+          </TabsTrigger>
+          <TabsTrigger value="history" className="flex-none">
+            Riwayat kegiatan
+          </TabsTrigger>
         </TabsList>
-        <TabsContent value="history">
-          <History events={d.events} />
-        </TabsContent>
       </Tabs>
       <ErrorBox message={error} />
-      {tab === "results" && (
+      {tab === "history" && <History events={d.events} />}
+      {tab === "results" && editable && (
         <>
-          <fieldset disabled={busy} className="flex flex-col gap-6 min-w-0">
-            {editable && (
-              <>
+          <div className="grid gap-6 md:grid-cols-[220px_1fr]">
+            <aside className="flex flex-col gap-4 md:sticky md:top-4 md:self-start">
+              <div className="flex flex-col gap-2">
                 <div className="flex justify-between text-sm">
-                  <span>
-                    {results.filter((r) => r.outcome).length} dari{" "}
-                    {results.length} butir terisi
-                  </span>
-                  <span>
-                    Langkah {step + 1} / {available.length + 1}
+                  <span className="text-muted-foreground">Terisi</span>
+                  <span className="font-medium tabular-nums">
+                    {filled} / {results.length}
                   </span>
                 </div>
-                <Progress
-                  value={
-                    (results.filter((r) => r.outcome).length / results.length) *
-                    100
-                  }
-                  aria-label="Kelengkapan hasil"
-                />
-                <Tabs
-                  value={String(step)}
-                  onValueChange={(v) => setStep(Number(v))}
-                >
-                  <TabsList className="flex-wrap h-auto">
-                    {[...available, "Ringkasan"].map((g, i) => (
-                      <TabsTrigger value={String(i)} key={g}>
+                <Progress value={(filled / results.length) * 100} aria-label="Kelengkapan hasil" />
+              </div>
+              <nav className="flex gap-1 overflow-x-auto md:flex-col" aria-label="Kelompok butir">
+                {available.map((g, i) => {
+                  const rows = results.filter((r) => r.snapshot.group === g);
+                  const done = rows.filter((r) => r.outcome).length;
+                  const invalid = rows.some((r) => errors[String(r.id)]);
+                  return (
+                    <Button
+                      key={g}
+                      variant={step === i ? "secondary" : "ghost"}
+                      className="flex-none justify-between md:w-full"
+                      onClick={() => setStep(i)}
+                    >
+                      <span className="flex items-center gap-2">
+                        {done === rows.length ? (
+                          <CircleCheck className="text-success" />
+                        ) : (
+                          <Circle className={cn(invalid && "text-destructive")} />
+                        )}
                         {g}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </Tabs>
-              </>
-            )}
-            {editable && !review && (
-              <InspectionResultsEditableTable
-                results={results}
-                options={options}
-                photos={photos}
-                files={files}
-                removed={removed}
-                errors={errors}
-                update={update}
-                setRemoved={setRemoved}
-                setFiles={setFiles}
-                markDirty={() => w.dirty(true)}
-              />
-            )}
-            {!editable && (
-              <InspectionResultsTable
-                results={results}
-                options={options}
-                photos={photos}
-              />
-            )}
-            {editable && review && (
-              <Panel
-                title="Ringkasan pemeriksaan"
-                description="Periksa hasil sebelum menyelesaikan. Hasil yang selesai akan dikunci; koreksi disimpan sebagai catatan tambahan."
+                      </span>
+                      <span className="text-xs text-muted-foreground tabular-nums">
+                        {done}/{rows.length}
+                      </span>
+                    </Button>
+                  );
+                })}
+              </nav>
+            </aside>
+            <fieldset disabled={busy} className="flex min-w-0 flex-col gap-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-lg font-semibold">{current}</h2>
+                {results.some((r) => r.snapshot.group === current && !r.outcome) && (
+                  <Button variant="outline" size="sm" onClick={markGood}>
+                    <CheckCheck data-icon="inline-start" />
+                    Tandai sisanya Baik
+                  </Button>
+                )}
+              </div>
+              {results
+                .filter((r) => r.snapshot.group === current)
+                .map((r) => {
+                  const key = String(r.id);
+                  return (
+                    <ResultEditor
+                      key={key}
+                      r={r}
+                      options={options}
+                      photos={photos.filter((p) => String(p.result_id) === key)}
+                      pending={files[key] || []}
+                      removed={removed[key] || []}
+                      error={errors[key]}
+                      update={(patch) => update(r.id, patch)}
+                      toggleRemove={(p) => {
+                        setRemoved((prev) => {
+                          const list = prev[key] || [];
+                          return {
+                            ...prev,
+                            [key]: list.includes(String(p.id))
+                              ? list.filter((id) => id !== String(p.id))
+                              : [...list, String(p.id)],
+                          };
+                        });
+                        w.dirty(true);
+                      }}
+                      setPending={(picked) => {
+                        setFiles((prev) => ({ ...prev, [key]: picked }));
+                        w.dirty(true);
+                      }}
+                    />
+                  );
+                })}
+            </fieldset>
+          </div>
+          <ActionBar status={message}>
+            <Button variant="outline" disabled={busy} onClick={() => save(false)}>
+              Simpan draf
+            </Button>
+            {step < available.length - 1 ? (
+              <Button
+                variant="secondary"
+                disabled={busy}
+                onClick={() => {
+                  setStep(step + 1);
+                  root.current?.scrollIntoView({ block: "start" });
+                }}
               >
+                {available[step + 1]}
+                <ArrowRight data-icon="inline-end" />
+              </Button>
+            ) : null}
+            <Button disabled={busy} onClick={finish}>
+              <Check data-icon="inline-start" />
+              Selesaikan pemeriksaan
+            </Button>
+          </ActionBar>
+          <Dialog open={finishing} onOpenChange={(open) => !busy && setFinishing(open)}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Selesaikan pemeriksaan?</DialogTitle>
+                <DialogDescription>
+                  Hasil akan dikunci. Koreksi setelahnya disimpan sebagai catatan tambahan.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {entries(options.outcomes).map((o) => (
+                  <div key={o.value} className="rounded-lg border p-2 text-center">
+                    <p className="text-lg font-semibold tabular-nums">{tally(o.value)}</p>
+                    <p className="text-xs text-muted-foreground">{o.label}</p>
+                  </div>
+                ))}
+              </div>
+              {tally("action") > 0 && (
+                <p className="text-sm">
+                  <strong>{tally("action")} temuan</strong> akan dibuat dan dikirim ke penanggung jawabnya.
+                </p>
+              )}
+              <FieldGroup>
+                <TextField
+                  label="Tanggal pelaksanaan"
+                  type="date"
+                  value={performed}
+                  onChange={(v) => {
+                    setPerformed(v);
+                    w.dirty(true);
+                  }}
+                  required
+                  max={config.today}
+                  error={errors.performed_date}
+                />
+                <TextField
+                  label="Catatan pemeriksaan (opsional)"
+                  value={notes}
+                  multiline
+                  rows={2}
+                  onChange={(v) => {
+                    setNotes(v);
+                    w.dirty(true);
+                  }}
+                />
+              </FieldGroup>
+              <DialogFooter>
+                <Button variant="outline" disabled={busy} onClick={() => setFinishing(false)}>
+                  Periksa lagi
+                </Button>
+                <Button disabled={busy} onClick={() => save(true)}>
+                  {busy ? message || "Menyimpan…" : "Ya, selesaikan"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </>
+      )}
+      {tab === "results" && !editable && (
+        <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
+          <InspectionResultsTable results={results} options={options} photos={photos} />
+          <div className="flex flex-col gap-4 lg:sticky lg:top-4 lg:self-start">
+            <Panel title="Ringkasan">
+              <dl className="grid grid-cols-2 gap-3">
+                {entries(options.outcomes).map((o) => (
+                  <div key={o.value}>
+                    <dt className="text-xs text-muted-foreground">{o.label}</dt>
+                    <dd className="text-lg font-semibold tabular-nums">{tally(o.value)}</dd>
+                  </div>
+                ))}
+              </dl>
+              {d.inspection.performed_date && (
+                <p className="mt-3 text-sm text-muted-foreground">Dilaksanakan {dateLabel(d.inspection.performed_date)}</p>
+              )}
+              {d.inspection.notes && <p className="mt-2 text-sm whitespace-pre-wrap">{d.inspection.notes}</p>}
+            </Panel>
+            <Panel title="Tindak lanjut">
+              {d.findings.length ? (
+                <div className="flex flex-col gap-2">
+                  {d.findings.map((f) => {
+                    const result = d.results.find((r) => String(r.id) === String(f.result_id));
+                    return (
+                      <button
+                        type="button"
+                        key={f.id}
+                        className="flex items-center justify-between gap-2 rounded-lg border p-2 text-left text-sm hover:bg-muted/50"
+                        onClick={() => w.go({ view: "finding", record: f.id })}
+                      >
+                        <span className="min-w-0 truncate">{result?.snapshot.object || `Temuan #${f.id}`}</span>
+                        <Status value={f.status} />
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Tidak ada temuan yang perlu tindakan.</p>
+              )}
+            </Panel>
+            {config.write && (
+              <Panel title="Koreksi" description="Tambahkan catatan koreksi atau buat pemeriksaan ulang.">
                 <FieldGroup>
                   <TextField
-                    label="Tanggal pelaksanaan"
-                    type="date"
-                    value={performed}
+                    label="Catatan koreksi"
+                    value={correction}
                     onChange={(v) => {
-                      setPerformed(v);
+                      setCorrection(v);
                       w.dirty(true);
                     }}
-                    required
-                    max={config.today}
-                    error={errors.performed_date}
-                  />
-                  <TextField
-                    label="Catatan pemeriksaan"
-                    value={notes}
                     multiline
-                    onChange={(v) => {
-                      setNotes(v);
-                      w.dirty(true);
-                    }}
+                    rows={2}
                   />
-                  <div className="flex flex-col gap-2">
-                    {results.map((r) => (
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      disabled={busy || !correction.trim()}
+                      onClick={async () => {
+                        setBusy(true);
+                        try {
+                          await w.mutate({ watch_action: "correction", id: d.inspection.id, notes: correction });
+                          w.dirty(false);
+                          toast.success("Catatan koreksi tersimpan.");
+                          w.refresh();
+                        } catch (e) {
+                          setError((e as Error).message);
+                        } finally {
+                          setBusy(false);
+                        }
+                      }}
+                    >
+                      Simpan catatan
+                    </Button>
+                    {d.inspection.location_id && (
                       <Button
-                        key={r.id}
+                        size="sm"
                         variant="outline"
-                        onClick={() => jump(String(r.id))}
-                        className="justify-between h-auto py-3 whitespace-normal"
+                        onClick={() =>
+                          w.go({
+                            view: "new-inspection",
+                            parent_id: d.inspection.id,
+                            room: d.inspection.location_id!,
+                            template_id: d.snapshot.template_id ?? undefined,
+                          })
+                        }
                       >
-                        <span>{r.snapshot.object}</span>
-                        <span>
-                          {options.outcomes[r.outcome] || "Belum diisi"}
-                        </span>
+                        Pemeriksaan ulang
                       </Button>
-                    ))}
+                    )}
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    {results.filter((r) => r.outcome === "action").length}{" "}
-                    temuan akan dibuat untuk ditindaklanjuti.
-                  </p>
                 </FieldGroup>
               </Panel>
             )}
-          </fieldset>
-          {editable ? (
-            <div className="sticky bottom-0 border-t bg-background py-4 flex flex-wrap items-center gap-3">
-              <Button
-                variant="outline"
-                disabled={busy}
-                onClick={() => save(false)}
-              >
-                Simpan draf
-              </Button>
-              {step > 0 && (
-                <Button
-                  variant="ghost"
-                  disabled={busy}
-                  onClick={() => setStep(step - 1)}
-                >
-                  Sebelumnya
-                </Button>
-              )}
-              <Button
-                disabled={busy}
-                onClick={() => (review ? save(true) : setStep(step + 1))}
-              >
-                {busy
-                  ? "Menyimpan…"
-                  : review
-                    ? "Selesaikan pemeriksaan"
-                    : "Lanjutkan"}
-                <ArrowRight data-icon="inline-end" />
-              </Button>
-              <p className="text-sm text-muted-foreground" role="status">
-                {message}
-              </p>
-            </div>
-          ) : (
-            <>
-              <Panel title="Tindak lanjut">
-                {d.findings.length ? (
-                  d.findings.map((f) => (
-                    <div className="flex justify-between py-2" key={f.id}>
-                      <Status value={f.status} />
-                      <Button
-                        variant="outline"
-                        onClick={() => w.go({ view: "finding", record: f.id })}
-                      >
-                        Buka temuan #{f.id}
-                      </Button>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    Tidak ada temuan yang perlu tindakan.
-                  </p>
-                )}
-              </Panel>
-              {config.write && (
-                <Accordion type="single" collapsible>
-                  <AccordionItem value="correction">
-                    <AccordionTrigger>
-                      Catatan koreksi dan pemeriksaan ulang
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <FieldGroup>
-                        <TextField
-                          label="Catatan koreksi"
-                          value={correction}
-                          onChange={(v) => {
-                            setCorrection(v);
-                            w.dirty(true);
-                          }}
-                          multiline
-                        />
-                        <div className="flex gap-3">
-                          <Button
-                            disabled={busy || !correction.trim()}
-                            onClick={async () => {
-                              setBusy(true);
-                              try {
-                                await w.mutate({
-                                  watch_action: "correction",
-                                  id: d.inspection.id,
-                                  notes: correction,
-                                });
-                                w.dirty(false);
-                                w.refresh();
-                              } catch (e) {
-                                setError((e as Error).message);
-                              } finally {
-                                setBusy(false);
-                              }
-                            }}
-                          >
-                            Simpan catatan
-                          </Button>
-                          {d.inspection.location_id && (
-                            <Button
-                              variant="outline"
-                              onClick={() =>
-                                w.go({
-                                  view: "new-inspection",
-                                  parent_id: d.inspection.id,
-                                  room: d.inspection.location_id!,
-                                  template_id:
-                                    d.snapshot.template_id ?? undefined,
-                                })
-                              }
-                            >
-                              Pemeriksaan ulang
-                            </Button>
-                          )}
-                        </div>
-                      </FieldGroup>
-                    </AccordionContent>
-                  </AccordionItem>
-                </Accordion>
-              )}
-            </>
-          )}
-        </>
+          </div>
+        </div>
       )}
     </div>
   );
 }
+
 export function FindingPage() {
   const { route } = useWorkspace();
-  const { data, error } = useData<Document>("finding", {
-    record: route.record,
-  });
+  const { data, error } = useData<Document>("finding", { record: route.record });
   return (
     <>
       <ErrorBox message={error} />
-      {data ? (
-        <FindingEditor
-          key={`${data.finding!.id}-${data.finding!.version}`}
-          document={data}
-        />
-      ) : (
-        !error && <Loading />
-      )}
+      {data ? <FindingEditor key={`${data.finding!.id}-${data.finding!.version}`} document={data} /> : !error && <Loading />}
     </>
   );
 }
+
+const actionKinds: Record<string, string> = { repair: "Perbaikan", maintenance: "Pemeliharaan", none: "Tanpa pekerjaan" };
+
 function FindingEditor({ document: d }: { document: Document }) {
   const w = useWorkspace();
   const f = d.finding!;
   const result = d.results.find((r) => String(r.id) === String(f.result_id))!;
-  const actions = d.actions.filter(
-    (a) => String(a.finding_id) === String(f.id),
-  );
+  const actions = d.actions.filter((a) => String(a.finding_id) === String(f.id));
   const draft = actions.find((a) => !a.submitted_at);
   const [values, setValues] = useState({
     kind: draft?.kind || "repair",
@@ -940,17 +1021,7 @@ function FindingEditor({ document: d }: { document: Document }) {
     try {
       const body = new FormData();
       files.forEach((file) => body.append("photos[]", file));
-      await w.mutate(
-        {
-          watch_action: "finding",
-          id: f.id,
-          version: f.version,
-          mode,
-          ...values,
-          remove: removed,
-        },
-        body,
-      );
+      await w.mutate({ watch_action: "finding", id: f.id, version: f.version, mode, ...values, remove: removed }, body);
       w.dirty(false);
       toast.success(
         mode === "submit"
@@ -969,215 +1040,225 @@ function FindingEditor({ document: d }: { document: Document }) {
       setBusy(false);
     }
   }
-  const workPhotos = d.photos.filter(
-    (p) => draft && String(p.action_id) === String(draft.id),
-  );
+  const workPhotos = d.photos.filter((p) => draft && String(p.action_id) === String(draft.id));
+  const late = f.deadline < w.config.today && f.status !== "closed";
+  const editable = w.config.write && ["open", "working"].includes(f.status);
+  const reviewing = w.config.write && f.status === "review";
+  const steps = [
+    { key: "open", label: "Temuan dibuat" },
+    { key: "working", label: "Pekerjaan dicatat" },
+    { key: "review", label: "Verifikasi" },
+    { key: "closed", label: "Selesai" },
+  ];
+  const stepIndex = steps.findIndex((s) => s.key === f.status);
+
   return (
     <>
-      <Heading
-        back
+      <PageHeader
+        crumbs={[
+          tasksCrumb,
+          f.status === "closed"
+            ? { label: "Riwayat", route: { view: "tasks", kind: "history", subject: "findings" } }
+            : f.status === "review"
+              ? { label: "Verifikasi", route: { view: "tasks", kind: "review" } }
+              : { label: "Tindak lanjut", route: { view: "tasks", kind: "findings" } },
+        ]}
         title={result.snapshot.object}
-        description={`${d.snapshot.room_name} · ${f.assignee_name} · Tenggat ${dateLabel(f.deadline)}`}
-        action={
-          <Button
-            variant="outline"
-            onClick={() =>
-              w.go({ view: "inspection", record: f.inspection_id })
-            }
-          >
+        description={`${d.snapshot.room_name} · ${itemLabel(result)}`}
+        meta={
+          <>
+            <Status value={f.status} />
+            <Badge variant="outline">Prioritas {w.options.priorities[f.priority]?.toLowerCase()}</Badge>
+            <Badge variant={late ? "destructive" : "outline"}>
+              <CalendarClock />
+              Tenggat {dateLabel(f.deadline)}
+            </Badge>
+            <Badge variant="outline">
+              <User />
+              {f.assignee_name}
+            </Badge>
+          </>
+        }
+        actions={
+          <Button variant="outline" onClick={() => w.go({ view: "inspection", record: f.inspection_id })}>
             Pemeriksaan asal
           </Button>
         }
       />
-      <div className="flex gap-3">
-        <Status value={f.status} />
-        <Badge variant="outline">{w.options.priorities[f.priority]}</Badge>
-      </div>
+      <ol className="flex flex-wrap items-center gap-2 text-sm" aria-label="Tahapan tindak lanjut">
+        {steps.map((s, i) => (
+          <li key={s.key} className="flex items-center gap-2">
+            <span
+              className={cn(
+                "flex items-center gap-1.5 rounded-full border px-2.5 py-0.5",
+                i < stepIndex && "border-success/40 text-success",
+                i === stepIndex && "border-foreground bg-foreground text-background",
+                i > stepIndex && "text-muted-foreground",
+              )}
+            >
+              {i < stepIndex ? <Check className="size-3.5" /> : <span className="tabular-nums">{i + 1}</span>}
+              {s.label}
+            </span>
+            {i < steps.length - 1 && <ArrowRight className="size-3.5 text-muted-foreground" />}
+          </li>
+        ))}
+      </ol>
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
-          <TabsTrigger value="work">Pekerjaan</TabsTrigger>
-          <TabsTrigger value="history">Riwayat</TabsTrigger>
+        <TabsList variant="line" className="w-full justify-start border-b">
+          <TabsTrigger value="work" className="flex-none">
+            Pekerjaan
+          </TabsTrigger>
+          <TabsTrigger value="history" className="flex-none">
+            Riwayat kegiatan
+          </TabsTrigger>
         </TabsList>
-        <TabsContent value="history">
-          <History
-            events={d.events.filter(
-              (e) => String(e.finding_id) === String(f.id),
-            )}
-          />
-        </TabsContent>
       </Tabs>
       <ErrorBox message={error} />
+      {tab === "history" && <History events={d.events.filter((e) => String(e.finding_id) === String(f.id))} />}
       {tab === "work" && (
-        <>
-          <Panel title="Temuan awal">
-            <p className="whitespace-pre-wrap mb-4">{result.notes}</p>
-            <Photos
-              photos={d.photos.filter(
-                (p) => String(p.result_id) === String(f.result_id),
-              )}
-            />
-          </Panel>
-          {actions
-            .filter((a) => a.submitted_at)
-            .map((a) => (
-              <Panel
-                key={a.id}
-                title={`${a.kind === "none" ? "Tanpa pekerjaan" : a.kind === "repair" ? "Perbaikan" : "Pemeliharaan"} · ${dateLabel(a.performed_date)}`}
-                description={`${a.actor_name}${a.cost ? ` · ${money(a.cost)}` : ""}`}
+        <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
+          <div className="flex min-w-0 flex-col gap-6">
+            {editable ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  save("submit");
+                }}
               >
-                <p className="whitespace-pre-wrap mb-4">{a.description}</p>
-                <Photos
-                  photos={d.photos.filter(
-                    (p) => String(p.action_id) === String(a.id),
-                  )}
-                />
-              </Panel>
-            ))}
-          {w.config.write && ["open", "working"].includes(f.status) ? (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                save("submit");
-              }}
-            >
-              <fieldset disabled={busy} className="flex flex-col gap-6 min-w-0">
-                <Panel
-                  title="Catat pekerjaan"
-                  description="Isi tindakan dan bukti, lalu ajukan hasil untuk diverifikasi."
-                >
-                  <FieldGroup>
-                    <Choice
-                      label="Jenis tindakan"
-                      value={values.kind}
-                      onChange={(v) => update("kind", v)}
-                      items={entries({
-                        repair: "Perbaikan",
-                        maintenance: "Pemeliharaan",
-                        none: "Tanpa pekerjaan",
-                      })}
-                    />
-                    <TextField
-                      label={
-                        values.kind === "none"
-                          ? "Alasan tanpa pekerjaan"
-                          : "Uraian pekerjaan"
-                      }
-                      required
-                      multiline
-                      value={values.description}
-                      onChange={(v) => update("description", v)}
-                    />
-                    <FieldGroup className="grid sm:grid-cols-2">
+                <fieldset disabled={busy} className="flex min-w-0 flex-col gap-6">
+                  <Panel title="Catat pekerjaan" description="Isi tindakan dan bukti, lalu ajukan untuk diverifikasi.">
+                    <FieldGroup>
+                      <ToggleGroup
+                        type="single"
+                        variant="outline"
+                        value={values.kind}
+                        onValueChange={(v) => v && update("kind", v)}
+                        className="w-full"
+                        aria-label="Jenis tindakan"
+                      >
+                        {Object.entries(actionKinds).map(([value, label]) => (
+                          <ToggleGroupItem key={value} value={value} className="flex-1">
+                            {label}
+                          </ToggleGroupItem>
+                        ))}
+                      </ToggleGroup>
                       <TextField
-                        label="Tanggal pekerjaan"
-                        type="date"
+                        label={values.kind === "none" ? "Alasan tanpa pekerjaan" : "Uraian pekerjaan"}
                         required
-                        max={w.config.today}
-                        value={values.performed_date}
-                        onChange={(v) => update("performed_date", v)}
+                        multiline
+                        value={values.description}
+                        onChange={(v) => update("description", v)}
                       />
-                      <TextField
-                        label="Biaya (opsional, Rp)"
-                        type="number"
-                        min="0"
-                        value={values.cost}
-                        onChange={(v) => update("cost", v)}
-                      />
-                    </FieldGroup>
-                    <Photos
-                      photos={workPhotos.filter(
-                        (p) => !removed.includes(String(p.id)),
-                      )}
-                    />
-                    {workPhotos.map((p) => (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        key={p.id}
-                        onClick={() => {
+                      <FieldGroup className="grid sm:grid-cols-2">
+                        <TextField
+                          label="Tanggal pekerjaan"
+                          type="date"
+                          required
+                          max={w.config.today}
+                          value={values.performed_date}
+                          onChange={(v) => update("performed_date", v)}
+                        />
+                        <TextField
+                          label="Biaya (Rp, opsional)"
+                          type="number"
+                          min="0"
+                          value={values.cost}
+                          onChange={(v) => update("cost", v)}
+                        />
+                      </FieldGroup>
+                      <Photos
+                        photos={workPhotos}
+                        size="sm"
+                        removed={removed}
+                        onToggle={(p) => {
                           setRemoved((prev) =>
-                            prev.includes(String(p.id))
-                              ? prev.filter((id) => id !== String(p.id))
-                              : [...prev, String(p.id)],
+                            prev.includes(String(p.id)) ? prev.filter((id) => id !== String(p.id)) : [...prev, String(p.id)],
                           );
                           w.dirty(true);
                         }}
-                      >
-                        {removed.includes(String(p.id))
-                          ? "Batalkan hapus"
-                          : "Hapus"}{" "}
-                        foto #{p.id}
-                      </Button>
-                    ))}
-                    <Upload
-                      files={files}
-                      onChange={(f) => {
-                        setFiles(f);
-                        w.dirty(true);
-                      }}
-                      count={workPhotos.length - removed.length}
-                    />
-                    <p className="text-sm text-muted-foreground">
-                      {values.kind === "none"
-                        ? "Alasan wajib diisi; foto opsional."
-                        : "Minimal satu foto hasil diperlukan untuk pengajuan."}
-                    </p>
-                  </FieldGroup>
+                      />
+                      <Upload
+                        label={values.kind === "none" ? "Foto hasil (opsional)" : "Foto hasil pekerjaan"}
+                        files={files}
+                        onChange={(f) => {
+                          setFiles(f);
+                          w.dirty(true);
+                        }}
+                        count={workPhotos.length - removed.length}
+                        hint={
+                          values.kind === "none"
+                            ? "Foto opsional untuk tindakan tanpa pekerjaan."
+                            : "Minimal satu foto diperlukan untuk pengajuan. Maksimal 5 foto, 2 MB per foto."
+                        }
+                      />
+                    </FieldGroup>
+                  </Panel>
+                  <ActionBar status={busy ? "Menyimpan…" : undefined}>
+                    <Button type="button" variant="outline" onClick={() => save("draft")}>
+                      Simpan draf
+                    </Button>
+                    <Button type="submit">
+                      Ajukan verifikasi
+                      <ArrowRight data-icon="inline-end" />
+                    </Button>
+                  </ActionBar>
+                </fieldset>
+              </form>
+            ) : (
+              draft && (
+                <Panel title="Draf pekerjaan">
+                  <p className="mb-3 whitespace-pre-wrap">{draft.description}</p>
+                  <Photos photos={workPhotos} size="sm" />
                 </Panel>
-                <div className="flex gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => save("draft")}
-                  >
-                    Simpan draf
-                  </Button>
-                  <Button type="submit">
-                    {busy ? "Menyimpan…" : "Ajukan verifikasi"}
-                    <ArrowRight data-icon="inline-end" />
-                  </Button>
-                </div>
-              </fieldset>
-            </form>
-          ) : f.status === "review" && w.config.write ? (
-            <Panel title="Verifikasi hasil">
-              <fieldset disabled={busy}>
-                <FieldGroup>
-                  <TextField
-                    label="Catatan verifikasi / alasan pengembalian"
-                    multiline
-                    required
-                    value={values.notes}
-                    onChange={(v) => update("notes", v)}
-                  />
-                  <div className="flex gap-3">
-                    <Button
-                      disabled={!values.notes.trim()}
-                      onClick={() => save("verify")}
-                    >
-                      <Check data-icon="inline-start" />
-                      Terima hasil
-                    </Button>
-                    <Button
-                      variant="outline"
-                      disabled={!values.notes.trim()}
-                      onClick={() => save("reject")}
-                    >
-                      Kembalikan untuk perbaikan
-                    </Button>
-                  </div>
-                </FieldGroup>
-              </fieldset>
-            </Panel>
-          ) : (
-            draft && (
-              <Panel title="Draf pekerjaan">
-                <p>{draft.description}</p>
-                <Photos photos={workPhotos} />
+              )
+            )}
+            {actions
+              .filter((a) => a.submitted_at)
+              .reverse()
+              .map((a) => (
+                <Panel
+                  key={a.id}
+                  title={`${actionKinds[a.kind] || a.kind} · ${dateLabel(a.performed_date)}`}
+                  description={`${a.actor_name}${a.cost ? ` · ${money(a.cost)}` : ""}`}
+                >
+                  <p className="mb-3 whitespace-pre-wrap">{a.description}</p>
+                  <Photos photos={d.photos.filter((p) => String(p.action_id) === String(a.id))} size="sm" />
+                </Panel>
+              ))}
+            {reviewing && (
+              <Panel title="Verifikasi hasil" description="Periksa pekerjaan di atas, lalu terima atau kembalikan.">
+                <fieldset disabled={busy}>
+                  <FieldGroup>
+                    <TextField
+                      label="Catatan verifikasi"
+                      description="Wajib diisi, termasuk alasan bila dikembalikan."
+                      multiline
+                      required
+                      value={values.notes}
+                      onChange={(v) => update("notes", v)}
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      <Button disabled={!values.notes.trim()} onClick={() => save("verify")}>
+                        <Check data-icon="inline-start" />
+                        Terima hasil
+                      </Button>
+                      <Button variant="outline" disabled={!values.notes.trim()} onClick={() => save("reject")}>
+                        <Undo2 data-icon="inline-start" />
+                        Kembalikan untuk perbaikan
+                      </Button>
+                    </div>
+                  </FieldGroup>
+                </fieldset>
               </Panel>
-            )
-          )}
-        </>
+            )}
+          </div>
+          <Panel title="Temuan awal" className="lg:sticky lg:top-4 lg:self-start">
+            <p className="text-sm whitespace-pre-wrap">{result.notes || "—"}</p>
+            <div className="mt-3">
+              <Photos photos={d.photos.filter((p) => String(p.result_id) === String(f.result_id))} size="sm" />
+            </div>
+          </Panel>
+        </div>
       )}
     </>
   );

@@ -59,6 +59,17 @@ final class Workspace
             foreach($result['rows'] as &$row){$row['snapshot']=Supervision::decode($row['snapshot']);if(isset($row['result_snapshot']))$row['result_snapshot']=Supervision::decode($row['result_snapshot']);}
             return $result;
         }
+        if($resource==='counts') {
+            $mine='%"assignee":{"id":"'.$uid.'",%';
+            $count=fn(string $sql,array $args=[])=>(int)$w->query($sql,$args)->fetchColumn();
+            return ['inspections'=>['mine'=>$count("SELECT COUNT(*) FROM inventory_watch_inspections WHERE status<>'final' AND snapshot LIKE ?",[$mine]),'all'=>$count("SELECT COUNT(*) FROM inventory_watch_inspections WHERE status<>'final'")],
+                'findings'=>['mine'=>$count("SELECT COUNT(*) FROM inventory_watch_findings WHERE status IN ('open','working') AND assignee_id=?",[$uid]),'all'=>$count("SELECT COUNT(*) FROM inventory_watch_findings WHERE status IN ('open','working')")],
+                'review'=>$count("SELECT COUNT(*) FROM inventory_watch_findings WHERE status='review'"),
+                'history'=>$count("SELECT COUNT(*) FROM inventory_watch_inspections WHERE status='final'"),
+                'templates'=>$count('SELECT COUNT(*) FROM inventory_watch_templates'),
+                'schedules'=>$count("SELECT COUNT(*) FROM inventory_watch_schedules WHERE active=1 AND location_id IS NOT NULL AND (end_date IS NULL OR end_date>=CURRENT_DATE)"),
+                'rooms'=>$count('SELECT COUNT(*) FROM inventory_locations'),'items'=>$count('SELECT COUNT(*) FROM inventory_items')];
+        }
         if($resource==='inspection'||$resource==='finding') {
             $finding=$resource==='finding'?$w->row('findings',$id):null;
             $d=$w->document($finding?(int)$finding['inspection_id']:$id);$d['finding']=$finding;
@@ -71,10 +82,18 @@ final class Workspace
             if($isItem){$where[]='l.id=?';$args[]=$room;}
             if($library!==''){$where[]='l.slims_location_id=?';$args[]=$library;}
             if($search!==''){$where[]=$isItem?'(i.item_name LIKE ? OR i.item_code LIKE ? OR i.brand_model LIKE ?)':'(l.room_name LIKE ? OR l.location_code LIKE ?)';$args=array_merge($args,array_fill(0,$isItem?3:2,'%'.$search.'%'));}
+            $condition=(string)($g['condition']??'');
+            if($isItem&&in_array($condition,['B','KB','RB'],true)){$where[]='i.item_condition=?';$args[]=$condition;}
             $from=$isItem?'FROM inventory_items i JOIN inventory_locations l ON l.id=i.location_id':'FROM inventory_locations l';
-            $select=$isItem?'i.*':"l.*,(SELECT COUNT(*) FROM inventory_items i WHERE i.location_id=l.id) item_count,(SELECT location_name FROM mst_location WHERE location_id=l.slims_location_id) library_name";
+            $select=$isItem?'i.*,(SELECT MIN(p.id) FROM inventory_item_photos p WHERE p.item_id=i.id AND p.filename IS NOT NULL) photo_id,(SELECT COUNT(*) FROM inventory_item_photos p WHERE p.item_id=i.id) photo_count'
+                :"l.*,(SELECT COUNT(*) FROM inventory_items i WHERE i.location_id=l.id) item_count,(SELECT COUNT(*) FROM inventory_items i WHERE i.location_id=l.id AND i.item_condition<>'B') damaged_count,(SELECT location_name FROM mst_location WHERE location_id=l.slims_location_id) library_name";
             $result=self::page($w,$select,$from.' WHERE '.implode(' AND ',$where),$args,$page,$isItem?'i.item_name,i.id':'l.room_name,l.id');
-            if($isItem)$result['room']=$w->query('SELECT * FROM inventory_locations WHERE id=?',[$room])->fetch(\PDO::FETCH_ASSOC)?:null;
+            if($isItem){
+                foreach($result['rows'] as &$row)$row['photo_url']=$row['photo_id']?self::endpoint('index.php',['action'=>'item_photo','photo_id'=>$row['photo_id']]):null;
+                unset($row);
+                $result['room']=$w->query('SELECT l.*,(SELECT location_name FROM mst_location WHERE location_id=l.slims_location_id) library_name FROM inventory_locations l WHERE l.id=?',[$room])->fetch(\PDO::FETCH_ASSOC)?:null;
+                $result['conditions']=$w->query('SELECT item_condition,COUNT(*) FROM inventory_items WHERE location_id=? GROUP BY item_condition',[$room])->fetchAll(\PDO::FETCH_KEY_PAIR);
+            }
             return $result;
         }
         if($resource==='item'||$resource==='room') {

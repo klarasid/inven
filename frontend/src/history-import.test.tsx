@@ -26,7 +26,7 @@ test('upload validates first, presents location and only commits after explicit 
  expect(mutate.mock.calls[1][0]).toEqual({watch_action:'history_commit',token:'preview-token'})
  expect(w.dirty).toHaveBeenLastCalledWith(false)
  fireEvent.click(screen.getByRole('button',{name:'Lihat riwayat pemeriksaan'}))
- expect(w.go).toHaveBeenCalledWith({view:'tasks',history:'1',owner:'all'})
+ expect(w.go).toHaveBeenCalledWith({view:'tasks',kind:'history',owner:'all'})
 })
 test('changing the file invalidates preview and server validation errors are visible',async()=>{
  const mutate=vi.fn().mockResolvedValueOnce({ok:true,data:summary}).mockRejectedValueOnce(new Error('Pemeriksaan baris 2: barang di ruang lain.'))

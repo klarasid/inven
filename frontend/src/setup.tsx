@@ -1,19 +1,26 @@
 import { roomLabel } from "./rooms";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Plus, ArrowRight, Trash2 } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  ListChecks,
+  CalendarDays,
+  CalendarClock,
+  Copy,
+  Eye,
+  Repeat,
+  StopCircle,
+  User,
+  Building2,
+} from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
-import { Tabs, TabsList, TabsTrigger } from "./components/ui/tabs";
-import {
-  Table,
-  TableHeader,
-  TableRow,
-  TableHead,
-  TableBody,
-  TableCell,
-} from "./components/ui/table";
+import { Card, CardContent } from "./components/ui/card";
+import { Input } from "./components/ui/input";
+import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "./components/ui/table";
 import { FieldGroup } from "./components/ui/field";
+import { ToggleGroup, ToggleGroupItem } from "./components/ui/toggle-group";
 import {
   Dialog,
   DialogContent,
@@ -25,198 +32,244 @@ import {
 import { useData, useWorkspace } from "./context";
 import { read, groups, dateLabel } from "./api";
 import {
-  Heading,
+  PageHeader,
   Panel,
   Choice,
   TextField,
-  Search,
-  Filters,
+  SearchBox,
+  RoomFilter,
   ErrorBox,
   Loading,
   Blank,
   Actions,
   Pager,
   entries,
+  ActionBar,
 } from "./shared";
 import type { Schedule, Template, ChecklistItem, Page, Id } from "./types";
+
 export function SetupList() {
   const w = useWorkspace();
   const schedule = w.route.view === "schedules";
-  const { data, error, loading } = useData<Page<Schedule | Template>>(
-    schedule ? "schedules" : "templates",
-    w.route,
-  );
+  const { data, error, loading } = useData<Page<Schedule | Template>>(schedule ? "schedules" : "templates", w.route);
   const [stop, setStop] = useState<Schedule>();
   const [effective, setEffective] = useState(w.config.today);
   const [busy, setBusy] = useState(false);
   const [stopError, setStopError] = useState("");
+  const noTemplates = schedule && !w.options.templates.length;
+  const filtered = !!(w.route.q || w.route.room);
   return (
     <>
-      <Heading
+      <PageHeader
         title={schedule ? "Jadwal pemeriksaan" : "Checklist"}
         description={
           schedule
-            ? "Atur kapan ruangan diperiksa dan siapa penanggung jawabnya."
-            : "Siapkan butir pemeriksaan yang jelas dan dapat digunakan kembali."
+            ? "Atur ruangan yang diperiksa rutin, frekuensinya, dan penanggung jawabnya. Tugas dibuat otomatis sesuai jadwal."
+            : "Daftar butir pemeriksaan yang dipakai jadwal dan pemeriksaan insidental."
         }
-        action={
+        actions={
           w.config.write && (
-            <Button
-              onClick={() =>
-                w.go({ view: schedule ? "schedule-edit" : "template-edit" })
-              }
-            >
-              <Plus data-icon="inline-start" />
-              {schedule ? "Buat jadwal" : "Buat checklist"}
-            </Button>
+            <>
+              {schedule && (
+                <Button variant="outline" onClick={() => w.go({ view: "checklists" })}>
+                  <ListChecks data-icon="inline-start" />
+                  Kelola checklist
+                </Button>
+              )}
+              <Button
+                disabled={noTemplates}
+                onClick={() => w.go({ view: schedule ? "schedule-edit" : "template-edit" })}
+              >
+                <Plus data-icon="inline-start" />
+                {schedule ? "Buat jadwal" : "Buat checklist"}
+              </Button>
+            </>
           )
         }
       />
-      <div className="flex gap-3">
-        <Search placeholder={schedule ? "Cari ruangan…" : "Cari checklist…"} />
-        {schedule && <Filters showHistory />}
-      </div>
-      <ErrorBox message={error} />
-      {loading ? (
-        <Loading />
-      ) : data && !data.rows.length ? (
+      {noTemplates ? (
         <Blank
-          title={schedule ? "Belum ada jadwal" : "Belum ada checklist"}
-          description={
-            schedule
-              ? "Buat jadwal setelah ruangan dan checklist tersedia."
-              : "Mulai dari contoh checklist, lalu sesuaikan dengan kebutuhan ruangan."
-          }
-        />
+          icon={ListChecks}
+          title="Buat checklist terlebih dahulu"
+          description="Jadwal memerlukan checklist yang menentukan butir apa saja yang diperiksa di ruangan."
+        >
+          {w.config.write && (
+            <Button onClick={() => w.go({ view: "template-edit" })}>
+              <Plus data-icon="inline-start" />
+              Buat checklist
+            </Button>
+          )}
+        </Blank>
       ) : (
-        data && (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>
-                  {schedule ? "Ruangan / checklist" : "Nama checklist"}
-                </TableHead>
-                <TableHead>{schedule ? "Jadwal / petugas" : "Butir"}</TableHead>
-                <TableHead>{schedule ? "Status" : "Versi"}</TableHead>
-                <TableHead>Tindakan</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.rows.map((row) => {
-                if (schedule) {
-                  const s = row as Schedule;
-                  const active =
-                    Number(s.active) &&
-                    s.location_id &&
-                    (!s.end_date || s.end_date >= w.config.today);
-                  return (
-                    <TableRow key={s.id}>
-                      <TableCell>
-                        <p className="font-medium">{s.snapshot.room_name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {s.snapshot.template_name}
-                        </p>
-                      </TableCell>
-                      <TableCell>
-                        <p>
-                          {w.options.frequencies[s.frequency]} ·{" "}
-                          {s.assignee_name}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {dateLabel(s.start_date)} —{" "}
-                          {s.end_date ? dateLabel(s.end_date) : "Seterusnya"}
-                        </p>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">
-                          {active ? "Aktif" : "Tidak aktif"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {w.config.write && active ? (
-                          <Actions
-                            items={[
-                              {
-                                label: "Ganti jadwal",
-                                run: () =>
-                                  w.go({
-                                    view: "schedule-edit",
-                                    replaces_id: s.id,
-                                  }),
-                              },
-                              {
-                                label: "Hentikan jadwal",
-                                run: () => {
-                                  setStop(s);
-                                  setStopError("");
-                                },
-                              },
-                            ]}
-                          />
-                        ) : (
-                          <Button
-                            variant="ghost"
-                            onClick={() =>
-                              w.go({ view: "schedule-detail", record: s.id })
-                            }
-                          >
-                            Lihat
-                          </Button>
-                        )}
-                      </TableCell>
+        <>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <SearchBox placeholder={schedule ? "Cari ruangan…" : "Cari checklist…"} />
+            {schedule && (
+              <>
+                <RoomFilter />
+                <ToggleGroup
+                  type="single"
+                  variant="outline"
+                  className="sm:ml-auto"
+                  value={w.route.history === "1" ? "1" : "0"}
+                  onValueChange={(history) => history && w.go({ ...w.route, history, page: 1 }, true)}
+                >
+                  <ToggleGroupItem value="0">Aktif</ToggleGroupItem>
+                  <ToggleGroupItem value="1">Semua</ToggleGroupItem>
+                </ToggleGroup>
+              </>
+            )}
+          </div>
+          <ErrorBox message={error} />
+          {loading && !data ? (
+            <Loading />
+          ) : data && !data.rows.length ? (
+            <Blank
+              icon={schedule ? CalendarDays : ListChecks}
+              title={filtered ? "Tidak ditemukan" : schedule ? "Belum ada jadwal" : "Belum ada checklist"}
+              description={
+                filtered
+                  ? "Ubah kata kunci atau filter."
+                  : schedule
+                    ? "Buat jadwal agar tugas pemeriksaan muncul otomatis."
+                    : "Mulai dari contoh checklist, lalu sesuaikan dengan kebutuhan ruangan."
+              }
+            >
+              {w.config.write && !filtered && (
+                <Button onClick={() => w.go({ view: schedule ? "schedule-edit" : "template-edit" })}>
+                  <Plus data-icon="inline-start" />
+                  {schedule ? "Buat jadwal" : "Buat checklist"}
+                </Button>
+              )}
+            </Blank>
+          ) : (
+            data &&
+            (schedule ? (
+              <div className="overflow-hidden rounded-xl border">
+                <Table>
+                  <TableHeader className="bg-muted/50">
+                    <TableRow>
+                      <TableHead>Ruangan</TableHead>
+                      <TableHead>Frekuensi</TableHead>
+                      <TableHead className="hidden md:table-cell">Petugas</TableHead>
+                      <TableHead className="hidden sm:table-cell">Berlaku</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="w-12">
+                        <span className="sr-only">Tindakan</span>
+                      </TableHead>
                     </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(data.rows as Schedule[]).map((s) => {
+                      const active =
+                        Number(s.active) && s.location_id && (!s.end_date || s.end_date >= w.config.today);
+                      return (
+                        <TableRow
+                          key={s.id}
+                          className="cursor-pointer"
+                          onClick={() => w.go({ view: "schedule-detail", record: s.id })}
+                        >
+                          <TableCell className="max-w-64 whitespace-normal">
+                            <p className="font-medium">{s.snapshot.room_name}</p>
+                            <p className="text-xs text-muted-foreground">{s.snapshot.template_name}</p>
+                          </TableCell>
+                          <TableCell>{w.options.frequencies[s.frequency]}</TableCell>
+                          <TableCell className="hidden text-muted-foreground md:table-cell">{s.assignee_name}</TableCell>
+                          <TableCell className="hidden text-muted-foreground sm:table-cell">
+                            {dateLabel(s.start_date)} – {s.end_date ? dateLabel(s.end_date) : "seterusnya"}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={active ? "success" : "outline"}>{active ? "Aktif" : "Berhenti"}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            {w.config.write && active ? (
+                              <Actions
+                                items={[
+                                  { label: "Lihat detail", icon: Eye, run: () => w.go({ view: "schedule-detail", record: s.id }) },
+                                  {
+                                    label: "Ganti jadwal",
+                                    icon: Repeat,
+                                    run: () => w.go({ view: "schedule-edit", replaces_id: s.id }),
+                                  },
+                                  {
+                                    label: "Hentikan jadwal",
+                                    icon: StopCircle,
+                                    destructive: true,
+                                    run: () => {
+                                      setStop(s);
+                                      setStopError("");
+                                    },
+                                  },
+                                ]}
+                              />
+                            ) : null}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {(data.rows as Template[]).map((t) => {
+                  const open = () => w.go({ view: "template-detail", record: t.id });
+                  return (
+                    <Card
+                      key={t.id}
+                      role="link"
+                      tabIndex={0}
+                      onClick={open}
+                      onKeyDown={(e) => e.key === "Enter" && open()}
+                      className="cursor-pointer gap-3 py-4 transition-colors hover:bg-muted/40"
+                    >
+                      <CardContent className="flex flex-col gap-3 px-4">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex min-w-0 items-start gap-3">
+                            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted">
+                              <ListChecks className="size-4 text-muted-foreground" />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="font-medium">{t.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                Versi #{t.id}
+                                {t.source_id && ` · revisi dari #${t.source_id}`}
+                              </p>
+                            </div>
+                          </div>
+                          {w.config.write && (
+                            <Actions
+                              items={[
+                                { label: "Lihat", icon: Eye, run: open },
+                                {
+                                  label: "Salin / revisi",
+                                  icon: Copy,
+                                  run: () => w.go({ view: "template-edit", record: t.id }),
+                                },
+                              ]}
+                            />
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          <Badge variant="secondary">{t.items.length} butir</Badge>
+                          {groups.map((g) => {
+                            const n = t.items.filter((i) => i.group === g).length;
+                            return n ? (
+                              <Badge key={g} variant="outline">
+                                {g} {n}
+                              </Badge>
+                            ) : null;
+                          })}
+                        </div>
+                      </CardContent>
+                    </Card>
                   );
-                }
-                const t = row as Template;
-                return (
-                  <TableRow key={t.id}>
-                    <TableCell>
-                      <Button
-                        variant="link"
-                        onClick={() =>
-                          w.go({
-                            view: w.config.write
-                              ? "template-edit"
-                              : "template-detail",
-                            record: t.id,
-                          })
-                        }
-                      >
-                        {t.name}
-                      </Button>
-                    </TableCell>
-                    <TableCell>{t.items.length} butir</TableCell>
-                    <TableCell>
-                      #{t.id}
-                      {t.source_id && ` · revisi #${t.source_id}`}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="outline"
-                        onClick={() =>
-                          w.go({
-                            view: w.config.write
-                              ? "template-edit"
-                              : "template-detail",
-                            record: t.id,
-                          })
-                        }
-                      >
-                        {w.config.write ? "Salin / revisi" : "Lihat"}
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        )
-      )}
-      {data && (
-        <Pager
-          {...data}
-          onChange={(page) => w.go({ ...w.route, page }, true)}
-        />
+                })}
+              </div>
+            ))
+          )}
+          {data && <Pager {...data} onChange={(page) => w.go({ ...w.route, page }, true)} />}
+        </>
       )}
       <Dialog
         open={!!stop}
@@ -226,35 +279,25 @@ export function SetupList() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Hentikan jadwal</DialogTitle>
-            <DialogDescription>
-              Pemeriksaan dan riwayat yang sudah terbentuk tetap disimpan.
-            </DialogDescription>
+            <DialogTitle>Hentikan jadwal {stop?.snapshot.room_name}?</DialogTitle>
+            <DialogDescription>Pemeriksaan dan riwayat yang sudah terbentuk tetap disimpan.</DialogDescription>
           </DialogHeader>
           <ErrorBox message={stopError} />
-          <TextField
-            label="Tidak dijadwalkan mulai"
-            type="date"
-            value={effective}
-            onChange={setEffective}
-          />
+          <TextField label="Tidak dijadwalkan lagi mulai" type="date" value={effective} onChange={setEffective} />
           <DialogFooter>
             <Button variant="outline" onClick={() => setStop(undefined)}>
               Batal
             </Button>
             <Button
+              variant="destructive"
               disabled={busy}
               onClick={async () => {
                 if (!stop) return;
                 setBusy(true);
                 try {
-                  await w.mutate({
-                    watch_action: "stop",
-                    id: stop.id,
-                    version: stop.version,
-                    effective,
-                  });
+                  await w.mutate({ watch_action: "stop", id: stop.id, version: stop.version, effective });
                   setStop(undefined);
+                  toast.success("Jadwal dihentikan.");
                   w.refresh();
                 } catch (e) {
                   setStopError((e as Error).message);
@@ -271,15 +314,15 @@ export function SetupList() {
     </>
   );
 }
+
 export function TemplatePage() {
   const w = useWorkspace();
   return w.route.record ? <ExistingTemplate /> : <TemplateEditor />;
 }
+
 function ExistingTemplate() {
   const w = useWorkspace();
-  const { data, error } = useData<Template>("template", {
-    record: w.route.record,
-  });
+  const { data, error } = useData<Template>("template", { record: w.route.record });
   return (
     <>
       <ErrorBox message={error} />
@@ -287,240 +330,255 @@ function ExistingTemplate() {
     </>
   );
 }
+
+const sampleItems: Record<string, string[]> = {
+  Sarana: ["Meja dan kursi baca", "Rak buku", "Komputer katalog (OPAC)"],
+  Prasarana: ["Lantai, dinding, dan plafon", "Pintu dan jendela", "Instalasi listrik dan lampu"],
+  "Lingkungan Fisik": ["Kebersihan ruangan", "Pencahayaan dan sirkulasi udara"],
+};
+
 function TemplateEditor({ template }: { template?: Template }) {
   const w = useWorkspace();
   const readonly = !w.config.write || w.route.view === "template-detail";
   const [name, setName] = useState(
-    template
-      ? template.name + (readonly ? "" : " (revisi)")
-      : "Checklist pemeriksaan ruangan",
+    template ? template.name + (readonly ? "" : " (revisi)") : "Checklist pemeriksaan ruangan",
   );
   const [items, setItems] = useState<ChecklistItem[]>(
     template?.items ||
-      groups.map((group) => ({
-        group,
-        object:
-          group === "Sarana"
-            ? "Meja, kursi, dan rak"
-            : group === "Prasarana"
-              ? "Lantai, atap, dan pintu"
-              : "Kebersihan dan kenyamanan",
-        instruction: "Periksa kondisi dan catat jika perlu tindakan.",
-      })),
+      groups.flatMap((group) =>
+        sampleItems[group].map((object) => ({ group, object, instruction: "Periksa kondisi dan catat bila perlu tindakan." })),
+      ),
   );
-  const [selected, setSelected] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const update = (patch: Partial<ChecklistItem>) => {
-    setItems((list) =>
-      list.map((i, n) => (n === selected ? { ...i, ...patch } : i)),
-    );
+  const [invalid, setInvalid] = useState<number[]>([]);
+  const change = (next: ChecklistItem[]) => {
+    setItems(next);
     w.dirty(true);
   };
+  const update = (index: number, patch: Partial<ChecklistItem>) =>
+    change(items.map((item, n) => (n === index ? { ...item, ...patch } : item)));
+
+  async function save() {
+    const bad = items.map((i, n) => (i.object.trim() ? -1 : n)).filter((n) => n >= 0);
+    setInvalid(bad);
+    if (!name.trim() || bad.length || !items.length) {
+      setError(!items.length ? "Tambahkan minimal satu butir." : "Isi nama checklist dan objek setiap butir.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await w.mutate({ watch_action: "template", source_id: template?.id || 0, name, items });
+      w.dirty(false);
+      toast.success("Checklist tersimpan.");
+      w.go({ view: "checklists" }, true);
+      w.refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <>
-      <Heading
-        back
-        title={
-          readonly
-            ? "Detail checklist"
-            : template
-              ? "Revisi checklist"
-              : "Buat checklist"
-        }
+      <PageHeader
+        crumbs={[{ label: "Checklist", route: { view: "checklists" } }]}
+        title={readonly ? name : template ? "Revisi checklist" : "Buat checklist"}
         description={
-          template
-            ? "Perubahan disimpan sebagai versi baru. Jadwal dan hasil terdahulu tetap memakai versi lama."
-            : "Contoh dapat disesuaikan; bukan standar penilaian resmi."
+          readonly
+            ? `${items.length} butir pemeriksaan`
+            : template
+              ? "Perubahan disimpan sebagai versi baru. Jadwal dan hasil terdahulu tetap memakai versi lama."
+              : "Contoh butir sudah disiapkan. Ubah, hapus, atau tambahkan sesuai kebutuhan ruangan."
+        }
+        actions={
+          readonly &&
+          w.config.write &&
+          template && (
+            <>
+              <Button variant="outline" onClick={() => w.go({ view: "template-edit", record: template.id })}>
+                <Copy data-icon="inline-start" />
+                Salin / revisi
+              </Button>
+              <Button onClick={() => w.go({ view: "schedule-edit", template_id: template.id })}>
+                <CalendarDays data-icon="inline-start" />
+                Jadwalkan
+              </Button>
+            </>
+          )
         }
       />
       <ErrorBox message={error} />
-      <fieldset
-        disabled={readonly || busy}
-        className="flex flex-col gap-6 min-w-0"
-      >
-        <TextField
-          label="Nama checklist"
-          value={name}
-          onChange={(v) => {
-            setName(v);
-            w.dirty(true);
-          }}
-          required
-          maxLength={255}
-        />
-      </fieldset>
-      <div className="grid gap-6 md:grid-cols-[240px_1fr]">
-        <aside className="flex flex-col gap-4">
-          {groups.map((group) => (
-            <div className="flex flex-col gap-1" key={group}>
-              <h2 className="text-xs uppercase tracking-wide text-muted-foreground">
-                {group}
-              </h2>
-              {items.map(
-                (item, i) =>
-                  item.group === group && (
-                    <Button
-                      key={i}
-                      variant={selected === i ? "secondary" : "ghost"}
-                      className="justify-start whitespace-normal text-left h-auto py-2"
-                      onClick={() => setSelected(i)}
-                    >
-                      {item.object || `Butir ${i + 1}`}
-                    </Button>
-                  ),
-              )}
-            </div>
-          ))}
-          {!readonly && (
-            <Button
-              variant="outline"
-              disabled={busy || items.length >= 100}
-              onClick={() => {
-                setItems([
-                  ...items,
-                  {
-                    group: items[selected]?.group || groups[0],
-                    object: "",
-                    instruction: "",
-                  },
-                ]);
-                setSelected(items.length);
+      <fieldset disabled={busy} className="flex min-w-0 flex-col gap-6">
+        {!readonly && (
+          <div className="max-w-xl">
+            <TextField
+              label="Nama checklist"
+              value={name}
+              onChange={(v) => {
+                setName(v);
                 w.dirty(true);
               }}
+              required
+              maxLength={255}
+            />
+          </div>
+        )}
+        {groups.map((group) => {
+          const rows = items.map((item, index) => ({ item, index })).filter(({ item }) => item.group === group);
+          return (
+            <Panel
+              key={group}
+              title={group}
+              description={`${rows.length} butir`}
+              action={
+                !readonly && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={items.length >= 100}
+                    onClick={() => change([...items, { group, object: "", instruction: "" }])}
+                  >
+                    <Plus data-icon="inline-start" />
+                    Tambah butir
+                  </Button>
+                )
+              }
             >
-              <Plus data-icon="inline-start" />
-              Tambah butir
-            </Button>
-          )}
-          <p className="text-xs text-muted-foreground">
-            {items.length} / 100 butir
-          </p>
-        </aside>
-        <Panel title={`Butir ${selected + 1}`}>
-          <fieldset disabled={readonly || busy}>
-            <FieldGroup>
-              <Choice
-                label="Kelompok"
-                value={items[selected].group}
-                onChange={(group) => update({ group })}
-                items={groups.map((value) => ({ value, label: value }))}
-              />
-              <TextField
-                label="Objek pemeriksaan"
-                required
-                value={items[selected].object}
-                onChange={(object) => update({ object })}
-              />
-              <TextField
-                label="Petunjuk pemeriksaan"
-                multiline
-                value={items[selected].instruction}
-                onChange={(instruction) => update({ instruction })}
-              />
-              {!readonly && (
-                <Button
-                  variant="ghost"
-                  disabled={items.length <= 1}
-                  onClick={() => {
-                    setItems(items.filter((_, i) => i !== selected));
-                    setSelected(Math.max(0, selected - 1));
-                    w.dirty(true);
-                  }}
-                >
-                  <Trash2 data-icon="inline-start" />
-                  Hapus butir dari versi ini
-                </Button>
+              {!rows.length ? (
+                <p className="text-sm text-muted-foreground">Belum ada butir di kelompok ini.</p>
+              ) : readonly ? (
+                <ol className="flex flex-col divide-y">
+                  {rows.map(({ item, index }, n) => (
+                    <li key={index} className="flex gap-3 py-2.5">
+                      <span className="w-5 text-sm text-muted-foreground tabular-nums">{n + 1}.</span>
+                      <div>
+                        <p className="font-medium">{item.object}</p>
+                        {item.instruction && <p className="text-sm text-muted-foreground">{item.instruction}</p>}
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {rows.map(({ item, index }, n) => (
+                    <div key={index} className="flex items-start gap-2">
+                      <span className="mt-1.5 w-5 shrink-0 text-sm text-muted-foreground tabular-nums">{n + 1}.</span>
+                      <div className="grid flex-1 gap-2 sm:grid-cols-[1fr_1.4fr]">
+                        <Input
+                          aria-label={`Objek butir ${n + 1} ${group}`}
+                          placeholder="Objek, mis. Rak buku"
+                          value={item.object}
+                          autoFocus={!item.object && index === items.length - 1}
+                          aria-invalid={invalid.includes(index) && !item.object.trim()}
+                          onChange={(e) => update(index, { object: e.target.value })}
+                        />
+                        <Input
+                          aria-label={`Petunjuk butir ${n + 1} ${group}`}
+                          placeholder="Petunjuk pemeriksaan (opsional)"
+                          value={item.instruction}
+                          onChange={(e) => update(index, { instruction: e.target.value })}
+                        />
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Hapus butir ${n + 1} ${group}`}
+                        onClick={() => change(items.filter((_, i) => i !== index))}
+                      >
+                        <Trash2 />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
               )}
-            </FieldGroup>
-          </fieldset>
-        </Panel>
-      </div>
+            </Panel>
+          );
+        })}
+      </fieldset>
       {!readonly && (
-        <div>
-          <Button
-            disabled={busy}
-            onClick={async () => {
-              const invalid = items.findIndex((i) => !i.object.trim());
-              if (!name.trim() || invalid >= 0) {
-                setError("Isi nama checklist dan objek setiap butir.");
-                if (invalid >= 0) setSelected(invalid);
-                return;
-              }
-              setBusy(true);
-              setError("");
-              try {
-                await w.mutate({
-                  watch_action: "template",
-                  source_id: template?.id || 0,
-                  name,
-                  items,
-                });
-                w.dirty(false);
-                toast.success("Versi checklist tersimpan.");
-                w.go({ view: "checklists" });
-                w.refresh();
-              } catch (e) {
-                setError((e as Error).message);
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            {busy ? "Menyimpan…" : "Simpan versi checklist"}
+        <ActionBar status={`${items.length} / 100 butir`}>
+          <Button variant="outline" disabled={busy} onClick={w.back}>
+            Batal
           </Button>
-        </div>
+          <Button disabled={busy} onClick={save}>
+            {busy ? "Menyimpan…" : "Simpan checklist"}
+          </Button>
+        </ActionBar>
       )}
     </>
   );
 }
+
 export function SchedulePage() {
   const w = useWorkspace();
-  return w.route.replaces_id || w.route.view === "schedule-detail" ? (
-    <ExistingSchedule />
-  ) : (
-    <ScheduleEditor />
-  );
+  return w.route.replaces_id || w.route.view === "schedule-detail" ? <ExistingSchedule /> : <ScheduleEditor />;
 }
+
 function ExistingSchedule() {
   const w = useWorkspace();
-  const { data, error } = useData<Schedule>("schedule", {
-    record: w.route.replaces_id || w.route.record,
-  });
+  const { data, error } = useData<Schedule>("schedule", { record: w.route.replaces_id || w.route.record });
+  if (error) return <ErrorBox message={error} />;
+  if (!data) return <Loading />;
+  if (w.route.view !== "schedule-detail") return <ScheduleEditor previous={data} />;
+  const active = Number(data.active) && data.location_id && (!data.end_date || data.end_date >= w.config.today);
   return (
     <>
-      <ErrorBox message={error} />
-      {data ? (
-        w.route.view === "schedule-detail" ? (
+      <PageHeader
+        crumbs={[{ label: "Jadwal", route: { view: "schedules" } }]}
+        title={data.snapshot.room_name}
+        description={data.snapshot.template_name}
+        meta={
           <>
-            <Heading
-              back
-              title={data.snapshot.room_name}
-              description={data.snapshot.template_name}
-            />
-            <Panel title="Jadwal">
-              <p>
-                {w.options.frequencies[data.frequency]} · {data.assignee_name}
-              </p>
-              <p>
-                {dateLabel(data.start_date)} — {dateLabel(data.end_date)}
-              </p>
-              {data.snapshot.items.map((i, n) => (
-                <p key={n} className="py-2">
-                  {i.object} · {i.item_name || "Aspek ruangan"}
-                </p>
-              ))}
-            </Panel>
+            <Badge variant={active ? "success" : "outline"}>{active ? "Aktif" : "Berhenti"}</Badge>
+            <Badge variant="outline">
+              <Repeat />
+              {w.options.frequencies[data.frequency]}
+            </Badge>
+            <Badge variant="outline">
+              <User />
+              {data.assignee_name}
+            </Badge>
+            <Badge variant="outline">
+              <CalendarClock />
+              {dateLabel(data.start_date)} – {data.end_date ? dateLabel(data.end_date) : "seterusnya"}
+            </Badge>
           </>
-        ) : (
-          <ScheduleEditor previous={data} />
-        )
-      ) : (
-        !error && <Loading />
-      )}
+        }
+        actions={
+          w.config.write &&
+          active && (
+            <Button variant="outline" onClick={() => w.go({ view: "schedule-edit", replaces_id: data.id })}>
+              <Repeat data-icon="inline-start" />
+              Ganti jadwal
+            </Button>
+          )
+        }
+      />
+      <Panel title="Butir yang diperiksa" description={`${data.snapshot.items.length} butir`}>
+        <ol className="flex flex-col divide-y">
+          {data.snapshot.items.map((i, n) => (
+            <li key={n} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+              <span>
+                <span className="mr-2 text-sm text-muted-foreground tabular-nums">{n + 1}.</span>
+                {i.object}
+              </span>
+              <span className="flex gap-1.5">
+                <Badge variant="outline">{i.group}</Badge>
+                <Badge variant="secondary">{i.item_name || "Aspek ruangan"}</Badge>
+              </span>
+            </li>
+          ))}
+        </ol>
+      </Panel>
     </>
   );
 }
+
+type Scope = { items: ChecklistItem[]; assets: { id: Id; item_name: string; item_code: string }[] };
+
 function ScheduleEditor({ previous }: { previous?: Schedule }) {
   const w = useWorkspace();
   const incidental = w.route.view === "new-inspection";
@@ -529,82 +587,69 @@ function ScheduleEditor({ previous }: { previous?: Schedule }) {
   const tomorrowString = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}`;
   const [values, setValues] = useState({
     location_id: String(previous?.location_id || w.route.room || ""),
-    template_id: String(previous?.template_id || w.route.template_id || ""),
+    template_id: String(previous?.template_id || w.route.template_id || w.options.templates[0]?.id || ""),
     frequency: previous?.frequency || "monthly",
     start_date: previous ? tomorrowString : w.config.today,
     end_date: "",
     assignee_id: String(previous?.assignee_id || w.config.uid),
     reason: "",
   });
-  const [mapping, setMapping] = useState<string[]>(
-    previous?.snapshot.items.map((i) => String(i.item_id || "")) || [],
-  );
-  const [scope, setScope] = useState<{
-    items: ChecklistItem[];
-    assets: { id: Id; item_name: string; item_code: string }[];
-  }>();
+  const [mapping, setMapping] = useState<string[]>(previous?.snapshot.items.map((i) => String(i.item_id || "")) || []);
+  const [scope, setScope] = useState<Scope>();
   const [dates, setDates] = useState<string[]>([]);
-  const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showMapping, setShowMapping] = useState(!!previous?.snapshot.items.some((i) => i.item_id));
   const lock = useRef(false);
   const update = (key: string, v: string) => {
     setValues((old) => ({ ...old, [key]: v }));
-    if (key === "location_id" || key === "template_id") {
-      setScope(undefined);
-      setMapping([]);
-    }
+    if (key === "location_id" || key === "template_id") setMapping([]);
     w.dirty(true);
   };
-  async function next() {
-    setBusy(true);
-    setError("");
-    try {
-      if (incidental) {
-        if (step === 0) {
-          if (!values.location_id || !values.template_id)
-            throw new Error("Pilih ruangan dan checklist.");
-          const response = await read<typeof scope>(w.config, "scope", {
-            room: values.location_id,
-            template_id: values.template_id,
-          });
-          setScope(response);
-          if (!mapping.length) setMapping(response!.items.map(() => ""));
-        }
-        if (step === 1 && !values.reason.trim()) {
-          throw new Error("Isi alasan pemeriksaan.");
-        }
-      } else {
-        if (step === 0) {
-          if (!values.location_id || !values.template_id)
-            throw new Error("Pilih ruangan dan checklist.");
-          const response = await read<typeof scope>(w.config, "scope", {
-            room: values.location_id,
-            template_id: values.template_id,
-          });
-          setScope(response);
-          if (!mapping.length) setMapping(response!.items.map(() => ""));
-        }
-        if (step === 2) {
-          if (!values.assignee_id || !values.frequency || !values.start_date)
-            throw new Error("Lengkapi waktu dan penanggung jawab.");
-          if (values.end_date && values.end_date < values.start_date)
-            throw new Error("Tanggal akhir harus setelah tanggal mulai.");
-          setDates(
-            (await read<{ dates: string[] }>(w.config, "preview", values))
-              .dates,
-          );
-        }
-      }
-      setStep(step + 1);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
+
+  useEffect(() => {
+    if (!values.location_id || !values.template_id) {
+      setScope(undefined);
+      return;
     }
-  }
+    const controller = new AbortController();
+    read<Scope>(w.config, "scope", { room: values.location_id, template_id: values.template_id }, controller.signal)
+      .then((s) => {
+        setScope(s);
+        setMapping((m) => (m.length === s.items.length ? m : s.items.map(() => "")));
+      })
+      .catch((e) => e.name !== "AbortError" && setError(e.message));
+    return () => controller.abort();
+  }, [values.location_id, values.template_id]);
+
+  useEffect(() => {
+    if (incidental || !values.start_date || !values.frequency) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      read<{ dates: string[] }>(w.config, "preview", values, controller.signal)
+        .then((r) => setDates(r.dates))
+        .catch(() => {});
+    }, 250);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [values.frequency, values.start_date, values.end_date]);
+
   async function save() {
     if (lock.current) return;
+    const errors: Record<string, string> = {};
+    if (!values.location_id) errors.location_id = "Pilih ruangan.";
+    if (!values.template_id) errors.template_id = "Pilih checklist.";
+    if (incidental && !values.reason.trim()) errors.reason = "Isi alasan pemeriksaan.";
+    if (!incidental) {
+      if (!values.assignee_id) errors.assignee_id = "Pilih penanggung jawab.";
+      if (!values.start_date) errors.start_date = "Isi tanggal mulai.";
+      if (values.end_date && values.end_date < values.start_date) errors.end_date = "Tanggal akhir harus setelah tanggal mulai.";
+    }
+    setErrors(errors);
+    if (Object.keys(errors).length) return;
     lock.current = true;
     setBusy(true);
     setError("");
@@ -618,15 +663,9 @@ function ScheduleEditor({ previous }: { previous?: Schedule }) {
         parent_id: w.route.parent_id || 0,
       });
       w.dirty(false);
-      toast.success(incidental ? "Pemeriksaan dibuat." : "Jadwal tersimpan.");
-      const record = reply.url
-        ? new URL(reply.url, window.location.href).searchParams.get("record")
-        : null;
-      w.go(
-        incidental && record
-          ? { view: "inspection", record }
-          : { view: "schedules" },
-      );
+      toast.success(incidental ? "Pemeriksaan dibuat. Silakan isi hasilnya." : "Jadwal tersimpan.");
+      const record = reply.url ? new URL(reply.url, window.location.href).searchParams.get("record") : null;
+      w.go(incidental && record ? { view: "inspection", record } : { view: "schedules" }, true);
       w.refresh();
     } catch (e) {
       setError((e as Error).message);
@@ -635,229 +674,233 @@ function ScheduleEditor({ previous }: { previous?: Schedule }) {
       setBusy(false);
     }
   }
+
+  const title = incidental
+    ? w.route.parent_id
+      ? "Pemeriksaan ulang"
+      : "Pemeriksaan insidental"
+    : previous
+      ? "Ganti jadwal"
+      : "Buat jadwal";
+  const crumbs = incidental
+    ? [{ label: "Tugas", route: { view: "tasks" } }]
+    : [{ label: "Jadwal", route: { view: "schedules" } }, ...(previous ? [{ label: previous.snapshot.room_name, route: { view: "schedule-detail", record: previous.id } }] : [])];
+
   if (!w.options.rooms.length || !w.options.templates.length)
     return (
       <>
-        <Heading
-          back
-          title={incidental ? "Pemeriksaan insidental" : "Buat jadwal"}
-        />
+        <PageHeader crumbs={crumbs} title={title} />
         <Blank
+          icon={ListChecks}
           title="Siapkan ruangan dan checklist dahulu"
-          description="Keduanya diperlukan untuk menentukan objek pemeriksaan."
+          description="Keduanya diperlukan untuk menentukan apa yang diperiksa."
         >
-          <div className="flex gap-3">
-            <Button onClick={() => w.go({ view: "inventory" })}>
-              Kelola ruangan
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => w.go({ view: "checklists" })}
-            >
-              Kelola checklist
-            </Button>
+          <div className="flex flex-wrap justify-center gap-2">
+            {!w.options.templates.length && (
+              <Button onClick={() => w.go({ view: "template-edit" })}>
+                <ListChecks data-icon="inline-start" />
+                Buat checklist
+              </Button>
+            )}
+            {!w.options.rooms.length && (
+              <Button variant="outline" onClick={() => w.go({ view: "room-edit" })}>
+                <Building2 data-icon="inline-start" />
+                Tambah ruangan
+              </Button>
+            )}
           </div>
         </Blank>
       </>
     );
-  const steps = incidental
-    ? ["Ruangan & checklist", "Alasan", "Ringkasan"]
-    : ["Ruangan & checklist", "Cakupan barang", "Waktu & petugas", "Ringkasan"];
-  const lastStep = steps.length - 1;
+
+  const mapped = mapping.filter(Boolean).length;
+  const assignee = w.options.users.find((u) => String(u.user_id) === values.assignee_id)?.realname;
+
   return (
     <>
-      <Heading
-        back
-        title={
+      <PageHeader
+        crumbs={crumbs}
+        title={title}
+        description={
           incidental
-            ? w.route.parent_id
-              ? "Pemeriksaan ulang"
-              : "Pemeriksaan insidental"
+            ? "Pemeriksaan di luar jadwal, misalnya setelah ada laporan kerusakan. Setelah dibuat, Anda langsung mengisi hasilnya."
             : previous
-              ? "Ganti jadwal"
-              : "Buat jadwal"
+              ? "Jadwal lama berakhir sehari sebelum jadwal baru dimulai. Riwayat tetap disimpan."
+              : "Tugas pemeriksaan dibuat otomatis untuk petugas sesuai frekuensi."
         }
-        description={`Langkah ${step + 1} dari ${steps.length} · ${steps[step]}`}
       />
-      <div className="flex gap-2 flex-wrap">
-        {steps.map((s, i) => (
-          <Badge key={s} variant={step === i ? "default" : "outline"}>
-            {i + 1}. {s}
-          </Badge>
-        ))}
-      </div>
       <ErrorBox message={error} />
-      <fieldset disabled={busy} className="min-w-0">
-        <Panel title={steps[step]}>
-          <FieldGroup>
-            {step === 0 && (
-              <>
-                <Choice
-                  label="Ruangan"
-                  value={values.location_id}
-                  onChange={(v) => update("location_id", v)}
-                  items={w.options.rooms.map((x) => ({
-                    value: x.id,
-                    label: roomLabel(x, w.options.libraries),
-                  }))}
-                />
-                <Choice
-                  label="Checklist"
-                  value={values.template_id}
-                  onChange={(v) => update("template_id", v)}
-                  items={w.options.templates.map((x) => ({
-                    value: x.id,
-                    label: `${x.name} · #${x.id}`,
-                  }))}
-                />
-              </>
-            )}
-            {step === 1 &&
-              !incidental &&
-              scope?.items.map((i, n) => (
-                <Choice
-                  key={n}
-                  label={`${i.group} · ${i.object}`}
-                  value={mapping[n]}
-                  placeholder="Aspek ruangan"
-                  items={scope.assets.map((a) => ({
-                    value: a.id,
-                    label: `${a.item_name} ${a.item_code ? `(${a.item_code})` : ""}`,
-                  }))}
-                  onChange={(v) => {
-                    setMapping((old) => old.map((a, k) => (k === n ? v : a)));
-                    w.dirty(true);
-                  }}
-                />
-              ))}
-            {((incidental && step === 1) || (!incidental && step === 2)) &&
-              (incidental ? (
+      <fieldset disabled={busy || !w.config.write} className="grid min-w-0 gap-6 lg:grid-cols-[1fr_300px]">
+        <div className="flex min-w-0 flex-col gap-6">
+          <Panel title="Apa yang diperiksa">
+            <FieldGroup>
+              <Choice
+                label="Ruangan"
+                required
+                error={errors.location_id}
+                value={values.location_id}
+                onChange={(v) => update("location_id", v)}
+                items={w.options.rooms.map((x) => ({ value: x.id, label: roomLabel(x, w.options.libraries) }))}
+              />
+              <Choice
+                label="Checklist"
+                required
+                error={errors.template_id}
+                value={values.template_id}
+                onChange={(v) => update("template_id", v)}
+                items={w.options.templates.map((x) => ({ value: x.id, label: `${x.name} · versi #${x.id}` }))}
+              />
+              {incidental && (
                 <TextField
                   label="Alasan pemeriksaan"
                   multiline
+                  rows={2}
                   required
+                  error={errors.reason}
+                  placeholder="Contoh: laporan atap bocor setelah hujan deras"
                   value={values.reason}
                   onChange={(v) => update("reason", v)}
                 />
-              ) : (
-                <>
-                  <Choice
-                    label="Frekuensi"
-                    value={values.frequency}
-                    onChange={(v) => update("frequency", v)}
-                    items={entries(w.options.frequencies)}
+              )}
+            </FieldGroup>
+          </Panel>
+          {!incidental && (
+            <Panel title="Kapan dan oleh siapa">
+              <FieldGroup>
+                <Choice
+                  label="Frekuensi"
+                  value={values.frequency}
+                  onChange={(v) => update("frequency", v)}
+                  items={entries(w.options.frequencies)}
+                />
+                <FieldGroup className="grid sm:grid-cols-2">
+                  <TextField
+                    label={previous ? "Jadwal baru mulai" : "Tanggal mulai"}
+                    type="date"
+                    required
+                    error={errors.start_date}
+                    value={values.start_date}
+                    onChange={(v) => update("start_date", v)}
                   />
-                  <FieldGroup className="grid sm:grid-cols-2">
-                    <TextField
-                      label={previous ? "Mulai versi baru" : "Tanggal mulai"}
-                      type="date"
-                      value={values.start_date}
-                      onChange={(v) => update("start_date", v)}
-                    />
-                    <TextField
-                      label="Tanggal akhir (opsional)"
-                      type="date"
-                      value={values.end_date}
-                      onChange={(v) => update("end_date", v)}
-                    />
-                  </FieldGroup>
-                  <Choice
-                    label="Penanggung jawab"
-                    value={values.assignee_id}
-                    onChange={(v) => update("assignee_id", v)}
-                    items={w.options.users.map((x) => ({
-                      value: x.user_id,
-                      label: x.realname,
-                    }))}
+                  <TextField
+                    label="Tanggal akhir"
+                    description="Kosongkan bila berlaku seterusnya."
+                    type="date"
+                    error={errors.end_date}
+                    value={values.end_date}
+                    onChange={(v) => update("end_date", v)}
                   />
-                </>
-              ))}
-            {((incidental && step === 2) || (!incidental && step === 3)) && (
-              <>
-                <p className="font-medium">
-                  {roomLabel(
-                    w.options.rooms.find(
-                      (r) => String(r.id) === values.location_id,
-                    ),
-                    w.options.libraries,
-                  )}
-                </p>
-                <p>
-                  {
-                    w.options.templates.find(
-                      (t) => String(t.id) === values.template_id,
-                    )?.name
-                  }{" "}
-                  · {scope?.items.length} butir
-                </p>
-                <p>
-                  {mapping.filter(Boolean).length} butir terhubung ke barang;
-                  sisanya aspek ruangan.
-                </p>
-                {incidental ? (
-                  <>
-                    <p>{values.reason}</p>
-                    <p className="text-sm text-muted-foreground">
-                      Untuk pemeriksaan insidental, pemetaan barang per butir bersifat opsional agar input lebih cepat.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p>
-                      {w.options.frequencies[values.frequency]} ·{" "}
-                      {
-                        w.options.users.find(
-                          (u) => String(u.user_id) === values.assignee_id,
-                        )?.realname
-                      }
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      Tanggal pemeriksaan berikutnya:
-                    </p>
-                    <div className="flex gap-2 flex-wrap">
-                      {dates.map((date) => (
-                        <Badge variant="outline" key={date}>
-                          {dateLabel(date)}
-                        </Badge>
-                      ))}
+                </FieldGroup>
+                <Choice
+                  label="Penanggung jawab"
+                  required
+                  error={errors.assignee_id}
+                  value={values.assignee_id}
+                  onChange={(v) => update("assignee_id", v)}
+                  items={w.options.users.map((x) => ({ value: x.user_id, label: x.realname }))}
+                />
+              </FieldGroup>
+            </Panel>
+          )}
+          {scope && scope.items.length > 0 && (
+            <Panel
+              title="Hubungkan butir ke barang"
+              description={
+                scope.assets.length
+                  ? "Opsional. Hubungkan butir dengan barang tertentu di ruangan agar riwayat per barang tercatat."
+                  : "Ruangan ini belum memiliki barang; semua butir diperiksa sebagai aspek ruangan."
+              }
+              action={
+                scope.assets.length > 0 &&
+                !showMapping && (
+                  <Button variant="outline" size="sm" onClick={() => setShowMapping(true)}>
+                    Atur
+                  </Button>
+                )
+              }
+            >
+              {showMapping && scope.assets.length > 0 ? (
+                <div className="flex flex-col divide-y">
+                  {scope.items.map((i, n) => (
+                    <div key={n} className="grid items-center gap-2 py-2 sm:grid-cols-[1fr_1fr]">
+                      <div>
+                        <p className="text-sm font-medium">{i.object}</p>
+                        <p className="text-xs text-muted-foreground">{i.group}</p>
+                      </div>
+                      <Choice
+                        value={mapping[n]}
+                        placeholder="Aspek ruangan"
+                        items={scope.assets.map((a) => ({
+                          value: a.id,
+                          label: `${a.item_name}${a.item_code ? ` (${a.item_code})` : ""}`,
+                        }))}
+                        onChange={(v) => {
+                          setMapping((old) => old.map((a, k) => (k === n ? v : a)));
+                          w.dirty(true);
+                        }}
+                      />
                     </div>
-                    {previous && (
-                      <p className="text-sm text-muted-foreground">
-                        Jadwal lama berakhir sehari sebelum versi baru dimulai.
-                        Riwayat tetap disimpan.
-                      </p>
-                    )}
-                  </>
-                )}
-              </>
-            )}
-          </FieldGroup>
-        </Panel>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {scope.items.length} butir akan diperiksa sebagai aspek ruangan
+                  {mapped ? `; ${mapped} terhubung ke barang` : ""}.
+                </p>
+              )}
+            </Panel>
+          )}
+        </div>
+        <aside className="flex flex-col gap-4 lg:sticky lg:top-4 lg:self-start">
+          <Panel title="Ringkasan">
+            <dl className="flex flex-col gap-3 text-sm">
+              <div>
+                <dt className="text-xs text-muted-foreground">Ruangan</dt>
+                <dd>{w.options.rooms.find((r) => String(r.id) === values.location_id)?.room_name || "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Checklist</dt>
+                <dd>
+                  {w.options.templates.find((t) => String(t.id) === values.template_id)?.name || "—"}
+                  {scope && ` · ${scope.items.length} butir`}
+                </dd>
+              </div>
+              {!incidental && (
+                <>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Petugas</dt>
+                    <dd>{assignee || "—"}</dd>
+                  </div>
+                  <div>
+                    <dt className="mb-1 text-xs text-muted-foreground">Tanggal pemeriksaan berikutnya</dt>
+                    <dd className="flex flex-wrap gap-1.5">
+                      {dates.length ? (
+                        dates.map((date) => (
+                          <Badge variant="outline" key={date}>
+                            {dateLabel(date)}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </dd>
+                  </div>
+                </>
+              )}
+            </dl>
+          </Panel>
+        </aside>
       </fieldset>
-      <div className="flex gap-3">
-        {step > 0 && (
-          <Button
-            variant="outline"
-            disabled={busy}
-            onClick={() => setStep(step - 1)}
-          >
-            Sebelumnya
+      {w.config.write && (
+        <ActionBar status={busy ? "Menyimpan…" : undefined}>
+          <Button variant="outline" disabled={busy} onClick={w.back}>
+            Batal
           </Button>
-        )}
-        <Button
-          disabled={busy || !w.config.write}
-          onClick={() => (step === lastStep ? save() : next())}
-        >
-          {busy
-            ? "Memproses…"
-            : step === lastStep
-              ? incidental
-                ? "Buat pemeriksaan"
-                : "Simpan jadwal"
-              : "Lanjutkan"}
-          <ArrowRight data-icon="inline-end" />
-        </Button>
-      </div>
+          <Button disabled={busy} onClick={save}>
+            {incidental ? "Buat dan mulai periksa" : previous ? "Simpan jadwal baru" : "Simpan jadwal"}
+          </Button>
+        </ActionBar>
+      )}
     </>
   );
 }

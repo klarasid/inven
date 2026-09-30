@@ -1,28 +1,942 @@
-import { useRef, useState } from 'react'
-import { toast } from 'sonner'
-import { Plus, ArrowRight } from 'lucide-react'
-import { Button } from './components/ui/button'
-import { Badge } from './components/ui/badge'
-import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from './components/ui/table'
-import { FieldGroup } from './components/ui/field'
-import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from './components/ui/accordion'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from './components/ui/dialog'
-import { useData, useWorkspace } from './context'
-import { money } from './api'
-import { Heading, Panel, Search, Filters, Pager, Pdf, Loading, ErrorBox, Blank, TextField, Choice, entries, Upload, Photos, Actions } from './shared'
-import type { Page, Values, Photo } from './types'
-const conditions={B:'Baik',KB:'Kurang baik',RB:'Rusak berat'}
-export function InventoryList(){
- const w=useWorkspace();const room=w.route.room;const {data,error,loading}=useData<Page<Values>>(room?'items':'rooms',w.route);const [selected,setSelected]=useState<Values>();const [busy,setBusy]=useState(false);const [deleteError,setDeleteError]=useState('');
- return <><Heading back={!!room} title={room?String(data?.room?.room_name||'Barang dalam ruangan'):'Ruangan & Barang'} description={room?'Kelola barang yang berada di ruangan ini.':'Pilih ruangan untuk melihat dan mencatat barang inventaris.'} action={<div className="flex gap-2">{room&&<Pdf room={room}/>} {w.config.write&&<Button onClick={()=>w.go({view:room?'item-edit':'room-edit',room})}><Plus data-icon="inline-start"/>{room?'Tambah barang':'Tambah ruangan'}</Button>}{room&&w.config.write&&<Actions items={[{label:'Ubah ruangan',run:()=>w.go({view:'room-edit',record:room})}]}/>}</div>}/><div className="flex gap-3"><Search placeholder={room?'Cari nama, kode, atau merk barang…':'Cari ruangan…'}/>{!room&&<Filters/>}</div><ErrorBox message={error}/>{loading?<Loading/>:data&&!data.rows.length?<Blank title={room?'Belum ada barang':'Belum ada ruangan'} description={room?'Tambahkan barang pertama di ruangan ini atau ubah pencarian.':'Tambahkan ruangan pertama untuk mulai mencatat inventaris.'}/>:data&&<Table><TableHeader><TableRow><TableHead>{room?'Barang':'Ruangan'}</TableHead><TableHead>{room?'Kondisi':'Perpustakaan'}</TableHead><TableHead>{room?'Jumlah / register':'Jumlah barang'}</TableHead><TableHead>Tindakan</TableHead></TableRow></TableHeader><TableBody>{data.rows.map(r=><TableRow key={r.id}><TableCell><Button variant="link" onClick={()=>w.go(room?{view:'item-detail',record:String(r.id),room}:{view:'inventory',room:String(r.id)})}>{room?r.item_name:r.room_name}</Button><p className="text-xs text-muted-foreground">{room?r.item_code:r.location_code}</p></TableCell><TableCell>{room?<Badge variant="outline">{conditions[r.item_condition as keyof typeof conditions]}</Badge>:r.library_name||'—'}</TableCell><TableCell>{room?r.quantity_register||'—':r.item_count}</TableCell><TableCell><div className="flex gap-2"><Button variant="outline" onClick={()=>w.go(room?{view:'item-detail',record:String(r.id),room}:{view:'inventory',room:String(r.id)})}>{room?'Detail':'Lihat barang'}<ArrowRight data-icon="inline-end"/></Button>{w.config.write&&<Actions items={[{label:'Ubah',run:()=>w.go({view:room?'item-edit':'room-edit',record:String(r.id),room})},{label:'Hapus',destructive:true,run:()=>{setSelected(r);setDeleteError('')}}]}/>}</div></TableCell></TableRow>)}</TableBody></Table>}{data&&<Pager {...data} onChange={page=>w.go({...w.route,page},true)}/>}<Dialog open={!!selected} onOpenChange={open=>{if(!busy&&!open)setSelected(undefined)}}><DialogContent><DialogHeader><DialogTitle>Hapus {room?'barang':'ruangan'}?</DialogTitle><DialogDescription>{room?'Barang dan foto miliknya akan dihapus.':`Ruangan ${selected?.room_name||''} dan seluruh barang di dalamnya akan dihapus. Jadwal dihentikan; riwayat pemeriksaan tetap disimpan.`}</DialogDescription></DialogHeader><ErrorBox message={deleteError}/><DialogFooter><Button variant="outline" disabled={busy} onClick={()=>setSelected(undefined)}>Batal</Button><Button variant="destructive" disabled={busy} onClick={async()=>{if(!selected)return;setBusy(true);try{await w.mutate({form_action:room?'delete_item':'delete_location',record_id:selected.id,location_id:room||''},undefined,true);setSelected(undefined);toast.success('Data dihapus.');w.refresh()}catch(e){setDeleteError((e as Error).message)}finally{setBusy(false)}}}>Hapus {room?'barang':'ruangan'}</Button></DialogFooter></DialogContent></Dialog></>
+import { useRef, useState } from "react";
+import { toast } from "sonner";
+import {
+  Plus,
+  Building2,
+  Package,
+  Pencil,
+  Trash2,
+  ImageOff,
+  TriangleAlert,
+  MapPin,
+  Wand2,
+  CircleCheck,
+  CircleAlert,
+  CircleX,
+  Boxes,
+} from "lucide-react";
+import { Button } from "./components/ui/button";
+import { Badge } from "./components/ui/badge";
+import { Card, CardContent } from "./components/ui/card";
+import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "./components/ui/table";
+import { FieldGroup, Field, FieldLabel, FieldDescription } from "./components/ui/field";
+import { ToggleGroup, ToggleGroupItem } from "./components/ui/toggle-group";
+import { Separator } from "./components/ui/separator";
+import { Input } from "./components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "./components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from "./components/ui/sheet";
+import { useData, useWorkspace } from "./context";
+import { money } from "./api";
+import {
+  PageHeader,
+  Panel,
+  SearchBox,
+  LibraryFilter,
+  Pager,
+  Pdf,
+  Loading,
+  ErrorBox,
+  Blank,
+  TextField,
+  Choice,
+  Upload,
+  Photos,
+  Actions,
+  Condition,
+  conditions,
+  StatCard,
+  ActionBar,
+} from "./shared";
+import type { Page, Values, Photo, Route } from "./types";
+
+const home: Route = { view: "inventory" };
+const homeCrumb = { label: "Ruangan & Barang", route: home };
+
+export function InventoryList() {
+  const w = useWorkspace();
+  return w.route.room ? <RoomItems /> : <RoomGrid />;
 }
-export function InventoryForm(){const w=useWorkspace();return w.route.record?<ExistingInventory/>:<InventoryEditor/>}
-function ExistingInventory(){const w=useWorkspace();const item=w.route.view.startsWith('item');const {data,error}=useData<{record:Values;photos:Photo[]}>(item?'item':'room',{record:w.route.record});return <><ErrorBox message={error}/>{data?<InventoryEditor record={data.record} photos={data.photos}/>:!error&&<Loading/>}</>}
-function InventoryEditor({record,photos:initialPhotos=[]}:{record?:Values;photos?:Photo[]}){
- const w=useWorkspace();const item=w.route.view.startsWith('item');const readonly=w.route.view==='item-detail'||!w.config.write;const [values,setValues]=useState<Values>(record||{location_id:w.route.room||'',item_name:'',item_condition:'B',acquisition_price:'0',room_name:'',unit_name:'PERPUSTAKAAN',manager_title:'Pengurus Barang Inventaris'});const [photos,setPhotos]=useState(initialPhotos);const [files,setFiles]=useState<File[]>([]);const [busy,setBusy]=useState(false);const lock=useRef(false);const [error,setError]=useState('');const [errors,setErrors]=useState<Record<string,string>>({});const token=useRef(Array.from(crypto.getRandomValues(new Uint8Array(32)),x=>x.toString(16).padStart(2,'0')).join(''));const [confirmCode,setConfirmCode]=useState(false);const [removePhoto,setRemovePhoto]=useState<Photo>();const update=(key:string,value:string)=>{setValues(v=>({...v,[key]:value}));w.dirty(true)};
- async function code(){setBusy(true);setError('');try{const response=await w.mutate({form_action:'reserve_item_code',location_id:values.location_id,code_form_token:token.current},undefined,true);update('item_code',response.code!);setConfirmCode(false)}catch(e){setError((e as Error).message)}finally{setBusy(false)}}
- async function save(){if(lock.current)return;const errors:Record<string,string>={};if(item){if(!values.item_name)errors.item_name='Isi nama barang.';if(!values.location_id)errors.location_id='Pilih ruangan.'}else if(!values.room_name)errors.room_name='Isi nama ruangan.';setErrors(errors);if(Object.keys(errors).length)return;lock.current=true;setBusy(true);setError('');try{const body=new FormData();files.forEach(f=>body.append('item_photos[]',f));const reply=await w.mutate({...values,form_action:item?'save_item':'save_location',record_id:record?.id||0,expected_updated_at:record?.updated_at,code_form_token:token.current},body,true);w.dirty(false);toast.success(item?'Barang tersimpan.':'Ruangan tersimpan.');w.go({view:'inventory',...(item?{room:String(reply.location_id||values.location_id)}:{})});w.refresh()}catch(e){setError((e as Error).message)}finally{lock.current=false;setBusy(false)}}
- const text=(key:string,label:string,type='text',required=false)=> <TextField key={key} label={label} value={values[key]} type={type} required={required} error={errors[key]} onChange={v=>update(key,v)} maxLength={['notes'].includes(key)?5000:undefined}/>
- if(readonly)return <><Heading back title={String(values.item_name||'Detail barang')} description={String(values.item_code||'Tanpa kode')} action={w.config.write&&<Button onClick={()=>w.go({...w.route,view:'item-edit'})}>Ubah barang</Button>}/><Panel title="Identitas barang"><dl className="grid gap-4 sm:grid-cols-2">{Object.entries({Ruangan:w.options.rooms.find(r=>String(r.id)===String(values.location_id))?.room_name,Merk:values.brand_model,'Nomor seri':values.serial_number,Kondisi:conditions[values.item_condition as keyof typeof conditions],'Jumlah / register':values.quantity_register,'Harga perolehan':money(values.acquisition_price),Ukuran:values.item_size,Bahan:values.material,Tahun:values.acquisition_year,Keterangan:values.notes}).map(([label,value])=><div key={label}><dt className="text-sm text-muted-foreground">{label}</dt><dd className="whitespace-pre-wrap">{value||'—'}</dd></div>)}</dl></Panel><Panel title="Foto barang">{photos.length?<Photos photos={photos}/>:<Blank description="Belum ada foto barang."/>}</Panel></>
- return <><Heading back title={`${record?'Ubah':'Tambah'} ${item?'barang':'ruangan'}`} description="Isi informasi utama. Detail tambahan dapat dilengkapi sesuai kebutuhan."/><ErrorBox message={error}/><form onSubmit={e=>{e.preventDefault();save()}}><fieldset disabled={busy} className="flex flex-col gap-6 min-w-0"><Panel title={item?'Identitas barang':'Identitas ruangan'}><FieldGroup>{item?<><Choice label="Ruangan" value={values.location_id} error={errors.location_id} onChange={v=>update('location_id',v)} items={w.options.rooms.map(x=>({value:x.id,label:x.room_name}))}/>{text('item_name','Nama barang','text',true)}<FieldGroup className="grid sm:grid-cols-2">{text('item_code','Kode barang')}<div className="flex items-end"><Button type="button" variant="outline" disabled={!values.location_id} onClick={()=>values.item_code?setConfirmCode(true):code()}>Buat kode</Button></div></FieldGroup><FieldGroup className="grid sm:grid-cols-2">{text('brand_model','Merk / model')}{text('quantity_register','Jumlah / register')}</FieldGroup><Choice label="Kondisi barang" value={values.item_condition} onChange={v=>update('item_condition',v)} items={entries(conditions)}/></>:<>{text('room_name','Nama ruangan','text',true)}<Choice label="Lokasi perpustakaan" value={values.slims_location_id} onChange={v=>update('slims_location_id',v)} items={w.options.libraries.map(x=>({value:x.location_id,label:x.location_name}))}/>{text('location_code','Nomor kode lokasi kartu')}</>}</FieldGroup></Panel><Panel title="Detail tambahan"><Accordion type="multiple">{item?<><AccordionItem value="spec"><AccordionTrigger>Spesifikasi dan perolehan</AccordionTrigger><AccordionContent><FieldGroup className="grid sm:grid-cols-2">{text('serial_number','Nomor seri pabrik')}{text('item_size','Ukuran')}{text('material','Bahan')}{text('acquisition_year','Tahun pembuatan / pembelian','number')}{text('acquisition_price','Harga perolehan (Rp)','number')}</FieldGroup></AccordionContent></AccordionItem><AccordionItem value="photos"><AccordionTrigger>Foto barang ({photos.length+files.length})</AccordionTrigger><AccordionContent><FieldGroup><Photos photos={photos}/>{photos.map(photo=><Button type="button" key={photo.id} variant="ghost" onClick={()=>setRemovePhoto(photo)}>Hapus foto #{photo.id}</Button>)}<Upload files={files} count={photos.length} onChange={f=>{setFiles(f);w.dirty(true)}}/></FieldGroup></AccordionContent></AccordionItem><AccordionItem value="notes"><AccordionTrigger>Keterangan</AccordionTrigger><AccordionContent><TextField label="Keterangan" value={values.notes} onChange={v=>update('notes',v)} multiline maxLength={5000}/></AccordionContent></AccordionItem></>:<><AccordionItem value="card"><AccordionTrigger>Wilayah dan identitas kartu</AccordionTrigger><AccordionContent><FieldGroup className="grid sm:grid-cols-2">{text('province','Provinsi')}{text('regency_city','Kabupaten / kota')}{text('unit_name','Unit')}{text('work_unit','Satuan kerja')}</FieldGroup></AccordionContent></AccordionItem><AccordionItem value="signature"><AccordionTrigger>Penandatangan</AccordionTrigger><AccordionContent><FieldGroup>{text('signature_city','Kota penandatanganan')}<FieldGroup className="grid sm:grid-cols-2">{text('knowing_title','Jabatan yang mengetahui')}{text('manager_title','Jabatan pengurus')}{text('knowing_name','Nama yang mengetahui')}{text('manager_name','Nama pengurus')}{text('knowing_identity','Identitas yang mengetahui')}{text('manager_identity','Identitas pengurus')}</FieldGroup></FieldGroup></AccordionContent></AccordionItem></>}</Accordion></Panel><div className="sticky bottom-0 bg-background border-t py-4"><Button type="submit">{busy?'Menyimpan…':item?'Simpan barang':'Simpan ruangan'}</Button></div></fieldset></form><Dialog open={confirmCode} onOpenChange={setConfirmCode}><DialogContent><DialogHeader><DialogTitle>Ganti kode barang?</DialogTitle><DialogDescription>Kode saat ini akan diganti dengan nomor baru dari perpustakaan ruangan yang dipilih.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" onClick={()=>setConfirmCode(false)}>Batal</Button><Button disabled={busy} onClick={code}>Buat kode baru</Button></DialogFooter></DialogContent></Dialog><Dialog open={!!removePhoto} onOpenChange={open=>{if(!open)setRemovePhoto(undefined)}}><DialogContent><DialogHeader><DialogTitle>Hapus foto barang?</DialogTitle><DialogDescription>Foto ini akan dihapus. Isian barang lainnya tetap tersedia.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" onClick={()=>setRemovePhoto(undefined)}>Batal</Button><Button variant="destructive" disabled={busy} onClick={async()=>{if(!removePhoto)return;setBusy(true);try{await w.mutate({form_action:'delete_photo',item_id:record?.id,photo_id:removePhoto.id},undefined,true);setPhotos(photos.filter(p=>p.id!==removePhoto.id));setRemovePhoto(undefined)}catch(e){setError((e as Error).message)}finally{setBusy(false)}}}>Hapus foto</Button></DialogFooter></DialogContent></Dialog></>
+
+function DeleteDialog({
+  target,
+  kind,
+  onClose,
+  onDeleted,
+}: {
+  target?: Values;
+  kind: "item" | "room";
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const w = useWorkspace();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  return (
+    <Dialog
+      open={!!target}
+      onOpenChange={(open) => {
+        if (!busy && !open) {
+          setError("");
+          onClose();
+        }
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Hapus {kind === "item" ? "barang" : "ruangan"}?</DialogTitle>
+          <DialogDescription>
+            {kind === "item"
+              ? `${target?.item_name || "Barang"} beserta fotonya akan dihapus permanen.`
+              : `Ruangan ${target?.room_name || ""} dan seluruh barang di dalamnya akan dihapus. Jadwal dihentikan; riwayat pemeriksaan tetap disimpan.`}
+          </DialogDescription>
+        </DialogHeader>
+        <ErrorBox message={error} />
+        <DialogFooter>
+          <Button variant="outline" disabled={busy} onClick={onClose}>
+            Batal
+          </Button>
+          <Button
+            variant="destructive"
+            disabled={busy}
+            onClick={async () => {
+              if (!target) return;
+              setBusy(true);
+              try {
+                await w.mutate(
+                  {
+                    form_action: kind === "item" ? "delete_item" : "delete_location",
+                    record_id: target.id,
+                    location_id: kind === "item" ? target.location_id : "",
+                  },
+                  undefined,
+                  true,
+                );
+                toast.success(kind === "item" ? "Barang dihapus." : "Ruangan dihapus.");
+                onDeleted();
+              } catch (e) {
+                setError((e as Error).message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <Trash2 data-icon="inline-start" />
+            Hapus {kind === "item" ? "barang" : "ruangan"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function RoomGrid() {
+  const w = useWorkspace();
+  const { data, error, loading } = useData<Page<Values>>("rooms", w.route);
+  const [selected, setSelected] = useState<Values>();
+  const open = (id: unknown) => w.go({ view: "inventory", room: String(id) });
+  return (
+    <>
+      <PageHeader
+        title="Ruangan & Barang"
+        description="Pilih ruangan untuk melihat, menambah, dan mencetak kartu inventaris barangnya."
+        actions={
+          w.config.write && (
+            <Button onClick={() => w.go({ view: "room-edit" })}>
+              <Plus data-icon="inline-start" />
+              Tambah ruangan
+            </Button>
+          )
+        }
+      />
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <SearchBox placeholder="Cari nama atau kode ruangan…" />
+        <LibraryFilter />
+      </div>
+      <ErrorBox message={error} />
+      {loading ? (
+        <Loading />
+      ) : data && !data.rows.length ? (
+        <Blank
+          icon={Building2}
+          title={w.route.q || w.route.library ? "Ruangan tidak ditemukan" : "Belum ada ruangan"}
+          description={
+            w.route.q || w.route.library
+              ? "Ubah kata kunci atau filter perpustakaan."
+              : "Tambahkan ruangan pertama untuk mulai mencatat inventaris."
+          }
+        >
+          {w.config.write && !w.route.q && (
+            <Button onClick={() => w.go({ view: "room-edit" })}>
+              <Plus data-icon="inline-start" />
+              Tambah ruangan
+            </Button>
+          )}
+        </Blank>
+      ) : (
+        data && (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {data.rows.map((r) => (
+              <Card
+                key={String(r.id)}
+                role="link"
+                tabIndex={0}
+                onClick={() => open(r.id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") open(r.id);
+                }}
+                className="cursor-pointer gap-3 py-4 transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              >
+                <CardContent className="flex flex-col gap-3 px-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted">
+                        <Building2 className="size-4 text-muted-foreground" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{r.room_name}</p>
+                        <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
+                          <MapPin className="size-3 shrink-0" />
+                          {r.library_name || "Lokasi belum ditentukan"}
+                        </p>
+                      </div>
+                    </div>
+                    {w.config.write && (
+                      <Actions
+                        items={[
+                          {
+                            label: "Ubah ruangan",
+                            icon: Pencil,
+                            run: () => w.go({ view: "room-edit", record: String(r.id) }),
+                          },
+                          { label: "Hapus ruangan", icon: Trash2, destructive: true, run: () => setSelected(r) },
+                        ]}
+                      />
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="secondary">
+                      <Package />
+                      {r.item_count} barang
+                    </Badge>
+                    {Number(r.damaged_count) > 0 && (
+                      <Badge variant="warning">
+                        <TriangleAlert />
+                        {r.damaged_count} perlu perhatian
+                      </Badge>
+                    )}
+                    {r.location_code && (
+                      <span className="ml-auto text-xs text-muted-foreground tabular-nums">{r.location_code}</span>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )
+      )}
+      {data && <Pager {...data} onChange={(page) => w.go({ ...w.route, page }, true)} />}
+      <DeleteDialog
+        kind="room"
+        target={selected}
+        onClose={() => setSelected(undefined)}
+        onDeleted={() => {
+          setSelected(undefined);
+          w.refresh();
+        }}
+      />
+    </>
+  );
+}
+
+function RoomItems() {
+  const w = useWorkspace();
+  const room = String(w.route.room);
+  const { item, ...params } = w.route;
+  const { data, error, loading } = useData<Page<Values>>("items", params);
+  const [selected, setSelected] = useState<Values>();
+  const [deleteRoom, setDeleteRoom] = useState<Values>();
+  const info = data?.room;
+  const counts = data?.conditions || {};
+  const total = Object.values(counts).reduce((n, v) => n + Number(v), 0);
+  const condition = String(w.route.condition || "");
+  const filter = (value: string) => w.go({ ...w.route, condition: value, page: 1, item: undefined }, true);
+  const openItem = (id: unknown) => w.go({ ...w.route, item: String(id) }, true);
+  return (
+    <>
+      <PageHeader
+        crumbs={[homeCrumb]}
+        title={String(info?.room_name || "Memuat ruangan…")}
+        meta={
+          info && (
+            <>
+              <Badge variant="outline">
+                <MapPin />
+                {String(info.library_name || "Lokasi belum ditentukan")}
+              </Badge>
+              {info.location_code && <Badge variant="outline">Kode {String(info.location_code)}</Badge>}
+            </>
+          )
+        }
+        actions={
+          <>
+            <Pdf room={room} label="Cetak KIR" />
+            {w.config.write && (
+              <>
+                <Button onClick={() => w.go({ view: "item-edit", room })}>
+                  <Plus data-icon="inline-start" />
+                  Tambah barang
+                </Button>
+                <Actions
+                  label="Tindakan ruangan"
+                  items={[
+                    { label: "Ubah ruangan", icon: Pencil, run: () => w.go({ view: "room-edit", record: room }) },
+                    {
+                      label: "Hapus ruangan",
+                      icon: Trash2,
+                      destructive: true,
+                      run: () => info && setDeleteRoom(info),
+                    },
+                  ]}
+                />
+              </>
+            )}
+          </>
+        }
+      />
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <StatCard label="Semua barang" value={total} icon={Boxes} active={!condition} onClick={() => filter("")} />
+        <StatCard
+          label="Baik"
+          value={Number(counts.B || 0)}
+          icon={CircleCheck}
+          tone="success"
+          active={condition === "B"}
+          onClick={() => filter(condition === "B" ? "" : "B")}
+        />
+        <StatCard
+          label="Kurang baik"
+          value={Number(counts.KB || 0)}
+          icon={CircleAlert}
+          tone="warning"
+          active={condition === "KB"}
+          onClick={() => filter(condition === "KB" ? "" : "KB")}
+        />
+        <StatCard
+          label="Rusak berat"
+          value={Number(counts.RB || 0)}
+          icon={CircleX}
+          tone="destructive"
+          active={condition === "RB"}
+          onClick={() => filter(condition === "RB" ? "" : "RB")}
+        />
+      </div>
+      <SearchBox placeholder="Cari nama, kode, atau merk barang…" />
+      <ErrorBox message={error} />
+      {loading && !data ? (
+        <Loading />
+      ) : data && !data.rows.length ? (
+        <Blank
+          icon={Package}
+          title={w.route.q || condition ? "Barang tidak ditemukan" : "Belum ada barang"}
+          description={
+            w.route.q || condition
+              ? "Ubah kata kunci atau pilih kondisi lain."
+              : "Tambahkan barang pertama di ruangan ini."
+          }
+        >
+          {w.config.write && !w.route.q && !condition && (
+            <Button onClick={() => w.go({ view: "item-edit", room })}>
+              <Plus data-icon="inline-start" />
+              Tambah barang
+            </Button>
+          )}
+        </Blank>
+      ) : (
+        data && (
+          <div className="overflow-hidden rounded-xl border">
+            <Table>
+              <TableHeader className="bg-muted/50">
+                <TableRow>
+                  <TableHead className="w-14">
+                    <span className="sr-only">Foto</span>
+                  </TableHead>
+                  <TableHead>Barang</TableHead>
+                  <TableHead className="hidden md:table-cell">Merk / model</TableHead>
+                  <TableHead>Kondisi</TableHead>
+                  <TableHead className="hidden sm:table-cell">Jumlah / register</TableHead>
+                  <TableHead className="w-12">
+                    <span className="sr-only">Tindakan</span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.rows.map((r) => (
+                  <TableRow key={String(r.id)} className="cursor-pointer" onClick={() => openItem(r.id)}>
+                    <TableCell>
+                      <div className="flex size-10 items-center justify-center overflow-hidden rounded-md border bg-muted">
+                        {r.photo_url ? (
+                          <img src={String(r.photo_url)} alt="" loading="lazy" className="size-full object-cover" />
+                        ) : (
+                          <ImageOff className="size-4 text-muted-foreground" />
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="max-w-64 whitespace-normal">
+                      <button
+                        type="button"
+                        className="text-left font-medium hover:underline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openItem(r.id);
+                        }}
+                      >
+                        {r.item_name}
+                      </button>
+                      <p className="text-xs text-muted-foreground tabular-nums">{r.item_code || "Tanpa kode"}</p>
+                    </TableCell>
+                    <TableCell className="hidden text-muted-foreground md:table-cell">{r.brand_model || "—"}</TableCell>
+                    <TableCell>
+                      <Condition value={r.item_condition} />
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell">{r.quantity_register || "—"}</TableCell>
+                    <TableCell>
+                      {w.config.write && (
+                        <Actions
+                          items={[
+                            {
+                              label: "Ubah",
+                              icon: Pencil,
+                              run: () => w.go({ view: "item-edit", record: String(r.id), room }),
+                            },
+                            { label: "Hapus", icon: Trash2, destructive: true, run: () => setSelected(r) },
+                          ]}
+                        />
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )
+      )}
+      {data && <Pager {...data} onChange={(page) => w.go({ ...w.route, page }, true)} />}
+      <ItemSheet
+        record={w.route.item ? String(w.route.item) : undefined}
+        onClose={() => w.go({ ...w.route, item: undefined }, true)}
+        onDelete={(r) => setSelected(r)}
+      />
+      <DeleteDialog
+        kind="item"
+        target={selected}
+        onClose={() => setSelected(undefined)}
+        onDeleted={() => {
+          setSelected(undefined);
+          w.go({ ...w.route, item: undefined }, true);
+          w.refresh();
+        }}
+      />
+      <DeleteDialog
+        kind="room"
+        target={deleteRoom}
+        onClose={() => setDeleteRoom(undefined)}
+        onDeleted={() => {
+          setDeleteRoom(undefined);
+          w.go(home, true);
+          w.refresh();
+        }}
+      />
+    </>
+  );
+}
+
+function ItemSheet({
+  record,
+  onClose,
+  onDelete,
+}: {
+  record?: string;
+  onClose: () => void;
+  onDelete: (r: Values) => void;
+}) {
+  return (
+    <Sheet
+      open={!!record}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <SheetContent className="w-full gap-0 sm:max-w-lg">{record && <ItemSheetBody record={record} onDelete={onDelete} />}</SheetContent>
+    </Sheet>
+  );
+}
+
+function ItemSheetBody({ record, onDelete }: { record: string; onDelete: (r: Values) => void }) {
+  const w = useWorkspace();
+  const { data, error } = useData<{ record: Values; photos: Photo[] }>("item", { record });
+  const item = data?.record;
+  return (
+    <>
+      <SheetHeader className="border-b">
+        <SheetTitle>{item ? String(item.item_name) : "Memuat barang…"}</SheetTitle>
+        <SheetDescription className="flex items-center gap-2">
+          {item && (
+            <>
+              <span className="tabular-nums">{String(item.item_code || "Tanpa kode")}</span>
+              <Condition value={item.item_condition} />
+            </>
+          )}
+        </SheetDescription>
+      </SheetHeader>
+      <div className="flex-1 overflow-y-auto p-4">
+        <ErrorBox message={error} />
+        {data ? <ItemDetails record={data.record} photos={data.photos} /> : !error && <Loading />}
+      </div>
+      {item && w.config.write && (
+        <SheetFooter className="flex-row border-t">
+          <Button
+            className="flex-1"
+            onClick={() => w.go({ view: "item-edit", record: String(item.id), room: String(item.location_id) })}
+          >
+            <Pencil data-icon="inline-start" />
+            Ubah barang
+          </Button>
+          <Button variant="destructive" onClick={() => onDelete(item)}>
+            <Trash2 data-icon="inline-start" />
+            Hapus
+          </Button>
+        </SheetFooter>
+      )}
+    </>
+  );
+}
+
+function ItemDetails({ record, photos }: { record: Values; photos: Photo[] }) {
+  const w = useWorkspace();
+  const fields: [string, unknown][] = [
+    ["Ruangan", w.options.rooms.find((r) => String(r.id) === String(record.location_id))?.room_name],
+    ["Merk / model", record.brand_model],
+    ["Nomor seri", record.serial_number],
+    ["Jumlah / register", record.quantity_register],
+    ["Ukuran", record.item_size],
+    ["Bahan", record.material],
+    ["Tahun perolehan", record.acquisition_year],
+    ["Harga perolehan", Number(record.acquisition_price) ? money(record.acquisition_price) : ""],
+  ];
+  return (
+    <div className="flex flex-col gap-5">
+      <section className="flex flex-col gap-2">
+        <h3 className="text-sm font-medium">Foto ({photos.length})</h3>
+        {photos.length ? (
+          <Photos photos={photos} />
+        ) : (
+          <p className="text-sm text-muted-foreground">Belum ada foto barang.</p>
+        )}
+      </section>
+      <Separator />
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-3">
+        {fields.map(([label, value]) => (
+          <div key={label}>
+            <dt className="text-xs text-muted-foreground">{label}</dt>
+            <dd className="text-sm">{String(value || "—")}</dd>
+          </div>
+        ))}
+      </dl>
+      {record.notes && (
+        <>
+          <Separator />
+          <div>
+            <p className="text-xs text-muted-foreground">Keterangan</p>
+            <p className="text-sm whitespace-pre-wrap">{String(record.notes)}</p>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+export function InventoryForm() {
+  const w = useWorkspace();
+  return w.route.record ? <ExistingInventory /> : <InventoryEditor />;
+}
+
+function ExistingInventory() {
+  const w = useWorkspace();
+  const item = w.route.view.startsWith("item");
+  const { data, error } = useData<{ record: Values; photos: Photo[] }>(item ? "item" : "room", {
+    record: w.route.record,
+  });
+  if (error) return <ErrorBox message={error} />;
+  if (!data) return <Loading />;
+  if (w.route.view === "item-detail" || (item && !w.config.write))
+    return (
+      <>
+        <PageHeader
+          crumbs={[
+            homeCrumb,
+            {
+              label: w.options.rooms.find((r) => String(r.id) === String(data.record.location_id))?.room_name || "Ruangan",
+              route: { view: "inventory", room: String(data.record.location_id) },
+            },
+          ]}
+          title={String(data.record.item_name)}
+          meta={<Condition value={data.record.item_condition} />}
+          actions={
+            w.config.write && (
+              <Button onClick={() => w.go({ ...w.route, view: "item-edit" })}>
+                <Pencil data-icon="inline-start" />
+                Ubah barang
+              </Button>
+            )
+          }
+        />
+        <Card>
+          <CardContent>
+            <ItemDetails record={data.record} photos={data.photos} />
+          </CardContent>
+        </Card>
+      </>
+    );
+  return <InventoryEditor record={data.record} photos={data.photos} />;
+}
+
+function InventoryEditor({ record, photos: initialPhotos = [] }: { record?: Values; photos?: Photo[] }) {
+  const w = useWorkspace();
+  const item = w.route.view.startsWith("item");
+  const [values, setValues] = useState<Values>(
+    record || {
+      location_id: w.route.room || "",
+      item_name: "",
+      item_condition: "B",
+      acquisition_price: "0",
+      room_name: "",
+      unit_name: "PERPUSTAKAAN",
+      manager_title: "Pengurus Barang Inventaris",
+    },
+  );
+  const [photos, setPhotos] = useState(initialPhotos);
+  const [files, setFiles] = useState<File[]>([]);
+  const [busy, setBusy] = useState(false);
+  const lock = useRef(false);
+  const [error, setError] = useState("");
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const token = useRef(
+    Array.from(crypto.getRandomValues(new Uint8Array(32)), (x) => x.toString(16).padStart(2, "0")).join(""),
+  );
+  const [confirmCode, setConfirmCode] = useState(false);
+  const [removePhoto, setRemovePhoto] = useState<Photo>();
+  const update = (key: string, value: string) => {
+    setValues((v) => ({ ...v, [key]: value }));
+    w.dirty(true);
+  };
+  const roomName = w.options.rooms.find((r) => String(r.id) === String(values.location_id))?.room_name;
+
+  async function code() {
+    setBusy(true);
+    setError("");
+    try {
+      const response = await w.mutate(
+        { form_action: "reserve_item_code", location_id: values.location_id, code_form_token: token.current },
+        undefined,
+        true,
+      );
+      update("item_code", response.code!);
+      setConfirmCode(false);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function save() {
+    if (lock.current) return;
+    const errors: Record<string, string> = {};
+    if (item) {
+      if (!values.item_name) errors.item_name = "Isi nama barang.";
+      if (!values.location_id) errors.location_id = "Pilih ruangan.";
+    } else if (!values.room_name) errors.room_name = "Isi nama ruangan.";
+    setErrors(errors);
+    if (Object.keys(errors).length) return;
+    lock.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const body = new FormData();
+      files.forEach((f) => body.append("item_photos[]", f));
+      const reply = await w.mutate(
+        {
+          ...values,
+          form_action: item ? "save_item" : "save_location",
+          record_id: record?.id || 0,
+          expected_updated_at: record?.updated_at,
+          code_form_token: token.current,
+        },
+        body,
+        true,
+      );
+      w.dirty(false);
+      toast.success(item ? "Barang tersimpan." : "Ruangan tersimpan.");
+      const target = item ? String(reply.location_id || values.location_id) : String(reply.record || record?.id || "");
+      w.go(target ? { view: "inventory", room: target } : home, true);
+      w.refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      lock.current = false;
+      setBusy(false);
+    }
+  }
+  const text = (key: string, label: string, opts: { type?: string; required?: boolean; description?: string; placeholder?: string } = {}) => (
+    <TextField
+      key={key}
+      label={label}
+      value={values[key]}
+      type={opts.type}
+      required={opts.required}
+      description={opts.description}
+      placeholder={opts.placeholder}
+      error={errors[key]}
+      onChange={(v) => update(key, v)}
+    />
+  );
+  // Trail follows where the record lives: Ruangan & Barang › <ruangan> › <halaman ini>.
+  const parentRoom = item ? values.location_id && roomName : record && record.room_name;
+  const parentId = item ? values.location_id : record?.id;
+  const crumbs = [
+    homeCrumb,
+    ...(parentRoom ? [{ label: String(parentRoom), route: { view: "inventory", room: String(parentId) } }] : []),
+  ];
+
+  return (
+    <>
+      <PageHeader
+        crumbs={crumbs}
+        title={`${record ? "Ubah" : "Tambah"} ${item ? "barang" : "ruangan"}`}
+        description={
+          item
+            ? "Hanya nama barang yang wajib. Lengkapi isian lain bila datanya tersedia."
+            : "Identitas ruangan dan data yang dicetak pada Kartu Inventaris Ruangan (KIR)."
+        }
+      />
+      <ErrorBox message={error} />
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          save();
+        }}
+      >
+        <fieldset disabled={busy} className="flex min-w-0 flex-col gap-6">
+          {item ? (
+            <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+              <div className="flex flex-col gap-6">
+                <Panel title="Informasi utama">
+                  <FieldGroup>
+                    <Choice
+                      label="Ruangan"
+                      required
+                      value={values.location_id}
+                      error={errors.location_id}
+                      onChange={(v) => update("location_id", v)}
+                      items={w.options.rooms.map((x) => ({ value: x.id, label: x.room_name }))}
+                    />
+                    {text("item_name", "Nama barang", { required: true, placeholder: "Contoh: Rak buku besi 5 susun" })}
+                    <Field data-invalid={!!errors.item_code}>
+                      <FieldLabel htmlFor="item-code">Kode barang</FieldLabel>
+                      <div className="flex gap-2">
+                        <Input
+                          id="item-code"
+                          className="tabular-nums"
+                          value={String(values.item_code ?? "")}
+                          aria-invalid={!!errors.item_code}
+                          onChange={(e) => update("item_code", e.target.value)}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={!values.location_id}
+                          onClick={() => (values.item_code ? setConfirmCode(true) : code())}
+                        >
+                          <Wand2 data-icon="inline-start" />
+                          Buat otomatis
+                        </Button>
+                      </div>
+                      <FieldDescription>
+                        {errors.item_code || "Kosongkan atau klik Buat otomatis untuk nomor berikutnya dari perpustakaan ruangan."}
+                      </FieldDescription>
+                    </Field>
+                    <Field>
+                      <FieldLabel>Kondisi barang</FieldLabel>
+                      <ToggleGroup
+                        type="single"
+                        variant="outline"
+                        value={String(values.item_condition || "B")}
+                        onValueChange={(v) => v && update("item_condition", v)}
+                        className="w-full"
+                      >
+                        {Object.entries(conditions).map(([value, label]) => (
+                          <ToggleGroupItem key={value} value={value} className="flex-1">
+                            {label}
+                          </ToggleGroupItem>
+                        ))}
+                      </ToggleGroup>
+                    </Field>
+                    <FieldGroup className="grid sm:grid-cols-2">
+                      {text("brand_model", "Merk / model")}
+                      {text("quantity_register", "Jumlah / register")}
+                    </FieldGroup>
+                  </FieldGroup>
+                </Panel>
+                <Panel title="Spesifikasi dan perolehan" description="Opsional. Dicetak pada Kartu Inventaris Ruangan.">
+                  <FieldGroup className="grid sm:grid-cols-2">
+                    {text("serial_number", "Nomor seri pabrik")}
+                    {text("item_size", "Ukuran")}
+                    {text("material", "Bahan")}
+                    {text("acquisition_year", "Tahun pembuatan / pembelian", { type: "number" })}
+                    {text("acquisition_price", "Harga perolehan (Rp)", { type: "number" })}
+                  </FieldGroup>
+                  <div className="mt-5">
+                    <TextField label="Keterangan" value={values.notes} onChange={(v) => update("notes", v)} multiline maxLength={5000} />
+                  </div>
+                </Panel>
+              </div>
+              <Panel title="Foto barang" description="Opsional, maksimal 5 foto." className="self-start">
+                <FieldGroup>
+                  {photos.length > 0 && <Photos photos={photos} size="sm" onToggle={(p) => setRemovePhoto(p)} />}
+                  <Upload
+                    label={photos.length ? "Tambah foto" : "Unggah foto"}
+                    files={files}
+                    count={photos.length}
+                    onChange={(f) => {
+                      setFiles(f);
+                      w.dirty(true);
+                    }}
+                    hint="JPEG, PNG, atau WebP, masing-masing maksimal 2 MB."
+                  />
+                </FieldGroup>
+              </Panel>
+            </div>
+          ) : (
+            <div className="grid gap-6 lg:grid-cols-2">
+              <Panel title="Identitas ruangan">
+                <FieldGroup>
+                  {text("room_name", "Nama ruangan", { required: true, placeholder: "Contoh: Ruang Baca Lantai 2" })}
+                  <Choice
+                    label="Lokasi perpustakaan"
+                    value={values.slims_location_id}
+                    onChange={(v) => update("slims_location_id", v)}
+                    items={w.options.libraries.map((x) => ({ value: x.location_id, label: x.location_name }))}
+                    description="Dipakai untuk pembuatan kode barang otomatis dan filter."
+                  />
+                  {text("location_code", "Nomor kode lokasi kartu", {
+                    description: "Boleh sama dengan ruangan lain di lokasi yang sama.",
+                  })}
+                </FieldGroup>
+              </Panel>
+              <Panel title="Wilayah dan unit" description="Tercetak di kepala KIR.">
+                <FieldGroup className="grid sm:grid-cols-2">
+                  {text("province", "Provinsi")}
+                  {text("regency_city", "Kabupaten / kota")}
+                  {text("unit_name", "Unit")}
+                  {text("work_unit", "Satuan kerja")}
+                </FieldGroup>
+              </Panel>
+              <Panel title="Penandatangan KIR" description="Tercetak di bagian tanda tangan kartu." className="lg:col-span-2">
+                <FieldGroup>
+                  <div className="sm:max-w-sm">{text("signature_city", "Kota penandatanganan")}</div>
+                  <div className="grid gap-6 sm:grid-cols-2">
+                    <FieldGroup>
+                      <p className="text-sm font-medium">Yang mengetahui</p>
+                      {text("knowing_title", "Jabatan")}
+                      {text("knowing_name", "Nama")}
+                      {text("knowing_identity", "NIP / identitas")}
+                    </FieldGroup>
+                    <FieldGroup>
+                      <p className="text-sm font-medium">Pengurus barang</p>
+                      {text("manager_title", "Jabatan")}
+                      {text("manager_name", "Nama")}
+                      {text("manager_identity", "NIP / identitas")}
+                    </FieldGroup>
+                  </div>
+                </FieldGroup>
+              </Panel>
+            </div>
+          )}
+          <ActionBar status={busy ? "Menyimpan…" : undefined}>
+            <Button type="button" variant="outline" onClick={w.back}>
+              Batal
+            </Button>
+            <Button type="submit">{busy ? "Menyimpan…" : item ? "Simpan barang" : "Simpan ruangan"}</Button>
+          </ActionBar>
+        </fieldset>
+      </form>
+      <Dialog open={confirmCode} onOpenChange={setConfirmCode}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ganti kode barang?</DialogTitle>
+            <DialogDescription>
+              Kode saat ini akan diganti dengan nomor baru dari perpustakaan ruangan yang dipilih.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmCode(false)}>
+              Batal
+            </Button>
+            <Button disabled={busy} onClick={code}>
+              Buat kode baru
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={!!removePhoto}
+        onOpenChange={(open) => {
+          if (!open) setRemovePhoto(undefined);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Hapus foto barang?</DialogTitle>
+            <DialogDescription>Foto langsung dihapus. Isian barang lainnya tetap tersedia.</DialogDescription>
+          </DialogHeader>
+          {removePhoto?.url && <img src={removePhoto.url} alt="" className="max-h-48 rounded-lg border object-contain" />}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRemovePhoto(undefined)}>
+              Batal
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={busy}
+              onClick={async () => {
+                if (!removePhoto) return;
+                setBusy(true);
+                try {
+                  await w.mutate(
+                    { form_action: "delete_photo", item_id: record?.id, photo_id: removePhoto.id },
+                    undefined,
+                    true,
+                  );
+                  setPhotos(photos.filter((p) => p.id !== removePhoto.id));
+                  setRemovePhoto(undefined);
+                  toast.success("Foto dihapus.");
+                } catch (e) {
+                  setError((e as Error).message);
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              Hapus foto
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }

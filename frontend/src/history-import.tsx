@@ -6,7 +6,7 @@ import { Button } from './components/ui/button'
 import { Input } from './components/ui/input'
 import { Field, FieldLabel } from './components/ui/field'
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from './components/ui/table'
-import { Heading, Panel, ErrorBox } from './shared'
+import { PageHeader, Panel, ErrorBox } from './shared'
 
 type Summary = {inspections:number;results:number;findings:number;actions:number;closed:number;review:number;open:number;token?:string;ids?:number[];rows:{number:string;date:string;room:string;library:string;examiner:string;results:number;actions:number;closed:number}[]}
 export function HistoryImportPage() {
@@ -37,7 +37,7 @@ export function HistoryImportPage() {
   }
   if(!w.config.write)return <ErrorBox message="Anda memerlukan hak tulis untuk mengimpor riwayat."/>
   return <>
-    <Heading back title="Impor riwayat pekerjaan" description="Masukkan hasil pemeriksaan dan perbaikan atau pemeliharaan yang sudah dilaksanakan."/>
+    <PageHeader crumbs={[{label:'Tugas',route:{view:'tasks'}},{label:'Riwayat',route:{view:'tasks',kind:'history'}}]} current="Impor riwayat" title="Impor riwayat pekerjaan" description="Masukkan hasil pemeriksaan dan perbaikan atau pemeliharaan yang sudah dilaksanakan sebelum aplikasi ini dipakai."/>
     <Panel title="1. Isi template Excel" description="Gunakan ID ruang dan petugas dari lembar referensi dalam template.">
       <Button variant="outline" asChild><a className="notAJAX" href={url(w.config.watch,{tab:'history_template'})} download><Download data-icon="inline-start"/>Unduh template Excel</a></Button>
       <p className="mt-4 text-sm text-muted-foreground">Isi lembar Pemeriksaan dan Tindak_lanjut. Hubungkan keduanya dengan nomor pemeriksaan dan nomor butir. Petunjuk dan contoh tersedia di dalam template.</p>
@@ -58,7 +58,7 @@ export function HistoryImportPage() {
     </Panel>}
     {saved&&<Panel title="Riwayat berhasil diimpor">
       <p role="status">{saved.inspections} pemeriksaan dan {saved.actions} pekerjaan tersimpan.</p>
-      <div className="mt-4 flex flex-wrap gap-3"><Button onClick={()=>w.go({view:'tasks',history:'1',owner:'all'})}>Lihat riwayat pemeriksaan</Button>{saved.review>0&&<Button variant="outline" onClick={()=>w.go({view:'tasks',kind:'review'})}>Lihat antrean verifikasi</Button>}<Button variant="outline" onClick={()=>{setSaved(undefined);setFile(undefined);setError('')}}>Impor berkas lain</Button></div>
+      <div className="mt-4 flex flex-wrap gap-3"><Button onClick={()=>w.go({view:'tasks',kind:'history',owner:'all'})}>Lihat riwayat pemeriksaan</Button>{saved.review>0&&<Button variant="outline" onClick={()=>w.go({view:'tasks',kind:'review'})}>Lihat antrean verifikasi</Button>}<Button variant="outline" onClick={()=>{setSaved(undefined);setFile(undefined);setError('')}}>Impor berkas lain</Button></div>
     </Panel>}
   </>
 }
