@@ -8,10 +8,10 @@ use PDO;
 use RuntimeException;
 
 /**
- * Rekap Sarpras: eleven indicators of the library's facilities, each computed from the inventory
+ * Rekap Sarpras: eleven aspects of the library's facilities, each computed from the inventory
  * (room area and functions, item categories and conditions), the software register, the figures
  * kept in the `inventory_sarpras` setting (sivitas, bandwidth), and supervision history. Each
- * indicator reports the level its data reaches (a = Sangat baik … d = Kurang), with the checks
+ * aspect reports the level its data reaches (a = Sangat baik … d = Kurang), with the checks
  * that decided it, so the library can see what is missing.
  */
 final class Sarpras
@@ -279,7 +279,7 @@ final class Sarpras
         return $total > 0 ? round($part * 100 / $total, 1) : null;
     }
 
-    /** a: more than 75 %, b: 51–75 %, c: 50 %, d: below 50 % (the percentage scale used by every percentage indicator). */
+    /** a: more than 75 %, b: 51–75 %, c: 50 %, d: below 50 % (the percentage scale used by every percentage aspect). */
     private static function percentLevel(?float $pct): ?string
     {
         if ($pct === null) return null;
@@ -313,7 +313,7 @@ final class Sarpras
     }
 
     /**
-     * @return array{generated_at:string,settings:array,indicators:list<array>,summary:array}
+     * @return array{generated_at:string,settings:array,aspects:list<array>,summary:array}
      */
     public static function recap(PDO $db, Supervision $watch): array
     {
@@ -328,7 +328,7 @@ final class Sarpras
             $basic = array_values(array_filter($codes, static fn($c) => (self::ROOM_FUNCTIONS[$c]['group'] ?? '') === 'dasar'));
             return [$basic, array_values(array_diff($codes, $basic))];
         };
-        $indicators = [];
+        $aspects = [];
 
         // 1. Luas gedung atau ruang
         $roomArea = 0.0; $measured = 0;
@@ -336,7 +336,7 @@ final class Sarpras
         $area = (float) $settings['building_area'] > 0 ? (float) $settings['building_area'] : $roomArea;
         $ratio = $settings['sivitas'] > 0 && $area > 0 ? $area / $settings['sivitas'] : null;
         $large = $area > 750 || ($ratio !== null && $ratio > 0.5);
-        $indicators[] = [
+        $aspects[] = [
             'no' => 1, 'section' => 'Gedung dan ruang', 'title' => 'Luas gedung atau ruang perpustakaan',
             'value' => $area > 0 ? self::fmt($area, $area == floor($area) ? 0 : 2) . ' m²' . ($ratio !== null ? ' · ' . self::fmt($ratio, 2) . ' m²/sivitas' : '') : 'Belum diisi',
             'level' => $area <= 0 ? null : ($large && $settings['designed'] ? 'a' : ($large ? 'b' : ($area >= 750 || ($ratio !== null && $ratio >= 0.5) ? 'c' : 'd'))),
@@ -355,7 +355,7 @@ final class Sarpras
         $present = array_values(array_unique(array_merge(...array_values($roomFunctions ?: [[]]))));
         [$basic, $support] = $split($present);
         $classified = count(array_filter($roomFunctions));
-        $indicators[] = [
+        $aspects[] = [
             'no' => 2, 'section' => 'Gedung dan ruang', 'title' => 'Ruang atau area layanan perpustakaan',
             'value' => count($basic) . ' dari 4 area dasar · ' . count($support) . ' area pendukung',
             'level' => $classified === 0 ? null : (count($basic) < 4 ? 'd' : (count($support) > 1 ? 'a' : (count($support) === 1 ? 'b' : 'c'))),
@@ -373,7 +373,7 @@ final class Sarpras
         $good = count(array_filter($items, static fn($i) => $i['item_condition'] === 'B'));
         $fair = count(array_filter($items, static fn($i) => $i['item_condition'] === 'KB'));
         $pct = self::pct($good, count($items));
-        $indicators[] = [
+        $aspects[] = [
             'no' => 3, 'section' => 'Kondisi sarana dan prasarana', 'title' => 'Sarana dan prasarana berfungsi baik',
             'value' => $pct === null ? 'Belum ada barang' : self::fmt($pct, 1) . '% berfungsi baik',
             'level' => self::percentLevel($pct),
@@ -396,7 +396,7 @@ final class Sarpras
         // 4. Perabot dan peralatan
         [$fBasic, $fSupport] = $split($served(['perabot', 'peralatan']));
         $furnished = count(array_filter($items, static fn($i) => in_array($i['category'], ['perabot', 'peralatan'], true)));
-        $indicators[] = [
+        $aspects[] = [
             'no' => 4, 'section' => 'Perabot dan peralatan', 'title' => 'Perabot dan peralatan per fungsi layanan',
             'value' => count($fBasic) . ' dari 4 fungsi dasar · ' . count($fSupport) . ' fungsi pendukung',
             'level' => $furnished === 0 || $classified === 0 ? null : (count($fBasic) < 4 ? 'd' : (count($fSupport) > 4 ? 'a' : (count($fSupport) >= 3 ? 'b' : 'c'))),
@@ -413,7 +413,7 @@ final class Sarpras
         $withComputer = $served(['komputer']);
         $computerPct = self::pct(count(array_intersect($withComputer, $present)), count($present));
         $computers = count(array_filter($items, static fn($i) => $i['category'] === 'komputer'));
-        $indicators[] = [
+        $aspects[] = [
             'no' => 5, 'section' => 'Perangkat TI dan multimedia', 'title' => 'Komputer untuk mendukung fungsi layanan',
             'value' => $computerPct === null ? 'Belum ada fungsi ruang' : self::fmt($computerPct, 1) . '% fungsi layanan',
             'level' => $computers === 0 ? ($present ? 'd' : null) : self::percentLevel($computerPct),
@@ -426,7 +426,7 @@ final class Sarpras
         // 6. Jaringan internet
         $perUser = $settings['bandwidth_users'] > 0 && $settings['bandwidth_mbps'] > 0 ? $settings['bandwidth_mbps'] / $settings['bandwidth_users'] : null;
         $all = $settings['bandwidth_coverage'] === 'all';
-        $indicators[] = [
+        $aspects[] = [
             'no' => 6, 'section' => 'Perangkat TI dan multimedia', 'title' => 'Ketersediaan jaringan internet',
             'value' => $perUser === null ? 'Belum diisi' : self::fmt($perUser, 2) . ' Mbps/orang · ' . mb_strtolower(self::COVERAGE[$settings['bandwidth_coverage']]),
             'level' => $perUser === null ? null : ($perUser > 5 && $all ? 'a' : ($perUser >= 4 && $all ? 'b' : ($perUser >= 3 ? 'c' : 'd'))),
@@ -442,15 +442,15 @@ final class Sarpras
 
         // 7. Perangkat multimedia
         $multimedia = self::types($items, 'multimedia');
-        $indicators[] = self::typeIndicator(7, 'Perangkat TI dan multimedia', 'Perangkat multimedia tersedia, digunakan, dan terpelihara', $multimedia,
+        $aspects[] = self::typeAspect(7, 'Perangkat TI dan multimedia', 'Perangkat multimedia tersedia, digunakan, dan terpelihara', $multimedia,
             count($multimedia) > 5 ? 'a' : (count($multimedia) >= 4 ? 'b' : (count($multimedia) === 3 ? 'c' : 'd')),
-            'Lebih dari 5 jenis perangkat multimedia yang berfungsi', 'Beri kategori Multimedia dan isi jenisnya (mis. Proyektor). Pemeliharaannya dibuktikan lewat pemeriksaan pada indikator 11.');
+            'Lebih dari 5 jenis perangkat multimedia yang berfungsi', 'Beri kategori Multimedia dan isi jenisnya (mis. Proyektor). Pemeliharaannya dibuktikan lewat pemeriksaan rutin di menu Tugas.');
 
         // 8. Legalitas perangkat lunak
         $software = self::software($db);
         $legal = count(array_filter($software, static fn($s) => self::licensed($s, $today)));
         $softwarePct = self::pct($legal, count($software));
-        $indicators[] = [
+        $aspects[] = [
             'no' => 8, 'section' => 'Perangkat TI dan multimedia', 'title' => 'Legalitas perangkat lunak',
             'value' => $softwarePct === null ? 'Belum ada aplikasi' : self::fmt($softwarePct, 1) . '% berlisensi resmi',
             'level' => self::percentLevel($softwarePct),
@@ -463,13 +463,13 @@ final class Sarpras
 
         // 9. Sarana keamanan
         $security = self::types($items, 'keamanan');
-        $indicators[] = self::typeIndicator(9, 'Keamanan dan fasilitas umum', 'Sarana keamanan dan keselamatan', $security,
+        $aspects[] = self::typeAspect(9, 'Keamanan dan fasilitas umum', 'Sarana keamanan dan keselamatan', $security,
             count($security) > 5 ? 'a' : (count($security) === 5 ? 'b' : (count($security) === 4 ? 'c' : 'd')),
             'Lebih dari 5 jenis sarana keamanan', 'Beri kategori Keamanan dan isi jenisnya (APAR, CCTV, security gate, alarm, jalur evakuasi, …).');
 
         // 10. Fasilitas umum
         $public = self::types($items, 'fasilitas_umum');
-        $indicators[] = self::typeIndicator(10, 'Keamanan dan fasilitas umum', 'Ketersediaan fasilitas umum', $public,
+        $aspects[] = self::typeAspect(10, 'Keamanan dan fasilitas umum', 'Ketersediaan fasilitas umum', $public,
             count($public) > 6 ? 'a' : (count($public) === 6 ? 'b' : (count($public) === 5 ? 'c' : 'd')),
             'Lebih dari 6 jenis fasilitas umum', 'Catat fasilitas umum sebagai barang berkategori Fasilitas umum (toilet, musala, parkir, ruang laktasi, …).');
 
@@ -485,7 +485,7 @@ final class Sarpras
         $allRooms = count($summary['missing_rooms']) === 0 && count($rooms) > 0;
         $followed = $documented >= $findingTotal;
         $any = (int) $summary['counts']['total'] > 0;
-        $indicators[] = [
+        $aspects[] = [
             'no' => 11, 'section' => 'Pengawasan dan pemeliharaan', 'title' => 'Pengawasan berkala dan tindak lanjut',
             'value' => $planned ? "$routine dari $planned pemeriksaan terjadwal selesai" : ($any ? 'Hanya pemeriksaan insidental' : 'Belum ada pemeriksaan'),
             'level' => !$any && !$planned ? 'd' : ($routine === 0 ? 'c' : ($allRooms && $donePct !== null && $donePct >= 90 && $followed ? 'a' : 'b')),
@@ -500,17 +500,17 @@ final class Sarpras
             'fix' => 'Buat jadwal untuk ruangan yang belum, selesaikan pemeriksaan tepat waktu, dan catat pekerjaan untuk setiap temuan.',
         ];
 
-        $levels = array_count_values(array_map(static fn($i) => $i['level'] ?? '-', $indicators));
+        $levels = array_count_values(array_map(static fn($i) => $i['level'] ?? '-', $aspects));
         return [
             'generated_at' => date('Y-m-d H:i:s'),
             'settings' => $settings,
-            'indicators' => $indicators,
+            'aspects' => $aspects,
             'summary' => ['a' => $levels['a'] ?? 0, 'b' => $levels['b'] ?? 0, 'c' => $levels['c'] ?? 0, 'd' => $levels['d'] ?? 0, 'empty' => $levels['-'] ?? 0],
             'counts' => ['rooms' => count($rooms), 'items' => count($items), 'uncategorized' => count(array_filter($items, static fn($i) => $i['category'] === null)), 'unclassified_rooms' => count($rooms) - $classified, 'no_area' => count($rooms) - $measured],
         ];
     }
 
-    private static function typeIndicator(int $no, string $section, string $title, array $types, string $level, string $check, string $fix): array
+    private static function typeAspect(int $no, string $section, string $title, array $types, string $level, string $check, string $fix): array
     {
         return [
             'no' => $no, 'section' => $section, 'title' => $title,

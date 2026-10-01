@@ -31,34 +31,34 @@ final class SarprasPdf
             PdfDocuments::identity($context['documents'] ?? PdfDocuments::DEFAULTS, 'sarpras', ['date' => $date], $date)
         );
         $h .= $t::abstract(
-            'Rekap ini menyajikan kondisi sarana dan prasarana perpustakaan dalam sebelas indikator, dihitung dari data inventaris ruangan dan barang, '
+            'Rekap ini menyajikan kondisi sarana dan prasarana perpustakaan, dihitung dari data inventaris ruangan dan barang, '
             . 'register perangkat lunak, data jaringan, serta riwayat pengawasan dan pemeliharaan pada tanggal ' . PdfLayout::date($date) . '. '
-            . 'Sebanyak <b>' . (int) $s['a'] . ' indikator</b> berada pada tingkat Sangat baik, ' . (int) $s['b'] . ' Baik, ' . (int) $s['c'] . ' Cukup, dan ' . (int) $s['d'] . ' Kurang'
-            . ((int) $s['empty'] ? ', sedangkan ' . (int) $s['empty'] . ' indikator belum memiliki data' : '') . '.'
+            . 'Dari ' . count($recap['aspects']) . ' aspek yang direkap, <b>' . (int) $s['a'] . '</b> dalam kondisi Sangat baik, ' . (int) $s['b'] . ' Baik, ' . (int) $s['c'] . ' Cukup, dan ' . (int) $s['d'] . ' Kurang'
+            . ((int) $s['empty'] ? ', sedangkan ' . (int) $s['empty'] . ' aspek belum memiliki data' : '') . '.'
         );
 
         $h .= $t::section('Ikhtisar');
         $overview = [];
-        foreach ($recap['indicators'] as $indicator) {
-            $overview[] = [(string) $indicator['no'], self::e($indicator['title']), self::e($indicator['value']), self::level($indicator['level'])];
+        foreach ($recap['aspects'] as $aspect) {
+            $overview[] = [(string) $aspect['no'], self::e($aspect['title']), self::e($aspect['value']), self::level($aspect['level'])];
         }
-        $h .= $t::table('Capaian indikator sarana dan prasarana', [['No.', 'r'], 'Indikator', 'Capaian', 'Tingkat'], $overview);
+        $h .= $t::table('Ringkasan kondisi sarana dan prasarana', [['No.', 'r'], 'Aspek', 'Capaian', 'Kondisi'], $overview);
 
         $section = '';
-        foreach ($recap['indicators'] as $indicator) {
-            if ($indicator['section'] !== $section) {
-                $section = $indicator['section'];
+        foreach ($recap['aspects'] as $aspect) {
+            if ($aspect['section'] !== $section) {
+                $section = $aspect['section'];
                 $h .= $t::section($section);
             }
-            $h .= $t::subsection($indicator['title']);
-            $h .= $t::paragraph('Capaian: <b>' . self::e($indicator['value']) . '</b>, tingkat <b>' . self::level($indicator['level']) . '</b>. ' . self::e($indicator['basis']));
-            $checks = array_map(static fn($c) => [self::e($c['label']), $c['ok'] ? 'Terpenuhi' : 'Belum'], $indicator['checks']);
-            $h .= $t::table('Pemenuhan: ' . mb_strtolower($indicator['title']), ['Butir', ['Status', 'c']], $checks);
-            if ($indicator['rows']) {
-                $rows = array_map(static fn($r) => array_map([self::class, 'e'], $r), array_slice($indicator['rows'], 0, self::ROW_LIMIT));
-                $h .= $t::table('Rincian: ' . mb_strtolower($indicator['title']), $indicator['columns'], $rows, '', '8.8pt');
-                if (count($indicator['rows']) > self::ROW_LIMIT) {
-                    $h .= '<p class="small">Ditampilkan ' . self::ROW_LIMIT . ' dari ' . count($indicator['rows']) . ' baris.</p>';
+            $h .= $t::subsection($aspect['title']);
+            $h .= $t::paragraph('Capaian: <b>' . self::e($aspect['value']) . '</b>, kondisi <b>' . self::level($aspect['level']) . '</b>. ' . self::e($aspect['basis']));
+            $checks = array_map(static fn($c) => [self::e($c['label']), $c['ok'] ? 'Terpenuhi' : 'Belum'], $aspect['checks']);
+            $h .= $t::table('Syarat: ' . mb_strtolower($aspect['title']), ['Syarat', ['Status', 'c']], $checks);
+            if ($aspect['rows']) {
+                $rows = array_map(static fn($r) => array_map([self::class, 'e'], $r), array_slice($aspect['rows'], 0, self::ROW_LIMIT));
+                $h .= $t::table('Rincian: ' . mb_strtolower($aspect['title']), $aspect['columns'], $rows, '', '8.8pt');
+                if (count($aspect['rows']) > self::ROW_LIMIT) {
+                    $h .= '<p class="small">Ditampilkan ' . self::ROW_LIMIT . ' dari ' . count($aspect['rows']) . ' baris.</p>';
                 }
             }
         }

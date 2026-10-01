@@ -1,6 +1,6 @@
 <?php
 /**
- * Stock Take → Rekap Sarpras: eleven indicators of the library's facilities computed from the
+ * Stock Take → Rekap Sarpras: eleven aspects of the library's facilities computed from the
  * inventory, plus the figures that do not live in it (sivitas, building area, bandwidth with its
  * evidence) and the register of software the library runs.
  *

@@ -15,7 +15,7 @@ import {
 import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
-import { Card, CardContent, CardHeader, CardTitle, CardAction, CardDescription } from "./components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardAction } from "./components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./components/ui/accordion";
 import { Tabs, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./components/ui/table";
@@ -36,7 +36,7 @@ import { ActionBar, Blank, Choice, ErrorBox, Loading, PageHeader, Panel, Pdf, St
 import { Confirm, usePage } from "./settings";
 
 type Level = "a" | "b" | "c" | "d";
-type Indicator = {
+type Aspect = {
   no: number;
   section: string;
   title: string;
@@ -72,7 +72,7 @@ type Settings = {
 type Data = {
   recap: {
     generated_at: string;
-    indicators: Indicator[];
+    aspects: Aspect[];
     summary: Record<Level | "empty", number>;
     counts: { rooms: number; items: number; uncategorized: number; unclassified_rooms: number; no_area: number };
   };
@@ -103,11 +103,10 @@ function LevelBadge({ level, levels }: { level: Level | null; levels: Record<Lev
   );
 }
 
-function IndicatorCard({ indicator: x, levels }: { indicator: Indicator; levels: Record<Level, string> }) {
+function AspectCard({ aspect: x, levels }: { aspect: Aspect; levels: Record<Level, string> }) {
   return (
     <Card>
       <CardHeader>
-        <CardDescription>Indikator {x.no}</CardDescription>
         <CardTitle className="leading-snug">{x.title}</CardTitle>
         <CardAction>
           <LevelBadge level={x.level} levels={levels} />
@@ -174,13 +173,13 @@ function IndicatorCard({ indicator: x, levels }: { indicator: Indicator; levels:
 
 function Recap({ data }: { data: Data }) {
   const w = useWorkspace();
-  const { summary, counts, indicators } = data.recap;
+  const { summary, counts, aspects } = data.recap;
   const gaps = [
     counts.no_area > 0 && `${counts.no_area} ruangan belum diisi luasnya`,
     counts.unclassified_rooms > 0 && `${counts.unclassified_rooms} ruangan belum diisi fungsinya`,
     counts.uncategorized > 0 && `${counts.uncategorized} dari ${counts.items} barang belum berkategori`,
   ].filter(Boolean) as string[];
-  const sections = indicators.reduce<Record<string, Indicator[]>>((all, x) => ((all[x.section] ||= []).push(x), all), {});
+  const sections = aspects.reduce<Record<string, Aspect[]>>((all, x) => ((all[x.section] ||= []).push(x), all), {});
   return (
     <>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
@@ -211,7 +210,7 @@ function Recap({ data }: { data: Data }) {
           <h2 className="text-lg font-semibold tracking-tight">{section}</h2>
           <div className="grid gap-4 lg:grid-cols-2">
             {list.map((x) => (
-              <IndicatorCard key={x.no} indicator={x} levels={data.levels} />
+              <AspectCard key={x.no} aspect={x} levels={data.levels} />
             ))}
           </div>
         </section>
@@ -561,7 +560,7 @@ export function SarprasPage() {
     <>
       <PageHeader
         title="Rekap Sarpras"
-        description="Capaian sarana dan prasarana perpustakaan dalam sebelas indikator, dihitung dari data ruangan, barang, perangkat lunak, jaringan, serta pengawasan dan pemeliharaan."
+        description="Kondisi sarana dan prasarana perpustakaan, dihitung dari data ruangan, barang, perangkat lunak, jaringan, serta pengawasan dan pemeliharaan."
         meta={data && <span className="text-xs text-muted-foreground">Dihitung {dateLabel(data.recap.generated_at)}</span>}
         actions={<Pdf label="Cetak rekap" href={(style) => url(w.config.page!, { pdf: style })} />}
       />
