@@ -243,7 +243,7 @@ export function App({ config, host }: { config: Config; host: HTMLElement }) {
             <span className="flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground">
               <Package className="size-3.5" />
             </span>
-            Inventaris Perpustakaan
+            Klaras Inven
           </span>
           <div className="flex items-center gap-2">
             {syncing && (

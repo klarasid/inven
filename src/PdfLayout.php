@@ -199,7 +199,7 @@ final class PdfLayout
         ]);
         $pdf->SetTitle($title);
         $pdf->SetAuthor(self::institution()['name']);
-        $pdf->SetCreator('Inventaris Barang Perpustakaan');
+        $pdf->SetCreator('Klaras Inven');
         $pdf->SetHTMLFooter($footer);
         return $pdf;
     }

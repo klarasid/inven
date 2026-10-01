@@ -1,18 +1,18 @@
 <?php
 /**
- * Plugin Name: Inventaris Barang Perpustakaan
- * Plugin URI: https://github.com/idoalit/slims-inventarisasi-barang-plugin
- * Description: Pencatatan inventaris barang per lokasi/ruangan dan pencetakan Kartu Inventaris Ruangan dalam format PDF.
+ * Plugin Name: Klaras Inven
+ * Plugin URI: https://github.com/klarasid/inven
+ * Description: Inventaris barang, pengawasan, dan pemeliharaan sarana prasarana perpustakaan: ruangan dan barang, Kartu Inventaris Ruangan, jadwal pemeriksaan, laporan kerusakan, label QR, dan laporan PDF.
  * Version: 2.1.0
- * Author: Waris Agung Widodo
- * Author URI: https://github.com/idoalit
+ * Author: KlarasID
+ * Author URI: https://github.com/klarasid
  */
 
 use SLiMS\Plugins;
 
 defined('INDEX_AUTH') || die('Direct access not allowed!');
 
-Plugins::group('Inventaris Barang', function() {
+Plugins::group('Klaras Inven', function() {
     foreach ([
         ['Tugas','inspection.php','Pemeriksaan, tindak lanjut, dan verifikasi.'],
         ['Ruangan & Barang','index.php','Kelola ruangan, barang, dan kartu inventaris.'],

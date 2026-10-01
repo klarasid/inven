@@ -1,4 +1,6 @@
-# Inventaris Barang Perpustakaan
+# Klaras Inven
+
+Plugin SLiMS dari [KlarasID](https://github.com/klarasid) untuk inventaris barang, pengawasan, dan pemeliharaan sarana prasarana perpustakaan.
 
 Plugin SLiMS 9 untuk mencatat inventaris barang per lokasi/ruangan dan mencetak **Kartu Inventaris Ruangan** dalam PDF. Halaman awal menampilkan daftar ruangan; daftar barang baru muncul setelah ruangan dipilih.
 
@@ -12,7 +14,7 @@ Plugin SLiMS 9 untuk mencatat inventaris barang per lokasi/ruangan dan mencetak 
    ```
 
 3. Pastikan direktori cache SLiMS (`files/cache` pada konfigurasi standar) dapat ditulis oleh proses PHP.
-4. Masuk sebagai administrator, buka **System → Plugins**, lalu aktifkan **Inventaris Barang Perpustakaan**. Migrasi plugin membuat tabel `inventory_locations` dan `inventory_items` serta menambahkan referensi ke master lokasi perpustakaan (`mst_location`). Migrasi versi 3 membuat tabel metadata foto `inventory_item_photos`. Migrasi versi 4 memindahkan foto dari penyimpanan BLOB versi sebelumnya ke folder gambar, jika sudah ada.
+4. Masuk sebagai administrator, buka **System → Plugins**, lalu aktifkan **Klaras Inven**. Migrasi plugin membuat tabel `inventory_locations` dan `inventory_items` serta menambahkan referensi ke master lokasi perpustakaan (`mst_location`). Migrasi versi 3 membuat tabel metadata foto `inventory_item_photos`. Migrasi versi 4 memindahkan foto dari penyimpanan BLOB versi sebelumnya ke folder gambar, jika sudah ada.
 5. Buka **Stock Take → Inventaris Barang**.
 
 Pada pembaruan instalasi lama, jalankan migrasi plugin melalui **System → Plugins**. Migrasi versi 2 menambahkan referensi master lokasi tanpa menghapus data lama. Hubungkan ruangan yang sudah ada melalui ikon edit pada daftar lokasi. Saat memperbarui ke versi 1.3.0, jalankan semua migrasi hingga versi 4 sebelum menggunakan form barang atau galeri foto. Jika versi 3 dengan kolom BLOB sudah dijalankan, migrasi versi 4 memindahkan foto lama dan menghapus kolom BLOB jika seluruh foto berhasil dipindahkan. Jika data foto lama rusak, data itu dipertahankan untuk pemulihan dan ditampilkan sebagai foto yang tidak dapat dibaca; unggahan baru tetap disimpan ke folder. Unggah ulang sumber foto aslinya dan hapus entri rusak melalui tombol **Hapus Foto**. Cadangkan database sebelum migrasi; rollback otomatis migrasi versi 4 tidak tersedia.
@@ -23,7 +25,7 @@ Pada versi 1.3.1, jalankan migrasi hingga versi 5 melalui **System → Plugins**
 
 ## Memperbarui plugin
 
-Unduh `inventaris-barang-<versi>.zip` dari halaman [Releases](https://github.com/idoalit/slims-inventarisasi-barang-plugin/releases), cadangkan database, lalu ekstrak dan timpa folder `plugins/inventaris-barang`. Paket rilis sudah berisi dependensi PHP (tanpa perlu Composer) dan aset yang sudah dibangun. Buka **System → Plugins** untuk menjalankan migrasi bila ada.
+Unduh `klaras-inven-<versi>.zip` dari halaman [Releases](https://github.com/klarasid/inven/releases), cadangkan database, lalu ekstrak dan timpa folder `plugins/inventaris-barang`. Paket rilis sudah berisi dependensi PHP (tanpa perlu Composer) dan aset yang sudah dibangun. Buka **System → Plugins** untuk menjalankan migrasi bila ada.
 
 Aplikasi memeriksa rilis terbaru di GitHub dan menampilkan **Versi X tersedia** di kepala aplikasi bagi pengguna dengan hak tulis, lengkap dengan catatan rilis dan tautan unduh. Hasil pemeriksaan disimpan 12 jam di tabel `setting` (`inventory_update_check`); jika GitHub tidak dapat dihubungi, pemeriksaan diulang setelah 1 jam tanpa mengganggu aplikasi. Rilis *pre-release* tidak ditawarkan. Server memerlukan ekstensi PHP cURL dan akses keluar ke `api.github.com`.
 

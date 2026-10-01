@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Release helper for the Inventaris Barang SLiMS plugin.
+# Release helper for the Klaras Inven SLiMS plugin.
 #
 #   tools/release.sh <version>      Prepare a release locally: set the version, rebuild the frontend,
 #                                   commit "Release v<version>" and tag v<version>. Push to publish:
 #                                   git push origin main --follow-tags
-#   tools/release.sh package        Build dist/inventaris-barang-<version>.zip (+ .sha256) from HEAD.
+#   tools/release.sh package        Build dist/klaras-inven-<version>.zip (+ .sha256) from HEAD.
 #                                   Run by .github/workflows/release.yml on tag push; also safe locally.
 #
 # The version lives in one place, the "Version:" line of inventory.plugin.php, which SLiMS reads and
@@ -13,7 +13,8 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 ROOT=$(pwd)
-PLUGIN=inventaris-barang          # folder name SLiMS serves assets from (plugins/inventaris-barang/)
+PLUGIN=inventaris-barang          # folder name SLiMS serves assets from (plugins/inventaris-barang/); kept for existing installs
+ARCHIVE=klaras-inven             # release file name: klaras-inven-<version>.zip
 HEADER=inventory.plugin.php
 
 die() { echo "Galat: $*" >&2; exit 1; }
@@ -79,7 +80,7 @@ package() {
   echo "Uji asap paket…"
   php tools/smoke.php "$stage/$PLUGIN" || die "uji asap gagal; paket tidak dibuat."
 
-  local zipfile=$dist/$PLUGIN-$version.zip
+  local zipfile=$dist/$ARCHIVE-$version.zip
   rm -f "$zipfile" "$zipfile.sha256"
   (cd "$stage" && zip -q -r -X "$zipfile" "$PLUGIN")
   (cd "$dist" && shasum -a 256 "$(basename "$zipfile")" > "$(basename "$zipfile").sha256")

@@ -19,7 +19,7 @@ header('X-Content-Type-Options: nosniff');
 function inventory_pdf_log(string $message, string $action): void
 {
     try {
-        writeLog('staff', (string) ($_SESSION['uid'] ?? '0'), 'Inventaris Barang', $message, 'stock_take', $action);
+        writeLog('staff', (string) ($_SESSION['uid'] ?? '0'), 'Klaras Inven', $message, 'stock_take', $action);
     } catch (Throwable $exception) {
         error_log('Inventory PDF audit log error: ' . $exception->getMessage());
     }

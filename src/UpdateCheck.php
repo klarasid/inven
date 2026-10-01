@@ -77,7 +77,7 @@ final class UpdateCheck
             CURLOPT_CONNECTTIMEOUT => 3,
             CURLOPT_TIMEOUT => 5,
             CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_HTTPHEADER => ['Accept: application/vnd.github+json', 'User-Agent: slims-inventaris-barang-update-check', 'X-GitHub-Api-Version: 2022-11-28'],
+            CURLOPT_HTTPHEADER => ['Accept: application/vnd.github+json', 'User-Agent: klaras-inven-update-check', 'X-GitHub-Api-Version: 2022-11-28'],
         ]);
         $body = curl_exec($curl);
         $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
@@ -88,7 +88,7 @@ final class UpdateCheck
         if (!is_array($data) || !isset($data['tag_name'])) return false;
         $download = null;
         foreach ((array) ($data['assets'] ?? []) as $asset) {
-            if (preg_match('/\Ainventaris-barang-.*\.zip\z/', (string) ($asset['name'] ?? ''))) { $download = (string) $asset['browser_download_url']; break; }
+            if (preg_match('/\A(?:klaras-inven|inventaris-barang)-.*\.zip\z/', (string) ($asset['name'] ?? ''))) { $download = (string) $asset['browser_download_url']; break; }
         }
         return [
             'version' => ltrim((string) $data['tag_name'], 'vV'),

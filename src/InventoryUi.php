@@ -4,7 +4,7 @@ namespace SLiMS\Plugins\Inventory;
 final class InventoryUi
 {
     public const MENUS = [
-        'inventory' => ['index.php', 'Inventaris Barang', 'Kelola ruangan, barang, dan kartu inventaris.'],
+        'inventory' => ['index.php', 'Klaras Inven', 'Kelola ruangan, barang, dan kartu inventaris.'],
         'setup' => ['checklist-and-schedule.php', 'Checklist & Jadwal', 'Siapkan checklist dan atur pemeriksaan rutin ruangan.'],
         'inspections' => ['inspection.php', 'Pemeriksaan', 'Catat hasil pemeriksaan dan lengkapi bukti setiap butir.'],
         'findings' => ['findings-and-follow-up.php', 'Temuan & Tindak Lanjut', 'Pantau pekerjaan hingga hasilnya selesai diverifikasi.'],

@@ -1,5 +1,5 @@
 {
-    "name": "idoalit/slims-inventarisasi-barang-plugin",
+    "name": "klarasid/inven",
     "description": "SLiMS plugin for managing library room inventory and printing inventory cards as PDF.",
     "type": "slims-plugin",
     "license": "GPL-3.0-or-later",

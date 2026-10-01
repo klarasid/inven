@@ -168,7 +168,7 @@ function inventory_log(string $recordId, string $message, string $action): void
 {
     try {
         $suffix = $recordId === '' ? '' : ' Rekaman #' . $recordId . '.';
-        writeLog('staff', (string) ($_SESSION['uid'] ?? '0'), 'Inventaris Barang', $message . $suffix, 'stock_take', $action);
+        writeLog('staff', (string) ($_SESSION['uid'] ?? '0'), 'Klaras Inven', $message . $suffix, 'stock_take', $action);
     } catch (Throwable $exception) {
         error_log('Inventory audit log error: ' . $exception->getMessage());
     }
@@ -469,7 +469,7 @@ if ($isPhotoSave || $isPhotoDelete) {
 
 // Native datagrid deletion submits into SLiMS' hidden iframe.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['itemAction'])) {
-    utility::jsToastr('Inventaris Barang', $message, $messageType === 'danger' ? 'error' : 'success');
+    utility::jsToastr('Klaras Inven', $message, $messageType === 'danger' ? 'error' : 'success');
     $returnParams = ($_GET['action'] ?? '') === 'view_location'
         ? ['action' => 'view_location', 'location_id' => (int) ($_GET['location_id'] ?? 0), 'keywords' => (string) ($_GET['keywords'] ?? '')]
         : ['slims_location_id' => (string) ($_GET['slims_location_id'] ?? '')];

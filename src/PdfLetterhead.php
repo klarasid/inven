@@ -91,7 +91,7 @@ final class PdfLetterhead
         $pdf->SetDocTemplate(Letterheads::printFile($t, $tempDir), empty($t['first_only']));
         $pdf->SetTitle($title);
         $pdf->SetAuthor(PdfLayout::institution()['name']);
-        $pdf->SetCreator('Inventaris Barang Perpustakaan');
+        $pdf->SetCreator('Klaras Inven');
         return $pdf;
     }
 }

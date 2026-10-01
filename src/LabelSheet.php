@@ -86,7 +86,7 @@ final class LabelSheet
             'default_font' => 'dejavusanscondensed',
         ]);
         $pdf->SetTitle($title);
-        $pdf->SetCreator('Inventaris Barang Perpustakaan');
+        $pdf->SetCreator('Klaras Inven');
         return $pdf;
     }
 }
