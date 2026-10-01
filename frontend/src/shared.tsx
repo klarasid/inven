@@ -11,6 +11,7 @@ import {
   Search as SearchIcon,
   Undo2,
   ChevronDown,
+  Stamp,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "./components/ui/button";
@@ -43,6 +44,7 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
 } from "./components/ui/dropdown-menu";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardAction } from "./components/ui/card";
 import {
@@ -453,7 +455,7 @@ export function Pdf({
   /** PDF address per style, for pages outside the supervision reports. */
   href?: (style: string) => string;
 }) {
-  const { config } = useWorkspace();
+  const { config, go } = useWorkspace();
   const [letterheads, setLetterheads] = useState<{ id: string; name: string }[]>();
   if (room)
     return (
@@ -502,6 +504,15 @@ export function Pdf({
             </DropdownMenuItem>
           ))}
         </DropdownMenuGroup>
+        {config.write && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="gap-2 px-2 py-1.5" onSelect={() => go({ view: "print-settings" })}>
+              <Stamp />
+              Kelola template kop…
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

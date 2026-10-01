@@ -340,7 +340,7 @@ final class Sarpras
             'no' => 1, 'section' => 'Gedung dan ruang', 'title' => 'Luas gedung atau ruang perpustakaan',
             'value' => $area > 0 ? self::fmt($area, $area == floor($area) ? 0 : 2) . ' m²' . ($ratio !== null ? ' · ' . self::fmt($ratio, 2) . ' m²/sivitas' : '') : 'Belum diisi',
             'level' => $area <= 0 ? null : ($large && $settings['designed'] ? 'a' : ($large ? 'b' : ($area >= 750 || ($ratio !== null && $ratio >= 0.5) ? 'c' : 'd'))),
-            'basis' => (float) $settings['building_area'] > 0 ? 'Luas gedung dari data pendukung.' : "Jumlah luas $measured dari " . count($rooms) . ' ruangan yang sudah diisi luasnya.',
+            'basis' => (float) $settings['building_area'] > 0 ? 'Luas gedung dari menu Gedung & Jaringan.' : "Jumlah luas $measured dari " . count($rooms) . ' ruangan yang sudah diisi luasnya.',
             'checks' => [
                 ['label' => 'Luas lebih dari 750 m² atau lebih dari 0,5 m² per sivitas', 'ok' => $large],
                 ['label' => 'Jumlah sivitas akademika diisi', 'ok' => $settings['sivitas'] > 0],
@@ -348,7 +348,8 @@ final class Sarpras
             ],
             'rows' => array_map(static fn($r) => [$r['room_name'], $r['area_m2'] === null ? '—' : self::fmt((float) $r['area_m2'], 2) . ' m²'], $rooms),
             'columns' => ['Ruangan', 'Luas'],
-            'fix' => 'Isi luas tiap ruangan di Ruangan & Barang, atau isi luas gedung dan jumlah sivitas di Data pendukung.',
+            'fix' => 'Isi luas tiap ruangan di Ruangan & Barang, atau isi luas gedung dan jumlah sivitas di Gedung & Jaringan.',
+            'sources' => ['inventory', 'facility'],
         ];
 
         // 2. Ruang atau area layanan
@@ -367,6 +368,7 @@ final class Sarpras
             'rows' => array_map(static fn($r) => [$r['room_name'], implode(', ', array_map($label, array_filter(explode(',', (string) $r['room_functions'])))) ?: '—'], $rooms),
             'columns' => ['Ruangan', 'Fungsi'],
             'fix' => 'Pilih fungsi tiap ruangan (bisa lebih dari satu) di formulir ruangan.',
+            'sources' => ['inventory'],
         ];
 
         // 3. Sarana dan prasarana berfungsi baik
@@ -381,6 +383,7 @@ final class Sarpras
             'checks' => [['label' => 'Lebih dari 75% barang dalam kondisi Baik', 'ok' => $pct !== null && $pct > 75]],
             'rows' => [], 'columns' => [],
             'fix' => 'Perbarui kondisi barang setelah pemeriksaan, atau perbaiki barang yang rusak.',
+            'sources' => ['inventory'],
         ];
 
         // Functions served by working items of some categories, through the rooms they stand in.
@@ -407,6 +410,7 @@ final class Sarpras
             ),
             'rows' => [], 'columns' => [],
             'fix' => 'Beri kategori Perabot atau Peralatan pada barang, dan isi fungsi ruangannya.',
+            'sources' => ['inventory'],
         ];
 
         // 5. Komputer per fungsi layanan
@@ -421,6 +425,7 @@ final class Sarpras
             'checks' => array_map(static fn($code) => ['label' => self::ROOM_FUNCTIONS[$code]['label'], 'ok' => in_array($code, $withComputer, true)], $present),
             'rows' => [], 'columns' => [],
             'fix' => 'Beri kategori Komputer pada PC dan laptop layanan, lalu pastikan fungsi ruangannya terisi.',
+            'sources' => ['inventory'],
         ];
 
         // 6. Jaringan internet
@@ -430,14 +435,15 @@ final class Sarpras
             'no' => 6, 'section' => 'Perangkat TI dan multimedia', 'title' => 'Ketersediaan jaringan internet',
             'value' => $perUser === null ? 'Belum diisi' : self::fmt($perUser, 2) . ' Mbps/orang · ' . mb_strtolower(self::COVERAGE[$settings['bandwidth_coverage']]),
             'level' => $perUser === null ? null : ($perUser > 5 && $all ? 'a' : ($perUser >= 4 && $all ? 'b' : ($perUser >= 3 ? 'c' : 'd'))),
-            'basis' => $perUser === null ? 'Isi bandwidth dan jumlah pengguna serentak di Data pendukung.' : self::fmt((float) $settings['bandwidth_mbps'], 0) . ' Mbps untuk ' . $settings['bandwidth_users'] . ' pengguna serentak' . ($settings['bandwidth_date'] ? ', diukur ' . PdfLayout::date($settings['bandwidth_date']) : '') . '.',
+            'basis' => $perUser === null ? 'Isi bandwidth dan jumlah pengguna serentak di menu Gedung & Jaringan.' : self::fmt((float) $settings['bandwidth_mbps'], 0) . ' Mbps untuk ' . $settings['bandwidth_users'] . ' pengguna serentak' . ($settings['bandwidth_date'] ? ', diukur ' . PdfLayout::date($settings['bandwidth_date']) : '') . '.',
             'checks' => [
                 ['label' => 'Lebih dari 5 Mbps per orang', 'ok' => $perUser !== null && $perUser > 5],
                 ['label' => 'Menjangkau seluruh area layanan', 'ok' => $all && $perUser !== null],
                 ['label' => 'Bukti pengukuran diunggah', 'ok' => is_array($settings['evidence'])],
             ],
             'rows' => [], 'columns' => [],
-            'fix' => 'Ukur bandwidth saat jam sibuk, lalu isi dan unggah buktinya di Data pendukung.',
+            'fix' => 'Ukur bandwidth saat jam sibuk, lalu isi dan unggah buktinya di Gedung & Jaringan.',
+            'sources' => ['facility'],
         ];
 
         // 7. Perangkat multimedia
@@ -458,7 +464,8 @@ final class Sarpras
             'checks' => [['label' => 'Lebih dari 75% aplikasi berlisensi resmi', 'ok' => $softwarePct !== null && $softwarePct > 75]],
             'rows' => array_map(static fn($s) => [$s['name'] . ($s['version'] !== '' ? ' ' . $s['version'] : ''), (self::LICENCES[$s['licence']] ?? $s['licence']) . (self::licensed($s, $today) ? '' : ($s['licence'] === 'tidak' ? '' : ' (kedaluwarsa)'))], $software),
             'columns' => ['Aplikasi', 'Lisensi'],
-            'fix' => 'Catat semua aplikasi yang dipakai perpustakaan di tab Perangkat lunak.',
+            'fix' => 'Catat semua aplikasi yang dipakai perpustakaan di menu Perangkat Lunak.',
+            'sources' => ['software'],
         ];
 
         // 9. Sarana keamanan
@@ -498,6 +505,7 @@ final class Sarpras
             'rows' => array_map(static fn($r) => [$r['room_name'], (string) ($r['location_name'] ?? '—')], $summary['missing_rooms']),
             'columns' => ['Ruangan tanpa jadwal', 'Perpustakaan'],
             'fix' => 'Buat jadwal untuk ruangan yang belum, selesaikan pemeriksaan tepat waktu, dan catat pekerjaan untuk setiap temuan.',
+            'sources' => ['schedules'],
         ];
 
         $levels = array_count_values(array_map(static fn($i) => $i['level'] ?? '-', $aspects));
@@ -521,6 +529,7 @@ final class Sarpras
             'rows' => array_map(static fn($t) => [$t['type'], (string) $t['count']], $types),
             'columns' => ['Jenis', 'Jumlah'],
             'fix' => $fix,
+            'sources' => ['inventory'],
         ];
     }
 }

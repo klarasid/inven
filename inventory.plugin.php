@@ -12,18 +12,30 @@ use SLiMS\Plugins;
 
 defined('INDEX_AUTH') || die('Direct access not allowed!');
 
-Plugins::group('Klaras Inven', function() {
-    foreach ([
+// Three sections in the Stock Take sidebar: the daily work, the data it rests on, and settings.
+foreach ([
+    'Klaras Inven' => [
         ['Rekap Sarpras','sarpras.php','Capaian sarana dan prasarana dari data ruangan, barang, dan pengawasan.'],
         ['Tugas','inspection.php','Pemeriksaan, tindak lanjut, dan verifikasi.'],
-        ['Ruangan & Barang','index.php','Kelola ruangan, barang, dan kartu inventaris.'],
         ['Jadwal','checklist-and-schedule.php','Atur pemeriksaan rutin ruangan.'],
         ['Checklist','findings-and-follow-up.php','Kelola checklist dan riwayat versinya.'],
         ['Laporan','report.php','Tinjau capaian dan cetak laporan periode.'],
+    ],
+    'Data Sarpras' => [
+        ['Ruangan & Barang','index.php','Kelola ruangan, barang, dan kartu inventaris.'],
+        ['Perangkat Lunak','software.php','Catat aplikasi yang dipakai perpustakaan beserta lisensinya.'],
+        ['Gedung & Jaringan','facility.php','Isi jumlah sivitas, luas gedung, dan bandwidth internet beserta buktinya.'],
+    ],
+    'Pengaturan Inven' => [
+        ['Pengaturan Cetak','print-settings.php','Kelola template kop institusi dan nomor dokumen PDF.'],
         ['Aplikasi InvenSync','app.php','Izinkan aplikasi Klaras InvenSync dan kelola perangkat yang masuk.'],
         ['Data pemakaian','privacy.php','Lihat dan atur data pemakaian yang dikirim ke Klaras.'],
-    ] as [$label,$file,$description]) Plugins::registerMenu('stock_take',$label,__DIR__.'/'.$file,$description);
-});
+    ],
+] as $group => $menus) {
+    Plugins::group($group, function() use ($menus) {
+        foreach ($menus as [$label,$file,$description]) Plugins::registerMenu('stock_take',$label,__DIR__.'/'.$file,$description);
+    });
+}
 
 // Public item page for label QR codes: index.php?p=info_barang (not listed in OPAC navigation).
 Plugins::registerMenu('opac', 'Info Barang', __DIR__ . '/opac.php', 'Informasi barang inventaris dari label QR.');
