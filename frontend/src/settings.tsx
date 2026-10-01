@@ -26,20 +26,24 @@ import { useWorkspace } from "./context";
 import { formData, request, url } from "./api";
 import { Blank, ErrorBox, Loading, PageHeader, Panel } from "./shared";
 
-/** GET ?format=json on this page's own PHP file, and POST actions back to it. */
-export function usePage<T>() {
+/**
+ * GET ?format=json on a page's own PHP file, and POST actions back to it: the file that mounted
+ * the workspace, or the one given for a view that opens from other menus too.
+ */
+export function usePage<T>(endpoint?: string) {
   const { config } = useWorkspace();
+  const page = endpoint ?? config.page!;
   const [data, setData] = useState<T>();
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
-    request<{ data: T }>(url(config.page!, { format: "json" }), undefined, controller.signal)
+    request<{ data: T }>(url(page, { format: "json" }), undefined, controller.signal)
       .then((r) => setData(r.data))
       .catch((e) => e.name !== "AbortError" && setError(e.message));
     return () => controller.abort();
-  }, [config.page, revision]);
-  const post = (values: Record<string, unknown>) => request(config.page!, formData(values));
+  }, [page, revision]);
+  const post = (values: Record<string, unknown>) => request(page, formData(values));
   return { data, error, reload: () => setRevision((n) => n + 1), post };
 }
 

@@ -24,6 +24,9 @@ import { UpdateNotice } from "./updates";
 import { ReportPage } from "./report";
 import { InvenSyncPage, PrivacyPage } from "./settings";
 import { SarprasPage } from "./sarpras";
+import { SoftwarePage } from "./software";
+import { FacilityPage } from "./facility";
+import { PrintSettingsPage } from "./print-settings";
 import type { Config, Options, Route } from "./types";
 
 export function initialRoute(config: Config): Route {
@@ -226,6 +229,15 @@ export function App({ config, host }: { config: Config; host: HTMLElement }) {
       break;
     case "sarpras":
       page = <SarprasPage />;
+      break;
+    case "software":
+      page = <SoftwarePage />;
+      break;
+    case "facility":
+      page = <FacilityPage />;
+      break;
+    case "print-settings":
+      page = <PrintSettingsPage />;
       break;
     default:
       page = <ErrorBox message="Halaman tidak ditemukan." />;

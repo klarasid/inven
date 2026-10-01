@@ -11,18 +11,10 @@ import { Check } from "lucide-react";
 import { Field, FieldLabel, FieldDescription } from "./components/ui/field";
 import { Tabs, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "./components/ui/toggle-group";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "./components/ui/dialog";
 import { cn } from "./lib/utils";
 import { useWorkspace } from "./context";
 import { read, url } from "./api";
-import { ErrorBox, Loading, TextField, previewPdf } from "./shared";
+import { Blank, ErrorBox, Loading, TextField, previewPdf } from "./shared";
 
 export type Letterhead = {
   id: string;
@@ -211,6 +203,10 @@ function Editor({
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const saved = JSON.stringify(values) === JSON.stringify(template);
+  useEffect(() => {
+    w.dirty(!saved);
+    return () => w.dirty(false);
+  }, [saved]);
 
   useEffect(() => {
     let cancelled = false;
@@ -412,9 +408,9 @@ function Editor({
   );
 }
 
-export function LetterheadSettings() {
+/** Institution letterheads: upload a PDF, then set the area the report content fills. */
+export function LetterheadManager() {
   const w = useWorkspace();
-  const [open, setOpen] = useState(false);
   const [data, setData] = useState<Data>();
   const [selected, setSelected] = useState<string>();
   const [error, setError] = useState("");
@@ -430,11 +426,8 @@ export function LetterheadSettings() {
       })
       .catch((e) => setError(e.message));
   useEffect(() => {
-    if (open) {
-      setError("");
-      load();
-    }
-  }, [open]);
+    load();
+  }, []);
 
   async function upload(picked: File) {
     if (data && picked.size > data.maxBytes) {
@@ -458,87 +451,88 @@ export function LetterheadSettings() {
     }
   }
 
-  if (!w.config.write || !w.config.viewer) return null;
-  const current = data?.templates.find((t) => t.id === selected);
+  if (!data)
+    return (
+      <>
+        <ErrorBox message={error} />
+        {!error && <Loading />}
+      </>
+    );
+  const summary = (t: Letterhead) =>
+    `${t.sizes[0][0]}×${t.sizes[0][1]} mm · ${t.first_only ? "kop hlm. 1" : `${t.pages} hlm`} · ${data.bodies[t.body]}`;
+  // Changing a letterhead needs write access and the PDF viewer the area editor draws with.
+  if (!w.config.write || !w.config.viewer)
+    return data.templates.length ? (
+      <ul className="flex flex-col divide-y rounded-xl border">
+        {data.templates.map((t) => (
+          <li key={t.id} className="flex flex-col gap-0.5 px-4 py-3">
+            <span className="font-medium">{t.name}</span>
+            <span className="text-xs text-muted-foreground">{summary(t)}</span>
+          </li>
+        ))}
+      </ul>
+    ) : (
+      <Blank icon={Stamp} title="Belum ada template kop" description="Template kop yang diunggah akan tampil di sini." />
+    );
+  const current = data.templates.find((t) => t.id === selected);
   return (
     <>
-      <Button variant="outline" onClick={() => setOpen(true)}>
-        <Stamp data-icon="inline-start" />
-        Template kop
-      </Button>
-      <Dialog open={open} onOpenChange={(v) => !busy && setOpen(v)}>
-        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-5xl">
-          <DialogHeader>
-            <DialogTitle>Template kop institusi</DialogTitle>
-            <DialogDescription>
-              Unggah PDF berisi kop surat dan footer institusi, lalu tentukan area yang diisi konten laporan. Template muncul sebagai pilihan di menu Cetak PDF.
-            </DialogDescription>
-          </DialogHeader>
-          <ErrorBox message={error} />
-          {!data ? (
-            !error && <Loading />
-          ) : (
-            <div className="grid gap-5 md:grid-cols-[220px_1fr]">
-              <aside className="flex flex-col gap-3">
-                <div className="flex flex-col gap-1">
-                  {data.templates.map((t) => (
-                    <Button
-                      key={t.id}
-                      variant={t.id === selected ? "secondary" : "ghost"}
-                      className="h-auto justify-start py-2 text-left whitespace-normal"
-                      onClick={() => setSelected(t.id)}
-                    >
-                      <span className="flex min-w-0 flex-col items-start">
-                        <span className="font-medium">{t.name}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {t.sizes[0][0]}×{t.sizes[0][1]} mm · {t.first_only ? "kop hlm. 1" : `${t.pages} hlm`} · {data.bodies[t.body]}
-                        </span>
-                      </span>
-                    </Button>
-                  ))}
-                  {!data.templates.length && <p className="text-sm text-muted-foreground">Belum ada template.</p>}
-                </div>
-                <div className="flex flex-col gap-2 rounded-lg border border-dashed p-3">
-                  <Input placeholder="Nama template (opsional)" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} disabled={busy} />
-                  <Button variant="outline" disabled={busy} onClick={() => file.current?.click()}>
-                    <FileUp data-icon="inline-start" />
-                    {busy ? "Mengunggah…" : "Unggah PDF"}
-                  </Button>
-                  <input
-                    ref={file}
-                    type="file"
-                    accept="application/pdf,.pdf"
-                    className="sr-only"
-                    onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    PDF maksimal 5 MB. Halaman 1 untuk halaman pertama, halaman 2 (opsional) untuk halaman berikutnya.
-                  </p>
-                </div>
-              </aside>
-              {current ? (
-                <Editor
-                  key={current.id}
-                  template={current}
-                  bodies={data.bodies}
-                  fonts={data.fonts}
-                  onSaved={(t) => setData({ ...data, templates: data.templates.map((x) => (x.id === t.id ? t : x)) })}
-                  onDeleted={() => load()}
-                />
-              ) : (
-                <div className="flex min-h-60 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
-                  <Badge variant="outline">Unggah template untuk mulai</Badge>
-                </div>
-              )}
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" disabled={busy} onClick={() => setOpen(false)}>
-              Tutup
+      <ErrorBox message={error} />
+      <p className="text-sm text-muted-foreground">
+        Unggah PDF berisi kop surat dan footer institusi, lalu tentukan area yang diisi konten laporan. Template muncul sebagai
+        pilihan di setiap menu cetak PDF.
+      </p>
+      <div className="grid gap-5 md:grid-cols-[220px_1fr]">
+        <aside className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            {data.templates.map((t) => (
+              <Button
+                key={t.id}
+                variant={t.id === selected ? "secondary" : "ghost"}
+                className="h-auto justify-start py-2 text-left whitespace-normal"
+                onClick={() => setSelected(t.id)}
+              >
+                <span className="flex min-w-0 flex-col items-start">
+                  <span className="font-medium">{t.name}</span>
+                  <span className="text-xs text-muted-foreground">{summary(t)}</span>
+                </span>
+              </Button>
+            ))}
+            {!data.templates.length && <p className="text-sm text-muted-foreground">Belum ada template.</p>}
+          </div>
+          <div className="flex flex-col gap-2 rounded-lg border border-dashed p-3">
+            <Input placeholder="Nama template (opsional)" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} disabled={busy} />
+            <Button variant="outline" disabled={busy} onClick={() => file.current?.click()}>
+              <FileUp data-icon="inline-start" />
+              {busy ? "Mengunggah…" : "Unggah PDF"}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <input
+              ref={file}
+              type="file"
+              accept="application/pdf,.pdf"
+              className="sr-only"
+              onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])}
+            />
+            <p className="text-xs text-muted-foreground">
+              PDF maksimal 5 MB. Halaman 1 untuk halaman pertama, halaman 2 (opsional) untuk halaman berikutnya.
+            </p>
+          </div>
+        </aside>
+        {current ? (
+          <Editor
+            key={current.id}
+            template={current}
+            bodies={data.bodies}
+            fonts={data.fonts}
+            onSaved={(t) => setData({ ...data, templates: data.templates.map((x) => (x.id === t.id ? t : x)) })}
+            onDeleted={() => load()}
+          />
+        ) : (
+          <div className="flex min-h-60 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
+            <Badge variant="outline">Unggah template untuk mulai</Badge>
+          </div>
+        )}
+      </div>
     </>
   );
 }

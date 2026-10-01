@@ -65,7 +65,7 @@ final class Letterheads
     public static function find(\PDO $db, string $id): array
     {
         $template = self::all($db)[$id] ?? null;
-        if (!$template || !is_file(self::path($template))) throw new \RuntimeException('Template kop tidak ditemukan. Unggah ulang di Pengaturan template kop.');
+        if (!$template || !is_file(self::path($template))) throw new \RuntimeException('Template kop tidak ditemukan. Unggah ulang di Pengaturan Cetak.');
         return $template;
     }
 

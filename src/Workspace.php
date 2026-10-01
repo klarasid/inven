@@ -16,6 +16,8 @@ final class Workspace
             'api'=>self::endpoint('inspection.php',['workspace'=>'api']),
             'watch'=>self::endpoint('inspection.php'),
             'inventory'=>self::endpoint('index.php',['workspace'=>'save']),
+            // Pages that answer ?format=json themselves, so their views open from any menu.
+            'pages'=>['sarpras'=>self::endpoint('sarpras.php'),'software'=>self::endpoint('software.php'),'facility'=>self::endpoint('facility.php')],
             'today'=>date('Y-m-d')];
         $asset=SWB.'plugins/inventaris-barang/assets/app/';
         $version=(string)(@filemtime(dirname(__DIR__).'/assets/app/inventory-app.js')?:'2');
