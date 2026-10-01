@@ -72,6 +72,7 @@ final class Documents
             $pdf->SetAuthor($author);
         }
         $pdf->WriteHTML($html);
+        Telemetry::count('kir_pdf');
 
         return ['filename' => 'kartu-inventaris-' . self::slug((string) $location['room_name'], 'ruangan') . '.pdf', 'bytes' => $pdf->Output('', 'S'), 'count' => count($items)];
     }
@@ -116,6 +117,7 @@ final class Documents
         ], $items);
         $pdf = LabelSheet::mpdf($this->tempDir, $preset, 'Label inventaris - ' . $room['room_name']);
         $pdf->WriteHTML(LabelSheet::render($labels, $preset, 1));
+        Telemetry::count('labels_pdf');
         $name = count($items) === 1 ? ((string) $items[0]['item_code'] ?: (string) $items[0]['item_name']) : (string) $room['room_name'];
 
         return ['filename' => 'label-' . self::slug($name, 'barang') . '.pdf', 'bytes' => $pdf->Output('', 'S'), 'count' => count($items)];
@@ -140,6 +142,7 @@ final class Documents
         $html = WatchPdf::summary($filter, $watch->summary($filter, true), $rows, $context, 'latex');
         $pdf = WatchPdf::mpdf($this->tempDir, 'Laporan Pengawasan dan Pemeliharaan', 'latex');
         $pdf->WriteHTML($html);
+        Telemetry::count('report_pdf');
 
         return ['filename' => 'laporan-pengawasan-' . $filter['from'] . '-' . $filter['to'] . '.pdf', 'bytes' => $pdf->Output('', 'S'), 'count' => count($rows)];
     }

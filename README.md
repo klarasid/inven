@@ -346,3 +346,21 @@ Uji API memakai MySQL dan salinan SLiMS Connect:
 INVENTORY_TEST_DSN='mysql:host=127.0.0.1;dbname=uji' INVENTORY_TEST_USER=… INVENTORY_TEST_PASSWORD=… \
 SLIMS_CONNECT_DIR=/path/ke/slims-connect php tests/invensync_api_test.php
 ```
+
+## Data pemakaian
+
+Agar plugin gratis ini bisa terus dirawat, Klaras Inven mengirim ringkasan pemakaian ke Klaras **sekali sehari**. Pengiriman terjadi setelah halaman plugin selesai ditampilkan, jadi tidak pernah memperlambat atau menggagalkan pekerjaan.
+
+Yang dikirim:
+
+- nama perpustakaan dan alamat SLiMS;
+- versi plugin, SLiMS, PHP, dan database, serta ketersediaan ekstensi PHP dan mPDF;
+- jumlah: ruangan, barang per kondisi, foto, jadwal, pemeriksaan, temuan, sesi stock opname;
+- berapa kali fitur dipakai (KIR, label QR, laporan PDF, impor riwayat, laporan kerusakan, aplikasi InvenSync);
+- galat teknis terbaru, dengan nilai, angka, alamat surel, dan path dihapus dari pesannya.
+
+Yang **tidak pernah** dikirim: isi inventaris, nama atau kode barang, nama ruangan, data anggota, data petugas, atau apa pun yang diketik pengguna.
+
+Pengiriman aktif secara bawaan. Administrator dengan hak tulis **System** melihat pemberitahuan di halaman plugin sampai membuka **Stock Take → Data pemakaian**. Di halaman itu tampil JSON persis yang dikirim, beserta tombol **Matikan pengiriman**. Saat dimatikan, Klaras diberi tahu sekali, lalu menghapus nama dan alamat perpustakaan dari datanya.
+
+Tujuan pengiriman bawaan adalah `https://panel.klaras.id`. Untuk pengembangan, arahkan ke panel lain dengan konstanta atau variabel lingkungan `KLARAS_PANEL_URL`.

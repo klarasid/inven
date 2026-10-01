@@ -20,6 +20,7 @@ Plugins::group('Klaras Inven', function() {
         ['Checklist','findings-and-follow-up.php','Kelola checklist dan riwayat versinya.'],
         ['Laporan','report.php','Tinjau capaian dan cetak laporan periode.'],
         ['Aplikasi InvenSync','app.php','Izinkan aplikasi Klaras InvenSync dan kelola perangkat yang masuk.'],
+        ['Data pemakaian','privacy.php','Lihat dan atur data pemakaian yang dikirim ke Klaras.'],
     ] as [$label,$file,$description]) Plugins::registerMenu('stock_take',$label,__DIR__.'/'.$file,$description);
 });
 

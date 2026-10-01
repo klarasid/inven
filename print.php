@@ -130,12 +130,18 @@ try {
     $contents = $pdf->Output('', 'S');
 
     inventory_pdf_log('Kartu inventaris lokasi #' . $locationId . ' dicetak (' . count($items) . ' barang).', 'Print');
+    require_once __DIR__ . '/src/UpdateCheck.php';
+    require_once __DIR__ . '/src/Telemetry.php';
+    \SLiMS\Plugins\Inventory\Telemetry::count('kir_pdf');
     header('Content-Type: application/pdf');
     header('Content-Disposition: ' . $disposition . '; filename="' . $filename . '"');
     header('Content-Length: ' . strlen($contents));
     echo $contents;
 } catch (Throwable $exception) {
     error_log('Inventory PDF error: ' . $exception->getMessage());
+    require_once __DIR__ . '/src/UpdateCheck.php';
+    require_once __DIR__ . '/src/Telemetry.php';
+    \SLiMS\Plugins\Inventory\Telemetry::error('pdf', $exception);
     http_response_code(500);
     die('PDF tidak dapat dibuat. Periksa konfigurasi mPDF dan direktori cache SLiMS.');
 }

@@ -10,6 +10,7 @@ final class Workspace
     }
     public static function shell(string $view, bool $write): void
     {
+        self::telemetryNotice();
         $config=['view'=>$view,'query'=>$_GET,'write'=>$write,'uid'=>(int)($_SESSION['uid']??0),
             'api'=>self::endpoint('inspection.php',['workspace'=>'api']),
             'watch'=>self::endpoint('inspection.php'),
@@ -21,6 +22,28 @@ final class Workspace
         // data-version ties the host to one bundle build; a newer bundle never reuses an older runtime.
         echo '<div data-inventory-app data-version="'.htmlspecialchars($version,ENT_QUOTES,'UTF-8').'" data-config="'.htmlspecialchars(json_encode($config,JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT),ENT_QUOTES,'UTF-8').'" data-css="'.htmlspecialchars($asset.'inventory-app.css?v='.$version,ENT_QUOTES,'UTF-8').'"><p role="status">Memuat inventaris…</p></div>';
         echo '<script>(function(){var s=document.createElement("script");s.src='.json_encode($asset.'inventory-app.js?v='.$version).';document.head.appendChild(s);s.onload=function(){s.remove()};s.onerror=function(){document.querySelectorAll("[data-inventory-app]").forEach(function(e){if(!e.shadowRoot)e.textContent="Aplikasi gagal dimuat. Muat ulang halaman."})}})();</script>';
+    }
+    /**
+     * The daily usage report: sent after this page has gone out, when one is due. Until an
+     * administrator has opened Data pemakaian, those who may switch it off see a notice saying
+     * what is sent and where to look.
+     */
+    private static function telemetryNotice(): void
+    {
+        require_once __DIR__.'/UpdateCheck.php';
+        require_once __DIR__.'/Telemetry.php';
+        try {
+            $db=\SLiMS\DB::getInstance();
+            Telemetry::sendLater();
+            $state=Telemetry::state($db);
+            $canManage=class_exists('utility') && \utility::havePrivilege('system','w');
+            if(!$canManage || $state['notice_ack'] || !$state['enabled']) return;
+            echo '<div class="alert alert-info" role="status" style="margin:0 0 1rem">'
+                .'<strong>Klaras Inven mengirim data pemakaian.</strong> Sekali sehari, plugin ini mengirim nama perpustakaan, alamat SLiMS, versi, jumlah ruangan dan barang, pemakaian fitur, serta ringkasan galat ke Klaras untuk merawat plugin ini. Isi inventaris, nama barang, data anggota, dan data petugas tidak pernah dikirim. '
+                .'<a href="'.htmlspecialchars(self::endpoint('privacy.php'),ENT_QUOTES,'UTF-8').'">Lihat data yang dikirim atau matikan</a></div>';
+        } catch (\Throwable $error) {
+            // The notice is never worth breaking the page for.
+        }
     }
     /** LIKE patterns for a snapshot's assignee id, as a quoted string (pre-PHP 8.1 data) or a JSON integer. */
     private static function assigneeLike(int $uid): array

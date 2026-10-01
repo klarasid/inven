@@ -113,6 +113,9 @@ try {
     $contents = $pdf->Output('', 'S');
 
     inventory_label_log('Label inventaris lokasi #' . $locationId . ' dicetak (' . count($items) . ' label, ' . $preset . ', QR ' . ($public ? 'publik' : 'petugas') . ').', 'Print');
+    require_once __DIR__ . '/src/UpdateCheck.php';
+    require_once __DIR__ . '/src/Telemetry.php';
+    \SLiMS\Plugins\Inventory\Telemetry::count('labels_pdf');
     $safeRoom = trim((string) preg_replace('/[^A-Za-z0-9_-]+/', '-', (string) $room['room_name']), '-') ?: 'lokasi';
     header('Content-Type: application/pdf');
     header('Content-Disposition: inline; filename="label-' . strtolower($safeRoom) . '.pdf"');
@@ -120,6 +123,9 @@ try {
     echo $contents;
 } catch (Throwable $exception) {
     error_log('Inventory label error: ' . $exception->getMessage());
+    require_once __DIR__ . '/src/UpdateCheck.php';
+    require_once __DIR__ . '/src/Telemetry.php';
+    \SLiMS\Plugins\Inventory\Telemetry::error('pdf', $exception);
     http_response_code(500);
     die('Label tidak dapat dibuat. Periksa konfigurasi mPDF dan direktori cache SLiMS.');
 }

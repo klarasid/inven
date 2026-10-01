@@ -10,6 +10,8 @@ require_once __DIR__ . '/ItemPhotos.php';
 require_once __DIR__ . '/WatchRecurrence.php';
 require_once __DIR__ . '/Supervision.php';
 require_once __DIR__ . '/WatchView.php';
+require_once __DIR__ . '/UpdateCheck.php';
+require_once __DIR__ . '/Telemetry.php';
 use SLiMS\Plugins\Inventory\Supervision;
 use SLiMS\Plugins\Inventory\WatchView;
 use SLiMS\Plugins\Inventory\InventoryUi;
@@ -167,6 +169,7 @@ try {
         $pdf=\SLiMS\Plugins\Inventory\WatchPdf::mpdf(SB.FLS.DS.'cache',$title,$style);
         $pdf->WriteHTML($html);
         watch_log('Print','Laporan pengawasan '.($id?'#'.$id:Supervision::json($filter)));
+        \SLiMS\Plugins\Inventory\Telemetry::count($id?'inspection_pdf':'report_pdf');
         $pdf->Output($file,'I'); return;
     }
     WatchView::render($watch,$base,$tab,$filter,$canWrite,$csrf,$_GET);
@@ -175,7 +178,7 @@ try {
     $expected=$e instanceof RuntimeException && !($e instanceof PDOException);
     $schema=$e instanceof PDOException && in_array((int)($e->errorInfo[1]??0),[1146,1054],true);
     $message=$schema?'Struktur pengawasan belum tersedia. Jalankan migrasi plugin hingga versi 7 melalui System → Plugins.':($expected?$e->getMessage():'Operasi pengawasan gagal. Periksa log PHP.');
-    if (!$expected) error_log('Supervision error: '.$e->getMessage());
+    if (!$expected) { error_log('Supervision error: '.$e->getMessage()); \SLiMS\Plugins\Inventory\Telemetry::error($tab==='pdf'?'pdf':($e instanceof PDOException?'db':'workspace'),$e); }
     if ($isPost || $tab==='scope' || ($_GET['workspace']??'')==='api') { header('Content-Type: application/json; charset=utf-8'); if (http_response_code()<400) http_response_code(str_contains($message,'sesi lain')?409:422); echo json_encode(['ok'=>false,'message'=>$message,'errors'=>\SLiMS\Plugins\Inventory\WorkspaceRequests::errors($message)]); }
     else { if ($tab==='photo') http_response_code(404); header('Content-Type: text/html; charset=utf-8'); echo '<div class="alert alert-danger">'.htmlspecialchars($message,ENT_QUOTES,'UTF-8').'</div>'; }
 }

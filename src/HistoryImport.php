@@ -123,7 +123,9 @@ final class HistoryImport
                     if($a['verifier'])$this->event($id,$fid,'import_verification','Verifikasi historis oleh '.$a['verifier']['name'].' (ID '.$a['verifier']['id'].') pada '.$a['verified'].': '.$a['verification_notes'],$actor);
                 }
             }
-            $this->db->commit();return self::preview($groups)+['ids'=>$ids];
+            $this->db->commit();
+            require_once __DIR__.'/UpdateCheck.php';require_once __DIR__.'/Telemetry.php';Telemetry::count('history_import');
+            return self::preview($groups)+['ids'=>$ids];
         } catch(\Throwable $e) {if($this->db->inTransaction())$this->db->rollBack();throw $e;}
         finally {$this->query('SELECT RELEASE_LOCK(?)',[$lock]);}
     }

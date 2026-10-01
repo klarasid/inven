@@ -29,6 +29,8 @@ $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 require_once __DIR__ . '/src/ItemPhotos.php';
 require_once __DIR__ . '/src/ItemCodes.php';
 require_once __DIR__ . '/src/PhotoStorage.php';
+require_once __DIR__ . '/src/UpdateCheck.php';
+require_once __DIR__ . '/src/Telemetry.php';
 $photoStorage = new \SLiMS\Plugins\Inventory\PhotoStorage();
 $createdPhotos = [];
 $removedPhotos = [];
@@ -416,6 +418,7 @@ try {
     if ($db->inTransaction()) { $db->rollBack(); }
     $photoStorage->cleanup($createdPhotos);
     error_log('Inventory database error: ' . $exception->getMessage());
+    \SLiMS\Plugins\Inventory\Telemetry::error('db', $exception);
     $locations = [];
     $masterLocations = [];
     $messageType = 'danger';
@@ -437,6 +440,7 @@ try {
     if ($db->inTransaction()) { $db->rollBack(); }
     $photoStorage->cleanup($createdPhotos);
     error_log('Inventory application error: ' . $exception->getMessage());
+    \SLiMS\Plugins\Inventory\Telemetry::error('other', $exception);
     $locations = [];
     $masterLocations = [];
     $messageType = 'danger';
