@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="400" viewBox="0 0 1280 400" role="img" aria-labelledby="title desc">
+  <title id="title">Klaras Inven</title>
+  <desc id="desc">Plugin SLiMS untuk inventaris barang, pemeriksaan ruangan, dan stock opname perpustakaan.</desc>
+  <defs>
+    <clipPath id="card"><rect x="40" y="32" width="1200" height="336" rx="24"/></clipPath>
+    <!-- One fluted glass column: dark on its left edge, lit on its right. -->
+    <linearGradient id="flute" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0A1404"/>
+      <stop offset=".55" stop-color="#4E8A10"/>
+      <stop offset=".92" stop-color="#B8F23A"/>
+      <stop offset="1" stop-color="#E4FF8A"/>
+    </linearGradient>
+    <linearGradient id="fade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#050806"/>
+      <stop offset=".6" stop-color="#050806" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#050806" stop-opacity=".55"/>
+      <stop offset=".35" stop-color="#050806" stop-opacity="0"/>
+      <stop offset=".8" stop-color="#050806" stop-opacity="0"/>
+      <stop offset="1" stop-color="#050806" stop-opacity=".5"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="1" cy=".7" r=".6">
+      <stop offset="0" stop-color="#B8F23A" stop-opacity=".35"/>
+      <stop offset="1" stop-color="#B8F23A" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity=".07"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity=".03"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="400" fill="#16302D"/>
+
+  <g clip-path="url(#card)">
+    <rect x="40" y="32" width="1200" height="336" fill="#050806"/>
+    <!-- Fluted glass columns, brighter toward the right edge. -->
+    <g>
+      <rect x="720" y="32" width="56" height="336" fill="url(#flute)" opacity=".10"/>
+      <rect x="776" y="32" width="56" height="336" fill="url(#flute)" opacity=".16"/>
+      <rect x="832" y="32" width="56" height="336" fill="url(#flute)" opacity=".24"/>
+      <rect x="888" y="32" width="56" height="336" fill="url(#flute)" opacity=".34"/>
+      <rect x="944" y="32" width="56" height="336" fill="url(#flute)" opacity=".46"/>
+      <rect x="1000" y="32" width="56" height="336" fill="url(#flute)" opacity=".6"/>
+      <rect x="1056" y="32" width="56" height="336" fill="url(#flute)" opacity=".74"/>
+      <rect x="1112" y="32" width="56" height="336" fill="url(#flute)" opacity=".88"/>
+      <rect x="1168" y="32" width="72" height="336" fill="url(#flute)"/>
+      <!-- Lit edge where one column meets the next. -->
+      <rect x="774" y="32" width="2" height="336" fill="#E4FF8A" opacity="0.1"/>
+      <rect x="830" y="32" width="2" height="336" fill="#E4FF8A" opacity="0.16"/>
+      <rect x="886" y="32" width="2" height="336" fill="#E4FF8A" opacity="0.24"/>
+      <rect x="942" y="32" width="2" height="336" fill="#E4FF8A" opacity="0.32"/>
+      <rect x="998" y="32" width="2" height="336" fill="#E4FF8A" opacity="0.42"/>
+      <rect x="1054" y="32" width="2" height="336" fill="#E4FF8A" opacity="0.52"/>
+      <rect x="1110" y="32" width="2" height="336" fill="#E4FF8A" opacity="0.62"/>
+      <rect x="1166" y="32" width="2" height="336" fill="#E4FF8A" opacity="0.72"/>
+    </g>
+    <rect x="40" y="32" width="1200" height="336" fill="url(#glow)"/>
+    <rect x="40" y="32" width="1200" height="336" fill="url(#fade)"/>
+    <rect x="40" y="32" width="1200" height="336" fill="url(#shade)"/>
+  </g>
+  <rect x="40.5" y="32.5" width="1199" height="335" rx="23.5" fill="none" stroke="#FFFFFF" stroke-opacity=".06"/>
+
+  <g font-family="Inter, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+    <text x="120" y="96" font-size="15" font-weight="600" fill="#B8F23A" letter-spacing="2">KLARAS INVEN · PLUGIN SLiMS</text>
+    <text x="120" y="148" font-size="42" font-weight="500" fill="#F4F6F2" letter-spacing="-0.8">Sarana perpustakaan tercatat rapi,</text>
+    <text x="120" y="198" font-size="42" font-weight="500" fill="#F4F6F2" letter-spacing="-0.8">dari <tspan fill="#B8F23A">ruangan</tspan> hingga laporan</text>
+
+    <!-- Feature cards -->
+    <g transform="translate(120 244)">
+      <rect width="300" height="76" rx="14" fill="url(#glass)" stroke="#FFFFFF" stroke-opacity=".09"/>
+      <rect x="16" y="18" width="40" height="40" rx="10" fill="#B8F23A"/>
+      <g transform="translate(24 26)" fill="none" stroke="#0A1404" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round">
+        <rect x="1" y="3" width="22" height="6" rx="1.5"/>
+        <path d="M3 9v10a1.5 1.5 0 0 0 1.5 1.5h15A1.5 1.5 0 0 0 21 19V9M9 13h6"/>
+      </g>
+      <text x="72" y="34" font-size="15" fill="#E3F7B5">Catat barang per ruangan</text>
+      <text x="72" y="55" font-size="15" fill="#E3F7B5">dan cetak KIR</text>
+    </g>
+    <g transform="translate(436 244)">
+      <rect width="300" height="76" rx="14" fill="url(#glass)" stroke="#FFFFFF" stroke-opacity=".09"/>
+      <rect x="16" y="18" width="40" height="40" rx="10" fill="#B8F23A"/>
+      <g transform="translate(24 26)" fill="none" stroke="#0A1404" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round">
+        <path d="M2 5l2.5 2.5L9 3M2 15l2.5 2.5L9 13M13 6h9M13 16h9"/>
+      </g>
+      <text x="72" y="34" font-size="15" fill="#E3F7B5">Periksa ruangan dan</text>
+      <text x="72" y="55" font-size="15" fill="#E3F7B5">tindak lanjuti temuan</text>
+    </g>
+    <g transform="translate(752 244)">
+      <rect width="300" height="76" rx="14" fill="url(#glass)" stroke="#FFFFFF" stroke-opacity=".12"/>
+      <rect x="16" y="18" width="40" height="40" rx="10" fill="#B8F23A"/>
+      <g transform="translate(24 26)" fill="none" stroke="#0A1404" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round">
+        <rect x="2" y="2" width="7" height="7" rx="1.5"/>
+        <rect x="15" y="2" width="7" height="7" rx="1.5"/>
+        <rect x="2" y="15" width="7" height="7" rx="1.5"/>
+        <path d="M15 15h3v3M22 15v7h-4M15 20v2"/>
+      </g>
+      <text x="72" y="34" font-size="15" fill="#E3F7B5">Pindai QR dan stock opname</text>
+      <text x="72" y="55" font-size="15" fill="#E3F7B5">lewat aplikasi InvenSync</text>
+    </g>
+  </g>
+</svg>
