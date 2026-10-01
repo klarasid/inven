@@ -52,8 +52,6 @@ final class SarprasPdf
             }
             $h .= $t::subsection($aspect['title']);
             $h .= $t::paragraph('Capaian: <b>' . self::e($aspect['value']) . '</b>, kondisi <b>' . self::level($aspect['level']) . '</b>. ' . self::e($aspect['basis']));
-            $checks = array_map(static fn($c) => [self::e($c['label']), $c['ok'] ? 'Terpenuhi' : 'Belum'], $aspect['checks']);
-            $h .= $t::table('Syarat: ' . mb_strtolower($aspect['title']), ['Syarat', ['Status', 'c']], $checks);
             if ($aspect['rows']) {
                 $rows = array_map(static fn($r) => array_map([self::class, 'e'], $r), array_slice($aspect['rows'], 0, self::ROW_LIMIT));
                 $h .= $t::table('Rincian: ' . mb_strtolower($aspect['title']), $aspect['columns'], $rows, '', '8.8pt');
