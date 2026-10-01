@@ -104,7 +104,7 @@ Rekap dihitung dari data yang sudah ada, jadi lengkapi dulu klasifikasinya:
 3. Di **Gedung & Jaringan**, isi jumlah sivitas akademika, luas gedung bila diketahui, serta bandwidth beserta bukti pengukurannya.
 4. Di **Perangkat Lunak**, catat aplikasi yang dipakai beserta jenis lisensinya.
 
-Setiap aspek menampilkan kondisinya (Sangat baik, Baik, Cukup, Kurang), syarat yang sudah dan belum terpenuhi, rincian datanya, dan saran perbaikan dengan tombol menuju menu tempat datanya diisi. Klik **Cetak rekap** untuk PDF dalam gaya LaTeX, ISO, atau kop institusi.
+Bagian atas halaman merangkum berapa aspek yang sudah baik dan berapa yang perlu perhatian; saring daftarnya dengan tombol **Perlu perhatian**, **Belum ada data**, atau **Sudah baik**. Setiap aspek menampilkan kondisinya (Sangat baik, Baik, Cukup, Kurang). Klik sebuah aspek untuk melihat syarat yang sudah dan belum terpenuhi, rincian datanya, dan saran perbaikan dengan tombol menuju menu tempat datanya diisi. Klik **Cetak rekap** untuk PDF dalam gaya LaTeX, ISO, atau kop institusi.
 
 ### Label QR code
 

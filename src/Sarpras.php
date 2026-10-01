@@ -19,6 +19,13 @@ final class Sarpras
     public const SETTING = 'inventory_sarpras';
     public const LEVELS = ['a' => 'Sangat baik', 'b' => 'Baik', 'c' => 'Cukup', 'd' => 'Kurang'];
 
+    /** Short names of the aspects for the screen; the printed recap keeps their full titles. */
+    private const NAMES = [
+        1 => 'Luas gedung dan ruang', 2 => 'Area layanan', 3 => 'Kondisi barang', 4 => 'Perabot dan peralatan',
+        5 => 'Komputer layanan', 6 => 'Jaringan internet', 7 => 'Perangkat multimedia', 8 => 'Lisensi perangkat lunak',
+        9 => 'Keamanan dan keselamatan', 10 => 'Fasilitas umum', 11 => 'Pemeriksaan rutin dan tindak lanjut',
+    ];
+
     /** Room service functions: the four basic service areas first, then supporting ones. */
     public const ROOM_FUNCTIONS = [
         'koleksi' => ['label' => 'Area koleksi', 'group' => 'dasar'],
@@ -367,7 +374,7 @@ final class Sarpras
             ),
             'rows' => array_map(static fn($r) => [$r['room_name'], implode(', ', array_map($label, array_filter(explode(',', (string) $r['room_functions'])))) ?: '—'], $rooms),
             'columns' => ['Ruangan', 'Fungsi'],
-            'fix' => 'Pilih fungsi tiap ruangan (bisa lebih dari satu) di formulir ruangan.',
+            'fix' => 'Buka tiap ruangan, lalu pilih fungsinya. Satu ruangan boleh memiliki lebih dari satu fungsi.',
             'sources' => ['inventory'],
         ];
 
@@ -450,7 +457,7 @@ final class Sarpras
         $multimedia = self::types($items, 'multimedia');
         $aspects[] = self::typeAspect(7, 'Perangkat TI dan multimedia', 'Perangkat multimedia tersedia, digunakan, dan terpelihara', $multimedia,
             count($multimedia) > 5 ? 'a' : (count($multimedia) >= 4 ? 'b' : (count($multimedia) === 3 ? 'c' : 'd')),
-            'Lebih dari 5 jenis perangkat multimedia yang berfungsi', 'Beri kategori Multimedia dan isi jenisnya (mis. Proyektor). Pemeliharaannya dibuktikan lewat pemeriksaan rutin di menu Tugas.');
+            'Lebih dari 5 jenis perangkat multimedia yang berfungsi', 'Beri kategori Multimedia pada barang, lalu isi jenisnya, misalnya Proyektor. Pemeliharaannya tercatat lewat pemeriksaan rutin di menu Tugas.');
 
         // 8. Legalitas perangkat lunak
         $software = self::software($db);
@@ -472,13 +479,13 @@ final class Sarpras
         $security = self::types($items, 'keamanan');
         $aspects[] = self::typeAspect(9, 'Keamanan dan fasilitas umum', 'Sarana keamanan dan keselamatan', $security,
             count($security) > 5 ? 'a' : (count($security) === 5 ? 'b' : (count($security) === 4 ? 'c' : 'd')),
-            'Lebih dari 5 jenis sarana keamanan', 'Beri kategori Keamanan dan isi jenisnya (APAR, CCTV, security gate, alarm, jalur evakuasi, …).');
+            'Lebih dari 5 jenis sarana keamanan', 'Beri kategori Keamanan pada barang, lalu isi jenisnya, misalnya APAR, CCTV, security gate, alarm, atau jalur evakuasi.');
 
         // 10. Fasilitas umum
         $public = self::types($items, 'fasilitas_umum');
         $aspects[] = self::typeAspect(10, 'Keamanan dan fasilitas umum', 'Ketersediaan fasilitas umum', $public,
             count($public) > 6 ? 'a' : (count($public) === 6 ? 'b' : (count($public) === 5 ? 'c' : 'd')),
-            'Lebih dari 6 jenis fasilitas umum', 'Catat fasilitas umum sebagai barang berkategori Fasilitas umum (toilet, musala, parkir, ruang laktasi, …).');
+            'Lebih dari 6 jenis fasilitas umum', 'Catat fasilitas umum sebagai barang berkategori Fasilitas umum, misalnya toilet, musala, parkir, atau ruang laktasi.');
 
         // 11. Pengawasan dan pemeliharaan, over the last twelve months.
         $filter = $watch->filter(['from' => (new \DateTimeImmutable('-1 year +1 day'))->format('Y-m-d'), 'to' => $today]);
@@ -508,6 +515,8 @@ final class Sarpras
             'sources' => ['schedules'],
         ];
 
+        foreach ($aspects as &$aspect) $aspect['name'] = self::NAMES[$aspect['no']];
+        unset($aspect);
         $levels = array_count_values(array_map(static fn($i) => $i['level'] ?? '-', $aspects));
         return [
             'generated_at' => date('Y-m-d H:i:s'),
