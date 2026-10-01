@@ -299,9 +299,9 @@ type Privacy = {
   csrf: string;
 };
 const results: Record<string, string> = {
-  ok: "Terkirim",
-  failed: "Gagal terkirim, dicoba lagi dalam satu jam",
-  off: "Dimatikan",
+  ok: "Berhasil dikirim",
+  failed: "Belum terkirim. Plugin akan mencoba lagi dalam 1 jam.",
+  off: "Nonaktif",
 };
 
 function InfoRow({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
@@ -340,19 +340,19 @@ export function PrivacyPage() {
   const header = (
     <PageHeader
       title="Data pemakaian"
-      description="Sekali sehari, Klaras Inven mengirim ringkasan pemakaian ke Klaras agar plugin ini bisa terus dirawat: versi mana yang dipakai, fitur apa yang berguna, dan galat apa yang perlu diperbaiki."
-      meta={data && <Badge variant={data.enabled ? "success" : "secondary"}>{data.enabled ? "Pengiriman aktif" : "Dimatikan"}</Badge>}
+      description="Bantu sempurnakan Klaras Inven. Sekali sehari, plugin mengirim ringkasan pemakaian ke Klaras: versi yang Anda pakai, fitur yang paling berguna, dan error yang perlu diperbaiki. Pengiriman dapat dinonaktifkan kapan saja."
+      meta={data && <Badge variant={data.enabled ? "success" : "secondary"}>{data.enabled ? "Aktif" : "Nonaktif"}</Badge>}
       actions={
         data?.manage &&
         (data.enabled ? (
           <Button variant="outline" disabled={busy} onClick={() => setConfirm(true)}>
             <XCircle data-icon="inline-start" />
-            Matikan pengiriman
+            Nonaktifkan
           </Button>
         ) : (
           <Button disabled={busy} onClick={() => toggle(true)}>
             <Power data-icon="inline-start" />
-            Aktifkan kembali
+            Aktifkan
           </Button>
         ))
       }
@@ -378,38 +378,38 @@ export function PrivacyPage() {
       {header}
       <Alert>
         <ShieldCheck />
-        <AlertTitle>Yang tidak pernah dikirim</AlertTitle>
+        <AlertTitle>Isi inventaris Anda tidak pernah dikirim</AlertTitle>
         <AlertDescription>
-          Isi inventaris, nama dan kode barang, data anggota, dan data petugas. Yang dikirim hanya nama perpustakaan,
-          alamat SLiMS, versi perangkat lunak, jumlah (ruangan, barang, pemeriksaan, temuan, stock opname), pemakaian
-          fitur, dan galat teknis yang sudah dibersihkan dari isinya.
+          Nama dan kode barang, nama ruangan, data anggota, dan data petugas tetap berada di SLiMS Anda. Yang dikirim
+          hanya nama perpustakaan, alamat SLiMS, versi software, jumlah data (ruangan, barang, pemeriksaan, temuan, dan
+          stock opname), fitur yang dipakai, serta info error tanpa isi datanya.
         </AlertDescription>
       </Alert>
       {!data.manage && (
         <Alert>
-          <AlertDescription>Hanya pengguna dengan hak tulis System yang bisa mematikan atau mengaktifkan pengiriman.</AlertDescription>
+          <AlertDescription>Pengaturan ini dikelola oleh administrator. Untuk mengubahnya, Anda memerlukan hak tulis System.</AlertDescription>
         </Alert>
       )}
-      <Panel title="Status pengiriman">
+      <Panel title="Status">
         <InfoRow label="Terakhir dikirim">
           {data.last_sent ? (
             <span>
               {when(data.last_sent)} · {results[data.last_result] ?? data.last_result}
             </span>
           ) : (
-            <span className="text-muted-foreground">Belum pernah</span>
+            <span className="text-muted-foreground">Belum ada data yang dikirim</span>
           )}
         </InfoRow>
-        <InfoRow label="Tujuan">
+        <InfoRow label="Dikirim ke">
           <code className="break-all rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{data.endpoint}</code>
         </InfoRow>
-        <InfoRow label="ID instalasi" hint="Acak, dibuat di SLiMS ini. Tidak terkait dengan orang mana pun.">
+        <InfoRow label="ID instalasi" hint="ID acak yang dibuat di SLiMS ini. ID ini tidak terkait dengan siapa pun.">
           <code className="break-all rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{data.install_id}</code>
         </InfoRow>
       </Panel>
       <Panel
-        title="Data yang dikirim"
-        description="Persis seperti di bawah ini, dalam format JSON."
+        title="Lihat data yang dikirim"
+        description="Inilah seluruh data yang dikirim, dalam format JSON. Tidak ada data lain."
         action={
           <Button
             size="sm"
@@ -417,8 +417,8 @@ export function PrivacyPage() {
             onClick={() =>
               navigator.clipboard
                 .writeText(json)
-                .then(() => toast.success("JSON disalin."))
-                .catch(() => toast.error("Gagal menyalin."))
+                .then(() => toast.success("Disalin ke papan klip"))
+                .catch(() => toast.error("Tidak dapat menyalin. Coba lagi."))
             }
           >
             <Copy data-icon="inline-start" />
@@ -430,9 +430,9 @@ export function PrivacyPage() {
       </Panel>
       <Confirm
         open={confirm}
-        title="Matikan pengiriman data pemakaian?"
-        description="Klaras akan diberi tahu sekali, lalu menghapus nama dan alamat perpustakaan ini dari datanya."
-        action="Matikan pengiriman"
+        title="Nonaktifkan data pemakaian?"
+        description="Plugin akan berhenti mengirim data pemakaian. Klaras diberi tahu satu kali, lalu menghapus nama dan alamat perpustakaan Anda dari datanya. Anda dapat mengaktifkannya lagi kapan saja."
+        action="Nonaktifkan"
         busy={busy}
         onCancel={() => setConfirm(false)}
         onConfirm={() => toggle(false)}
