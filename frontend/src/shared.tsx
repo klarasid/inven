@@ -160,13 +160,13 @@ export function PageHeader({
           </BreadcrumbList>
         </Breadcrumb>
       )}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex min-w-0 flex-col gap-1">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
           <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
           {description && <p className="text-sm text-muted-foreground">{description}</p>}
           {meta && <div className="mt-1 flex flex-wrap items-center gap-2">{meta}</div>}
         </div>
-        {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+        {actions && <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">{actions}</div>}
       </div>
     </header>
   );

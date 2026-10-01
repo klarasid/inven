@@ -8,10 +8,11 @@ final class Workspace
     {
         return AWB.'plugin_container.php?'.http_build_query(array_merge(['mod'=>'stock_take','id'=>md5(realpath(dirname(__DIR__).'/'.$file))],$params));
     }
-    public static function shell(string $view, bool $write): void
+    /** @param array<string,mixed> $extra page-specific settings merged into the app config */
+    public static function shell(string $view, bool $write, array $extra=[]): void
     {
         self::telemetryNotice();
-        $config=['view'=>$view,'query'=>$_GET,'write'=>$write,'uid'=>(int)($_SESSION['uid']??0),
+        $config=$extra+['view'=>$view,'query'=>$_GET,'write'=>$write,'uid'=>(int)($_SESSION['uid']??0),
             'api'=>self::endpoint('inspection.php',['workspace'=>'api']),
             'watch'=>self::endpoint('inspection.php'),
             'inventory'=>self::endpoint('index.php',['workspace'=>'save']),
@@ -38,9 +39,21 @@ final class Workspace
             $state=Telemetry::state($db);
             $canManage=class_exists('utility') && \utility::havePrivilege('system','w');
             if(!$canManage || $state['notice_ack'] || !$state['enabled']) return;
-            echo '<div class="alert alert-info" role="status" style="margin:0 0 1rem">'
-                .'<strong>Klaras Inven mengirim data pemakaian.</strong> Sekali sehari, plugin ini mengirim nama perpustakaan, alamat SLiMS, versi, jumlah ruangan dan barang, pemakaian fitur, serta ringkasan galat ke Klaras untuk merawat plugin ini. Isi inventaris, nama barang, data anggota, dan data petugas tidak pernah dikirim. '
-                .'<a href="'.htmlspecialchars(self::endpoint('privacy.php'),ENT_QUOTES,'UTF-8').'">Lihat data yang dikirim atau matikan</a></div>';
+            if(empty($_SESSION['inventory_telemetry_csrf'])) $_SESSION['inventory_telemetry_csrf']=bin2hex(random_bytes(24));
+            $privacy=self::endpoint('privacy.php');
+            // A cookie-style banner pinned to the bottom of the window. "Mengerti" records the
+            // acknowledgement, so it stays gone; opening Data pemakaian does the same.
+            echo '<div id="klaras-telemetry-banner" role="region" aria-label="Pemberitahuan data pemakaian" style="position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:1050;width:calc(100% - 32px);max-width:760px;box-sizing:border-box;display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px;padding:14px 16px;background:#18181b;color:#f4f4f5;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.25);font-size:13px;line-height:1.5">'
+                .'<div style="flex:1 1 320px;min-width:0"><strong style="display:block;margin-bottom:2px;color:#fff">Klaras Inven mengirim data pemakaian</strong>'
+                .'Sekali sehari: nama perpustakaan, alamat SLiMS, versi, jumlah ruangan dan barang, pemakaian fitur, dan ringkasan galat. Isi inventaris, data anggota, dan data petugas tidak pernah dikirim.</div>'
+                .'<div style="display:flex;gap:8px;flex:0 0 auto;margin-left:auto">'
+                .'<a href="'.htmlspecialchars($privacy,ENT_QUOTES,'UTF-8').'" class="notAJAX" style="display:inline-flex;align-items:center;padding:6px 12px;border-radius:8px;border:1px solid #3f3f46;color:#f4f4f5;text-decoration:none">Lihat atau matikan</a>'
+                .'<button type="button" data-ack style="padding:6px 14px;border-radius:8px;border:0;background:#fafafa;color:#18181b;font-weight:600;cursor:pointer">Mengerti</button>'
+                .'</div></div>'
+                .'<script>(function(){var b=document.querySelectorAll("#klaras-telemetry-banner");for(var i=0;i<b.length-1;i++)b[i].remove();var el=b[b.length-1];if(!el)return;'
+                .'el.querySelector("a").addEventListener("click",function(e){e.preventDefault();el.remove();if(window.jQuery)jQuery("#mainContent").simbioAJAX(this.href);else location.href=this.href});'
+                .'el.querySelector("[data-ack]").addEventListener("click",function(){el.remove();var f=new FormData();f.append("acknowledge","1");f.append("csrf",'.json_encode($_SESSION['inventory_telemetry_csrf']).');fetch('.json_encode($privacy).',{method:"POST",body:f,credentials:"same-origin"}).catch(function(){})});'
+                .'})();</script>';
         } catch (\Throwable $error) {
             // The notice is never worth breaking the page for.
         }

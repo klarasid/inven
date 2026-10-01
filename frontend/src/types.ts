@@ -1,6 +1,6 @@
 export type Id = number | string
 export type Values = Record<string, string | number | null>
-export interface Config {view:string; query:Record<string,string>; write:boolean; uid:number; api:string; watch:string; inventory:string; today:string; viewer?:string}
+export interface Config {view:string; query:Record<string,string>; write:boolean; uid:number; api:string; watch:string; inventory:string; today:string; viewer?:string; page?:string}
 export interface Options {csrf:string; inventoryCsrf:string; users:{user_id:Id;realname:string}[]; rooms:{id:Id;room_name:string;slims_location_id:string}[]; libraries:{location_id:string;location_name:string}[]; templates:{id:Id;name:string;source_id:Id|null}[]; frequencies:Record<string,string>; outcomes:Record<string,string>; priorities:Record<string,string>}
 export interface Snapshot {room_name:string; library_name:string; template_name:string; template_id:Id|null; room_id:Id; assignee:{id:Id;name:string}; items:ChecklistItem[]}
 export interface ChecklistItem {group:string;object:string;instruction:string;item_id?:Id;item_name?:string;item_code?:string}

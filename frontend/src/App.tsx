@@ -22,6 +22,7 @@ import { Reports } from "./reports";
 import { HistoryImportPage } from "./history-import";
 import { UpdateNotice } from "./updates";
 import { ReportPage } from "./report";
+import { InvenSyncPage, PrivacyPage } from "./settings";
 import type { Config, Options, Route } from "./types";
 
 export function initialRoute(config: Config): Route {
@@ -215,6 +216,12 @@ export function App({ config, host }: { config: Config; host: HTMLElement }) {
       break;
     case "reports":
       page = <Reports />;
+      break;
+    case "invensync":
+      page = <InvenSyncPage />;
+      break;
+    case "privacy":
+      page = <PrivacyPage />;
       break;
     default:
       page = <ErrorBox message="Halaman tidak ditemukan." />;
