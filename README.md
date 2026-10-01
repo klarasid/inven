@@ -103,7 +103,7 @@ Rekap dihitung dari data yang sudah ada, jadi lengkapi dulu klasifikasinya:
 
 1. Di **Ruangan & Barang**, ubah tiap ruangan dan isi **Luas (m²)** serta **fungsi ruang**. Ada empat fungsi layanan dasar (koleksi, baca, kerja staf, layanan); fungsi lainnya termasuk pendukung.
 2. Beri **Kategori** dan **Jenis** pada barang (perabot, peralatan, komputer, multimedia, keamanan, fasilitas umum). Centang beberapa barang di tabel ruangan, lalu klik **Beri kategori** untuk mengisinya sekaligus.
-3. Di **Gedung & Jaringan**, isi jumlah sivitas akademika, luas gedung bila diketahui, serta bandwidth beserta bukti pengukurannya. Bila ada beberapa lokasi, pilih lokasinya dulu.
+3. Di **Gedung & Jaringan**, isi jumlah sivitas akademika, luas gedung bila diketahui, serta bandwidth beserta bukti pengukurannya. Bila ada beberapa lokasi, pilih lokasinya dulu. Di samping formulir tampil hasilnya di Rekap Sarpras menurut data yang tersimpan.
 4. Di **Perangkat Lunak**, catat aplikasi yang dipakai beserta jenis lisensinya.
 
 Rekap dihitung per **lokasi perpustakaan** (lokasi SLiMS yang dipilih pada tiap ruangan). Perpustakaan dengan satu lokasi langsung melihat rekapnya. Bila ruangan tersebar di beberapa lokasi:

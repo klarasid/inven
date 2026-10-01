@@ -198,7 +198,12 @@ if (($_GET['format'] ?? '') === 'json') {
             if ($places === null) $places = Sarpras::locations($db);
             $settings = Sarpras::settings($db, $library);
             $settings['evidence'] = is_array($settings['evidence']) ? ['name' => $settings['evidence']['name'], 'mime' => $settings['evidence']['mime'], 'uploaded_at' => $settings['evidence']['uploaded_at']] : null;
-            $json(['ok' => true, 'data' => ['settings' => $settings, 'coverage' => Sarpras::COVERAGE, 'locations' => $places['locations'], 'location' => $place()] + $access]);
+            // What these figures amount to in the recap, so the page can show the effect of saving them.
+            $result = [];
+            foreach (Sarpras::recap($db, $watch(), $library)['aspects'] as $aspect) {
+                if (in_array('facility', $aspect['sources'], true)) $result[] = array_intersect_key($aspect, array_flip(['no', 'name', 'value', 'level', 'checks']));
+            }
+            $json(['ok' => true, 'data' => ['settings' => $settings, 'coverage' => Sarpras::COVERAGE, 'result' => $result, 'levels' => Sarpras::LEVELS, 'locations' => $places['locations'], 'location' => $place()] + $access]);
         } else {
             if ($places === null) $places = Sarpras::locations($db);
             $shared = ['levels' => Sarpras::LEVELS, 'locations' => $places['rooms'] > 0 ? $places['locations'] : [], 'unassigned' => $places['unassigned']];

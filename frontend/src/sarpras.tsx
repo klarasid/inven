@@ -23,7 +23,7 @@ import { Blank, ErrorBox, Loading, LocationSelect, PageHeader, Pdf } from "./sha
 import { usePage } from "./settings";
 import type { Route } from "./types";
 
-type Level = "a" | "b" | "c" | "d";
+export type Level = "a" | "b" | "c" | "d";
 type Source = "inventory" | "facility" | "software" | "schedules";
 type Aspect = {
   no: number;
@@ -78,7 +78,7 @@ const tone: Record<Level, "success" | "info" | "warning" | "destructive"> = {
   d: "destructive",
 };
 
-function LevelBadge({ level, levels }: { level: Level | null; levels: Record<Level, string> }) {
+export function LevelBadge({ level, levels }: { level: Level | null; levels: Record<Level, string> }) {
   return level ? <Badge variant={tone[level]}>{levels[level]}</Badge> : <Badge variant="outline">Belum ada data</Badge>;
 }
 
