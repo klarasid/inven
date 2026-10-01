@@ -380,8 +380,34 @@ function Supporting({ data, post, reload }: { data: Data; post: (v: Record<strin
 
 const blank = { name: "", version: "", purpose: "", licence: "", licence_ref: "", valid_until: "", installs: "1", notes: "" };
 
+/** Common uses of library software; anything else is typed in after choosing Lainnya. */
+const purposes = [
+  "Otomasi perpustakaan",
+  "Repositori institusi",
+  "Jurnal elektronik",
+  "E-book dan basis data daring",
+  "Sistem operasi",
+  "Aplikasi perkantoran",
+  "Antivirus dan keamanan",
+  "Peramban web",
+  "Pembaca PDF",
+  "Pemindaian dan OCR",
+  "Manajemen referensi",
+  "Deteksi plagiarisme",
+  "Desain grafis",
+  "Penyuntingan foto dan video",
+  "Pemutar multimedia",
+  "Komunikasi dan rapat daring",
+  "Penyimpanan cloud",
+  "Basis data",
+  "Server dan jaringan",
+  "Akses jarak jauh",
+  "Kompresi berkas",
+];
+const OTHER = "__other";
+
 function SoftwareRegister({ data, post, reload }: { data: Data; post: (v: Record<string, unknown>) => Promise<{ message?: string }>; reload: () => void }) {
-  const [editing, setEditing] = useState<{ id: number; values: typeof blank } | null>(null);
+  const [editing, setEditing] = useState<{ id: number; values: typeof blank; other: boolean } | null>(null);
   const [remove, setRemove] = useState<Software | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -411,7 +437,7 @@ function SoftwareRegister({ data, post, reload }: { data: Data; post: (v: Record
         description="Semua aplikasi yang dipakai untuk operasional perpustakaan, termasuk sistem operasi dan aplikasi perkantoran. Open source dihitung berlisensi resmi."
         action={
           data.write && (
-            <Button size="sm" onClick={() => setEditing({ id: 0, values: blank })}>
+            <Button size="sm" onClick={() => setEditing({ id: 0, values: blank, other: false })}>
               <Plus data-icon="inline-start" />
               Tambah aplikasi
             </Button>
@@ -468,6 +494,7 @@ function SoftwareRegister({ data, post, reload }: { data: Data; post: (v: Record
                                 installs: String(s.installs),
                                 notes: s.notes || "",
                               },
+                              other: s.purpose !== "" && !purposes.includes(s.purpose),
                             })
                           }
                         >
@@ -499,7 +526,24 @@ function SoftwareRegister({ data, post, reload }: { data: Data; post: (v: Record
                   <TextField label="Nama aplikasi" required value={editing.values.name} onChange={(v) => set("name", v)} placeholder="Contoh: SLiMS" />
                   <TextField label="Versi" value={editing.values.version} onChange={(v) => set("version", v)} />
                 </FieldGroup>
-                <TextField label="Kegunaan" value={editing.values.purpose} onChange={(v) => set("purpose", v)} placeholder="Contoh: Otomasi perpustakaan" />
+                <Choice
+                  label="Kegunaan"
+                  value={editing.other ? OTHER : editing.values.purpose}
+                  placeholder="Pilih kegunaan"
+                  onChange={(v) =>
+                    setEditing((e) => e && { ...e, other: v === OTHER, values: { ...e.values, purpose: v === OTHER ? "" : v } })
+                  }
+                  items={[...purposes.map((p) => ({ value: p, label: p })), { value: OTHER, label: "Lainnya…" }]}
+                />
+                {editing.other && (
+                  <TextField
+                    label="Kegunaan lainnya"
+                    required
+                    value={editing.values.purpose}
+                    onChange={(v) => set("purpose", v)}
+                    placeholder="Tulis kegunaan aplikasi"
+                  />
+                )}
                 <FieldGroup className="grid sm:grid-cols-2">
                   <Choice
                     label="Jenis lisensi"
@@ -529,7 +573,11 @@ function SoftwareRegister({ data, post, reload }: { data: Data; post: (v: Record
             </Button>
             <Button
               disabled={busy}
-              onClick={() => editing && run({ action: "software", record_id: editing.id, ...editing.values }, () => setEditing(null))}
+              onClick={() => {
+                if (!editing) return;
+                if (editing.other && !editing.values.purpose.trim()) return setError("Tulis kegunaan aplikasi, atau pilih dari daftar.");
+                run({ action: "software", record_id: editing.id, ...editing.values }, () => setEditing(null));
+              }}
             >
               {busy ? "Menyimpan…" : "Simpan"}
             </Button>
