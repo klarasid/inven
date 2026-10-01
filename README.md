@@ -322,3 +322,25 @@ npm run build
 ```
 
 Tes integrasi membutuhkan `INVENTORY_TEST_DSN`, `INVENTORY_TEST_USER`, `INVENTORY_TEST_PASSWORD`, PDO MySQL, cURL, dan izin membuat tabel/trigger. Tes memakai tabel sementara berawalan acak `ih_test_*`, tidak mengubah tabel aplikasi, dan membersihkan fixture setelah selesai.
+
+## Aplikasi Klaras InvenSync
+
+Klaras InvenSync adalah aplikasi HP untuk petugas: mencatat dan memotret barang, memindai label QR, mengisi pemeriksaan ruangan, melapor kerusakan, dan memindai eksemplar saat stock opname SLiMS. Aplikasi bersifat opsional; semua fitur plugin tetap tersedia dari SLiMS tanpa aplikasi.
+
+Syarat:
+
+1. Plugin **SLiMS Connect** terpasang dan tertaut ke Klaras Panel (PHP 8.1 atau lebih baru). Daftarkan perpustakaan di Klaras Panel, buat API key, lalu isi di **System → SLiMS Connect**. SLiMS harus bisa dibuka lewat https.
+2. Paket perpustakaan di Klaras Panel mencakup Klaras InvenSync (saat ini gratis di semua paket).
+3. Migrasi plugin versi 8 sudah dijalankan di **System → Plugins**. Migrasi ini membuat tabel `inventory_api_sessions` dan `inventory_api_idempotency`.
+4. Administrator dengan hak tulis **System** membuka **Stock Take → Aplikasi InvenSync** lalu mengklik **Izinkan aplikasi**. Setelah heartbeat SLiMS Connect berikutnya, perpustakaan muncul di daftar pilihan aplikasi.
+
+Petugas masuk dengan nama pengguna dan kata sandi SLiMS. Hanya akun aktif dengan hak **Stock Take** yang bisa masuk; hak tulis diperlukan untuk mengubah data. Akun dengan verifikasi dua langkah diminta kode dari aplikasi autentikator. Sesi berakhir saat kata sandi diganti, akun dinonaktifkan, hak dicabut, atau administrator mengklik **Cabut sesi** di halaman yang sama. **Matikan aplikasi** menghentikan semua sesi sekaligus.
+
+API tersedia di `index.php?p=api/invensync/v1/…` dan memakai kembali layanan plugin (validasi barang, kode barang, foto, alur pengawasan), sehingga aturannya sama dengan halaman admin. Stock opname memakai sesi aktif **Stock Take** inti SLiMS: aplikasi menandai eksemplar ditemukan, sedangkan memulai dan menutup sesi tetap dari SLiMS. Perubahan dari aplikasi tercatat di log sistem SLiMS dengan lokasi `Klaras InvenSync`.
+
+Uji API memakai MySQL dan salinan SLiMS Connect:
+
+```bash
+INVENTORY_TEST_DSN='mysql:host=127.0.0.1;dbname=uji' INVENTORY_TEST_USER=… INVENTORY_TEST_PASSWORD=… \
+SLIMS_CONNECT_DIR=/path/ke/slims-connect php tests/invensync_api_test.php
+```

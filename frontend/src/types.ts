@@ -6,7 +6,7 @@ export interface Snapshot {room_name:string; library_name:string; template_name:
 export interface ChecklistItem {group:string;object:string;instruction:string;item_id?:Id;item_name?:string;item_code?:string}
 export interface Inspection {id:Id;version:number;status:string;due_date:string;performed_date:string|null;notes:string;kind:string;reason:string;parent_id:Id|null;location_id:Id|null;examiner_id:Id|null;examiner_name:string|null}
 export interface Result {id:Id;snapshot:ChecklistItem;outcome:string;notes:string;assignee_id:Id|null;priority:string|null;deadline:string|null}
-export interface Finding {id:Id;inspection_id:Id;result_id:Id;version:number;status:string;assignee_id:Id;assignee_name:string;deadline:string;priority:string}
+export interface Finding {id:Id;inspection_id:Id;result_id:Id;version:number;status:string;assignee_id:Id;assignee_name:string;deadline:string;priority:string;closed_at?:string|null}
 export interface Photo {id:Id;url:string|null;result_id?:Id;action_id?:Id}
 export interface WorkAction {id:Id;finding_id:Id;submitted_at:string|null;kind:string;description:string;performed_date:string;cost:string|null;actor_name:string}
 export interface Event {id:Id;finding_id:Id|null;event:string;actor_name:string;notes:string;created_at:string}

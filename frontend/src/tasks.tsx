@@ -393,11 +393,33 @@ function itemLabel(r: Result) {
     : "Aspek ruangan";
 }
 
-function InspectionResultsTable({ results, options, photos }: { results: Result[]; options: Options; photos: Photo[] }) {
+/**
+ * Finalized results. The outcome stays as recorded on the inspection day (it is evidence); a result
+ * that raised a finding also shows where its follow-up stands now, linking to it.
+ */
+function InspectionResultsTable({
+  results,
+  options,
+  photos,
+  findings,
+}: {
+  results: Result[];
+  options: Options;
+  photos: Photo[];
+  findings: Document["findings"];
+}) {
+  const { go } = useWorkspace();
+  const followUp: Record<string, string> = {
+    open: "Belum dikerjakan",
+    working: "Sedang dikerjakan",
+    review: "Menunggu verifikasi",
+    closed: "Selesai",
+  };
   return (
     <div className="flex flex-col gap-3">
       {results.map((r) => {
         const resultPhotos = photos.filter((p) => String(p.result_id) === String(r.id));
+        const finding = findings.find((f) => String(f.result_id) === String(r.id));
         return (
           <div key={r.id} className="flex flex-col gap-2 rounded-xl border p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -407,7 +429,23 @@ function InspectionResultsTable({ results, options, photos }: { results: Result[
                   {r.snapshot.group} · {itemLabel(r)}
                 </div>
               </div>
-              <Badge variant={outcomeBadge[r.outcome] || "outline"}>{options.outcomes[r.outcome] || "Belum diisi"}</Badge>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Badge variant={outcomeBadge[r.outcome] || "outline"} title="Hasil saat pemeriksaan">
+                  {options.outcomes[r.outcome] || "Belum diisi"}
+                </Badge>
+                {finding && (
+                  <>
+                    <ArrowRight className="size-3.5 text-muted-foreground" />
+                    <button type="button" onClick={() => go({ view: "finding", record: finding.id })} title="Buka tindak lanjut">
+                      <Badge variant={finding.status === "closed" ? "success" : finding.status === "review" ? "info" : "warning"} className="cursor-pointer">
+                        {finding.status === "closed" ? <Check /> : <Wrench />}
+                        {followUp[finding.status] || finding.status}
+                        {finding.status === "closed" && finding.closed_at && ` ${dateLabel(finding.closed_at)}`}
+                      </Badge>
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
             {r.notes && <p className="text-sm whitespace-pre-wrap">{r.notes}</p>}
             {resultPhotos.length > 0 && <Photos photos={resultPhotos} size="sm" />}
@@ -908,7 +946,7 @@ function InspectionEditor({ document: d }: { document: Document }) {
       )}
       {tab === "results" && !editable && (
         <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
-          <InspectionResultsTable results={results} options={options} photos={photos} />
+          <InspectionResultsTable results={results} options={options} photos={photos} findings={d.findings} />
           <div className="flex flex-col gap-4 lg:sticky lg:top-4 lg:self-start">
             <Panel title="Ringkasan">
               <dl className="grid grid-cols-2 gap-3">
@@ -1058,7 +1096,9 @@ function FindingEditor({ document: d }: { document: Document }) {
       );
       w.dirty(false);
       toast.success(
-        mode === "submit"
+        mode === "complete"
+          ? "Pekerjaan tercatat dan laporan selesai."
+          : mode === "submit"
           ? `Diajukan. Menunggu verifikasi dari ${reporter}.`
           : mode === "verify"
             ? "Hasil diterima. Laporan selesai."
@@ -1082,6 +1122,8 @@ function FindingEditor({ document: d }: { document: Document }) {
   // The reporter verifies; the server also lets anyone step in when the reporter account no longer exists.
   const isReporter = !d.inspection.examiner_id || Number(d.inspection.examiner_id) === w.config.uid;
   const isHandler = Number(f.assignee_id) === w.config.uid;
+  // Reporter who handled the work themselves: one step closes it (server checks the reporter again).
+  const selfClose = isHandler && !!d.inspection.examiner_id && Number(d.inspection.examiner_id) === w.config.uid;
   const editable = w.config.write && ["open", "working"].includes(f.status);
   const reviewing = w.config.write && f.status === "review" && isReporter;
   const events = d.events.filter((e) => String(e.finding_id) === String(f.id));
@@ -1190,7 +1232,7 @@ function FindingEditor({ document: d }: { document: Document }) {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                save("submit");
+                save(selfClose ? "complete" : "submit");
               }}
             >
               <fieldset disabled={busy} className="flex min-w-0 flex-col gap-6">
@@ -1264,13 +1306,30 @@ function FindingEditor({ document: d }: { document: Document }) {
                     />
                   </FieldGroup>
                 </Panel>
-                <ActionBar status={busy ? "Menyimpan…" : undefined}>
+                <ActionBar
+                  status={
+                    busy
+                      ? "Menyimpan…"
+                      : selfClose
+                        ? "Anda pelapor sekaligus penangan: laporan langsung selesai tanpa menunggu verifikasi."
+                        : "Simpan draf hanya menyimpan catatan; laporan baru diproses setelah diajukan."
+                  }
+                >
                   <Button type="button" variant="outline" onClick={() => save("draft")}>
                     Simpan draf
                   </Button>
                   <Button type="submit">
-                    Selesai, minta verifikasi
-                    <ArrowRight data-icon="inline-end" />
+                    {selfClose ? (
+                      <>
+                        <Check data-icon="inline-start" />
+                        Selesai & tutup laporan
+                      </>
+                    ) : (
+                      <>
+                        Selesai, minta verifikasi
+                        <ArrowRight data-icon="inline-end" />
+                      </>
+                    )}
                   </Button>
                 </ActionBar>
               </fieldset>

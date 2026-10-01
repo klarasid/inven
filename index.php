@@ -324,90 +324,17 @@ try {
                 $message = 'Lokasi berhasil ditambahkan.';
             }
         } elseif ($postAction === 'save_item') {
+            require_once __DIR__ . '/src/Inventory.php';
             $id = (int) ($_POST['record_id'] ?? 0);
             $locationId = (int) ($_POST['location_id'] ?? 0);
-            $itemName = inventory_post('item_name');
-            if ($locationId < 1 || $itemName === '') {
-                throw new RuntimeException('Lokasi dan nama barang wajib diisi.');
-            }
-            $condition = inventory_post('item_condition', 'B');
-            if (!in_array($condition, ['B', 'KB', 'RB'], true)) {
-                throw new RuntimeException('Kondisi barang tidak valid.');
-            }
-            $yearText = inventory_post('acquisition_year');
-            $year = $yearText === '' ? null : (int) $yearText;
-            if ($year !== null && ($year < 1000 || $year > ((int) date('Y') + 1))) {
-                throw new RuntimeException('Tahun pembuatan/pembelian tidak valid.');
-            }
-            $priceText = inventory_post('acquisition_price', '0');
-            if (!is_numeric($priceText) || (float) $priceText < 0 || (float) $priceText > 9999999999999999.99) {
-                throw new RuntimeException('Harga perolehan tidak valid.');
-            }
-            if (strlen(inventory_post('notes')) > 5000) {
-                throw new RuntimeException('Keterangan maksimal 5.000 karakter.');
-            }
-
-            $values = [
-                'location_id' => $locationId,
-                'item_name' => $itemName,
-                'brand_model' => inventory_post('brand_model'),
-                'serial_number' => inventory_post('serial_number'),
-                'item_size' => inventory_post('item_size'),
-                'material' => inventory_post('material'),
-                'acquisition_year' => $year,
-                'item_code' => inventory_post('item_code'),
-                'quantity_register' => inventory_post('quantity_register'),
-                'acquisition_price' => (float) $priceText,
-                'item_condition' => $condition,
-                'notes' => inventory_post('notes'),
-                'updated_at' => $now,
-            ];
-
-            $photos = \SLiMS\Plugins\Inventory\ItemPhotos::uploads($_FILES['item_photos'] ?? []);
             $isNewItem = $id < 1;
-            $db->beginTransaction();
-            \SLiMS\Plugins\Inventory\ItemCodes::lock($db);
-            $oldCode = null;
-            if ($id > 0) {
-                $lock = $db->prepare('SELECT item_code FROM inventory_items WHERE id = ? FOR UPDATE');
-                $lock->execute([$id]);
-                if (($oldCode = $lock->fetchColumn()) === false) {
-                    throw new RuntimeException('Barang tidak ditemukan.');
-                }
-            }
+            // Validate the fields before decoding any photo, as before the save moved into Inventory.
+            \SLiMS\Plugins\Inventory\Inventory::values($_POST);
+            $photos = \SLiMS\Plugins\Inventory\ItemPhotos::uploads($_FILES['item_photos'] ?? []);
             $codeToken = inventory_post('code_form_token');
             $codeOwner = $codeToken === '' ? '' : \SLiMS\Plugins\Inventory\ItemCodes::owner($codeToken, session_id());
-            \SLiMS\Plugins\Inventory\ItemCodes::validateAndConsume($db, $values['item_code'], $oldCode, $codeOwner);
-            if ($id > 0) {
-                $values['id'] = $id;
-                $statement = $db->prepare(
-                    'UPDATE inventory_items SET location_id=:location_id, item_name=:item_name, brand_model=:brand_model,
-                     serial_number=:serial_number, item_size=:item_size, material=:material,
-                     acquisition_year=:acquisition_year, item_code=:item_code, quantity_register=:quantity_register,
-                     acquisition_price=:acquisition_price, item_condition=:item_condition, notes=:notes,
-                     updated_at=:updated_at WHERE id=:id'
-                );
-                $statement->execute($values);
-                $message = 'Barang inventaris berhasil diperbarui.';
-            } else {
-                $values['created_by'] = $uid;
-                $values['created_at'] = $now;
-                $statement = $db->prepare(
-                    'INSERT INTO inventory_items
-                     (location_id, item_name, brand_model, serial_number, item_size, material, acquisition_year,
-                      item_code, quantity_register, acquisition_price, item_condition, notes, created_by, created_at, updated_at)
-                     VALUES (:location_id, :item_name, :brand_model, :serial_number, :item_size, :material, :acquisition_year,
-                      :item_code, :quantity_register, :acquisition_price, :item_condition, :notes, :created_by, :created_at, :updated_at)'
-                );
-                $statement->execute($values);
-                $id = (int) $db->lastInsertId();
-                $message = 'Barang inventaris berhasil ditambahkan.';
-            }
-            \SLiMS\Plugins\Inventory\ItemPhotos::apply($db, $id, $photos, [], $photoStorage, $createdPhotos, $removedPhotos);
-            $db->commit();
-            $createdPhotos = [];
-            $photoStorage->cleanup($removedPhotos);
-            $removedPhotos = [];
+            $id = \SLiMS\Plugins\Inventory\Inventory::saveItem($db, $photoStorage, $_POST, $id, $uid, $codeOwner, $photos);
+            $message = $isNewItem ? 'Barang inventaris berhasil ditambahkan.' : 'Barang inventaris berhasil diperbarui.';
             inventory_log((string) $id, $isNewItem ? 'Barang inventaris ditambahkan pada lokasi #' . $locationId . '.' : 'Barang inventaris diperbarui.', $isNewItem ? 'Create' : 'Update');
             if ($photos) {
                 inventory_log((string) $id, 'Foto barang diperbarui: ' . count($photos) . ' ditambahkan.', 'Update');

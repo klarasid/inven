@@ -272,7 +272,10 @@ final class Supervision
             if ($status==='open') $this->event($inspection,$id,'start','Pekerjaan dimulai.',$actor);
             $this->event($inspection,$id,'progress',$this->text($input['notes']??'','Catatan perkembangan'),$actor); return;
         }
-        if (!in_array($mode,['draft','submit'],true) || !in_array($status,['open','working'],true)) throw new RuntimeException('Transisi status tidak tersedia. Muat ulang halaman.');
+        if (!in_array($mode,['draft','submit','complete'],true) || !in_array($status,['open','working'],true)) throw new RuntimeException('Transisi status tidak tersedia. Muat ulang halaman.');
+        // "complete" = submit and verify at once; only the reporter may verify, so only a reporter
+        // who also handled the work can close it in one step.
+        if ($mode==='complete') $this->assertReporter($inspection,$actor);
         // Opening a form is read-only. Start is recorded with the first successful save.
         if ($status==='open') $this->event($inspection,$id,'start','Pekerjaan dimulai.',$actor);
         $kind=$input['kind']??'';
@@ -291,12 +294,17 @@ final class Supervision
             $action=(int)$this->db->lastInsertId();
         }
         $this->photos($inspection,null,$action,ItemPhotos::uploads($uploads),(array)($input['remove']??[]));
-        if ($mode==='submit') {
+        $submit=$mode==='submit'||$mode==='complete';
+        if ($submit) {
             if ($kind!=='none' && !(int)$this->query('SELECT COUNT(*) FROM inventory_watch_photos WHERE action_id=?',[$action])->fetchColumn()) throw new RuntimeException('Perbaikan/pemeliharaan wajib memiliki minimal satu foto hasil.');
             $this->query('UPDATE inventory_watch_actions SET submitted_at=NOW() WHERE id=?',[$action]);
         }
-        $this->query('UPDATE inventory_watch_findings SET status=?,version=version+1 WHERE id=?',[$mode==='submit'?'review':'working',$id]);
-        $this->event($inspection,$id,$mode==='submit'?'submit':'save_action',$description,$actor);
+        $this->query('UPDATE inventory_watch_findings SET status=?,version=version+1 WHERE id=?',[$submit?'review':'working',$id]);
+        $this->event($inspection,$id,$submit?'submit':'save_action',$description,$actor);
+        if ($mode==='complete') {
+            $this->query("UPDATE inventory_watch_findings SET status='closed',closed_at=NOW(),version=version+1 WHERE id=?",[$id]);
+            $this->event($inspection,$id,'verify','Ditangani dan diverifikasi sendiri oleh pelapor.',$actor);
+        }
     }
     /** The person who raised the finding verifies it; any writer may step in once that account is gone. */
     private function assertReporter(int $inspection,array $actor): void {
