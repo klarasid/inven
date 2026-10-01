@@ -393,20 +393,25 @@ function itemLabel(r: Result) {
     : "Aspek ruangan";
 }
 
+const actionKinds: Record<string, string> = { repair: "Perbaikan", maintenance: "Pemeliharaan", none: "Tanpa pekerjaan" };
+
 /**
  * Finalized results. The outcome stays as recorded on the inspection day (it is evidence); a result
- * that raised a finding also shows where its follow-up stands now, linking to it.
+ * that raised a finding also shows where its follow-up stands now, linking to it, with the photos
+ * of each submitted repair next to the photos taken on the inspection day.
  */
 function InspectionResultsTable({
   results,
   options,
   photos,
   findings,
+  actions,
 }: {
   results: Result[];
   options: Options;
   photos: Photo[];
   findings: Document["findings"];
+  actions: Document["actions"];
 }) {
   const { go } = useWorkspace();
   const followUp: Record<string, string> = {
@@ -448,7 +453,27 @@ function InspectionResultsTable({
               </div>
             </div>
             {r.notes && <p className="text-sm whitespace-pre-wrap">{r.notes}</p>}
-            {resultPhotos.length > 0 && <Photos photos={resultPhotos} size="sm" />}
+            {resultPhotos.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                {finding && <p className="text-xs font-medium text-muted-foreground">Foto saat pemeriksaan</p>}
+                <Photos photos={resultPhotos} size="sm" />
+              </div>
+            )}
+            {finding &&
+              actions
+                .filter((a) => String(a.finding_id) === String(finding.id) && a.submitted_at)
+                .map((a) => {
+                  const workPhotos = photos.filter((p) => String(p.action_id) === String(a.id));
+                  return (
+                    <div key={a.id} className="flex flex-col gap-1.5 border-t pt-2">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        {actionKinds[a.kind] || a.kind} · {dateLabel(a.performed_date)} · {a.actor_name}
+                      </p>
+                      {a.description && <p className="text-sm whitespace-pre-wrap">{a.description}</p>}
+                      {workPhotos.length > 0 && <Photos photos={workPhotos} size="sm" />}
+                    </div>
+                  );
+                })}
           </div>
         );
       })}
@@ -946,7 +971,7 @@ function InspectionEditor({ document: d }: { document: Document }) {
       )}
       {tab === "results" && !editable && (
         <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
-          <InspectionResultsTable results={results} options={options} photos={photos} findings={d.findings} />
+          <InspectionResultsTable results={results} options={options} photos={photos} findings={d.findings} actions={d.actions} />
           <div className="flex flex-col gap-4 lg:sticky lg:top-4 lg:self-start">
             <Panel title="Ringkasan">
               <dl className="grid grid-cols-2 gap-3">
@@ -1054,8 +1079,6 @@ export function FindingPage() {
     </>
   );
 }
-
-const actionKinds: Record<string, string> = { repair: "Perbaikan", maintenance: "Pemeliharaan", none: "Tanpa pekerjaan" };
 
 function FindingEditor({ document: d }: { document: Document }) {
   const w = useWorkspace();
