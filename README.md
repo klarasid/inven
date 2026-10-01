@@ -69,12 +69,12 @@ Semua menu tersedia di modul **Stock Take**. Pengguna dengan hak baca dapat meli
 
 | Menu | Kegunaan |
 | --- | --- |
+| **Rekap Sarpras** | Merekap kondisi sarana dan prasarana (luas dan fungsi ruang, kondisi barang, perabot, komputer, jaringan, multimedia, lisensi perangkat lunak, keamanan, fasilitas umum, serta pengawasan), mencatat data pendukung dan register perangkat lunak, dan mencetak rekapnya. |
 | **Tugas** | Mengisi pemeriksaan, melapor kerusakan, mencatat perbaikan, dan memverifikasi hasilnya. Anda juga dapat mengimpor riwayat lama dari Excel. |
 | **Ruangan & Barang** | Mencatat ruangan dan barang, mengunggah hingga 5 foto per barang, membuat kode barang otomatis (misalnya `P01-INV-000001`), dan mencetak KIR. |
 | **Jadwal** | Menjadwalkan pemeriksaan ruangan, harian hingga tahunan. Jadwal mengikuti hari libur di **System → Hari Libur**. |
 | **Checklist** | Menyusun template checklist pemeriksaan beserta riwayat versinya. |
 | **Laporan** | Melihat cakupan dan keterlambatan pemeriksaan, serta mencetak laporan periode atau dokumen pemeriksaan dalam gaya LaTeX atau ISO. |
-| **Rekap Sarpras** | Merekap kondisi sarana dan prasarana (luas dan fungsi ruang, kondisi barang, perabot, komputer, jaringan, multimedia, lisensi perangkat lunak, keamanan, fasilitas umum, serta pengawasan), mencatat data pendukung dan register perangkat lunak, dan mencetak rekapnya. |
 | **Aplikasi InvenSync** | Mengizinkan aplikasi HP dan mengelola perangkat yang masuk. |
 | **Data pemakaian** | Melihat dan mengatur data pemakaian yang dikirim ke Klaras. |
 

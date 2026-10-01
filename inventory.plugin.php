@@ -14,12 +14,12 @@ defined('INDEX_AUTH') || die('Direct access not allowed!');
 
 Plugins::group('Klaras Inven', function() {
     foreach ([
+        ['Rekap Sarpras','sarpras.php','Capaian sarana dan prasarana dari data ruangan, barang, dan pengawasan.'],
         ['Tugas','inspection.php','Pemeriksaan, tindak lanjut, dan verifikasi.'],
         ['Ruangan & Barang','index.php','Kelola ruangan, barang, dan kartu inventaris.'],
         ['Jadwal','checklist-and-schedule.php','Atur pemeriksaan rutin ruangan.'],
         ['Checklist','findings-and-follow-up.php','Kelola checklist dan riwayat versinya.'],
         ['Laporan','report.php','Tinjau capaian dan cetak laporan periode.'],
-        ['Rekap Sarpras','sarpras.php','Capaian sarana dan prasarana dari data ruangan, barang, dan pengawasan.'],
         ['Aplikasi InvenSync','app.php','Izinkan aplikasi Klaras InvenSync dan kelola perangkat yang masuk.'],
         ['Data pemakaian','privacy.php','Lihat dan atur data pemakaian yang dikirim ke Klaras.'],
     ] as [$label,$file,$description]) Plugins::registerMenu('stock_take',$label,__DIR__.'/'.$file,$description);
