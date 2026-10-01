@@ -152,9 +152,10 @@ Sekali sehari, plugin mengirim ringkasan pemakaian ke Klaras agar plugin gratis 
 - Nama perpustakaan dan alamat SLiMS.
 - Versi plugin, SLiMS, PHP, dan database.
 - Jumlah ruangan, barang, pemeriksaan, temuan, dan sesi stock opname.
+- Jumlah data Rekap Sarpras yang sudah diisi: ruangan yang memiliki luas dan fungsi, barang yang berkategori, aplikasi di Perangkat Lunak, dan lokasi yang mengisi Gedung & Jaringan.
 - Frekuensi pemakaian fitur, serta galat teknis yang telah dibersihkan dari isinya.
 
-Plugin **tidak pernah** mengirim isi inventaris, nama atau kode barang, nama ruangan, data anggota, maupun data petugas.
+Plugin **tidak pernah** mengirim isi inventaris, nama atau kode barang, nama ruangan, nama aplikasi, angka gedung dan jaringan, data anggota, maupun data petugas.
 
 Untuk melihat data persis yang dikirim atau mematikan pengiriman, buka **Stock Take → Data pemakaian**. Saat Anda mematikannya, Klaras menghapus nama dan alamat perpustakaan Anda dari datanya.
 

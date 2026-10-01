@@ -383,9 +383,10 @@ export function PrivacyPage() {
         <ShieldCheck />
         <AlertTitle>Isi inventaris Anda tidak pernah dikirim</AlertTitle>
         <AlertDescription>
-          Nama dan kode barang, nama ruangan, data anggota, dan data petugas tetap berada di SLiMS Anda. Yang dikirim
-          hanya nama perpustakaan, alamat SLiMS, versi software, jumlah data (ruangan, barang, pemeriksaan, temuan, dan
-          stock opname), fitur yang dipakai, serta info error tanpa isi datanya.
+          Nama dan kode barang, nama ruangan, nama aplikasi, angka gedung dan jaringan, data anggota, dan data petugas
+          tetap berada di SLiMS Anda. Yang dikirim hanya nama perpustakaan, alamat SLiMS, versi software, jumlah data
+          (ruangan, barang, pemeriksaan, temuan, stock opname, dan data Rekap Sarpras yang sudah diisi), fitur yang
+          dipakai, serta info error tanpa isi datanya.
         </AlertDescription>
       </Alert>
       {!data.manage && (

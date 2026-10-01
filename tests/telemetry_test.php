@@ -15,7 +15,7 @@ require __DIR__ . '/../src/UpdateCheck.php';
 require __DIR__ . '/../src/Telemetry.php';
 
 $prefix = 'it_test_' . bin2hex(random_bytes(6)) . '_';
-$names = ['inventory_watch_inspections', 'inventory_watch_findings', 'inventory_items', 'inventory_locations', 'stock_take', 'setting', 'plugins'];
+$names = ['inventory_watch_inspections', 'inventory_watch_findings', 'inventory_items', 'inventory_locations', 'inventory_software', 'stock_take', 'setting', 'plugins'];
 final class PrefixedConnection extends PDO {
     public array $names = []; public string $prefix = '';
     private function sql(string $sql): string { foreach ($this->names as $name) $sql = preg_replace('/(?<![A-Za-z0-9_.])' . $name . '\b/', $this->prefix . $name, $sql); return $sql; }
@@ -35,15 +35,18 @@ $_SERVER['HTTPS'] = 'on';
 try {
     $db->exec('CREATE TABLE setting (setting_id INT AUTO_INCREMENT PRIMARY KEY, setting_name VARCHAR(30) UNIQUE, setting_value MEDIUMTEXT) ENGINE=InnoDB');
     $db->exec('CREATE TABLE plugins (id VARCHAR(32) PRIMARY KEY, options TEXT, path TEXT) ENGINE=InnoDB');
-    $db->exec('CREATE TABLE inventory_locations (id INT PRIMARY KEY, room_name VARCHAR(255), slims_location_id VARCHAR(3) NULL) ENGINE=InnoDB');
-    $db->exec("CREATE TABLE inventory_items (id INT PRIMARY KEY, location_id INT, item_name VARCHAR(255), item_code VARCHAR(150), item_condition ENUM('B','KB','RB')) ENGINE=InnoDB");
+    $db->exec("CREATE TABLE inventory_locations (id INT PRIMARY KEY, room_name VARCHAR(255), slims_location_id VARCHAR(3) NULL, area_m2 DECIMAL(10,2) NULL, room_functions VARCHAR(255) NOT NULL DEFAULT '') ENGINE=InnoDB");
+    $db->exec("CREATE TABLE inventory_items (id INT PRIMARY KEY, location_id INT, item_name VARCHAR(255), item_code VARCHAR(150), item_condition ENUM('B','KB','RB'), category VARCHAR(30) NULL) ENGINE=InnoDB");
+    $db->exec('CREATE TABLE inventory_software (id INT PRIMARY KEY, name VARCHAR(150)) ENGINE=InnoDB');
     $db->exec('CREATE TABLE inventory_watch_inspections (id INT PRIMARY KEY, kind VARCHAR(20), status VARCHAR(20), due_date DATE, snapshot LONGTEXT) ENGINE=InnoDB');
     $db->exec('CREATE TABLE inventory_watch_findings (id INT PRIMARY KEY, status VARCHAR(20)) ENGINE=InnoDB');
     $db->exec('CREATE TABLE stock_take (stock_take_id INT PRIMARY KEY, is_active INT) ENGINE=InnoDB');
     $db->prepare('INSERT INTO plugins VALUES (?, ?, ?)')->execute(['x', '{"version":"2.2.0","db_version":8}', '/srv/slims/plugins/inventaris-barang/inventory.plugin.php']);
     // Traps: none of this may ever leave the library.
-    $db->exec("INSERT INTO inventory_locations VALUES (1, 'RUANG RAHASIA', 'P01'), (2, 'Ruang Baca', 'P01')");
-    $db->exec("INSERT INTO inventory_items VALUES (1, 1, 'Brankas RAHASIA-ITEM', 'P01-INV-TRAP01', 'B'), (2, 1, 'Meja', 'P01-INV-000002', 'RB')");
+    $db->exec("INSERT INTO inventory_locations VALUES (1, 'RUANG RAHASIA', 'P01', 48.5, 'koleksi,baca'), (2, 'Ruang Baca', 'P01', NULL, '')");
+    $db->exec("INSERT INTO inventory_items VALUES (1, 1, 'Brankas RAHASIA-ITEM', 'P01-INV-TRAP01', 'B', 'keamanan'), (2, 1, 'Meja', 'P01-INV-000002', 'RB', NULL)");
+    $db->exec("INSERT INTO inventory_software VALUES (1, 'Aplikasi RAHASIA'), (2, 'SLiMS')");
+    $db->prepare('INSERT INTO setting (setting_name, setting_value) VALUES (?, ?)')->execute(['inventory_sarpras', serialize(['locations' => ['P01' => ['sivitas' => 987654, 'bandwidth_mbps' => 4321.5]]])]);
     $today = date('Y-m-d');
     $db->exec("INSERT INTO inventory_watch_inspections VALUES (1, 'incidental', 'final', '$today', '{\"template_name\":\"Laporan kerusakan\",\"room_name\":\"RUANG RAHASIA\"}')");
     $db->exec("INSERT INTO inventory_watch_findings VALUES (1, 'open')");
@@ -64,7 +67,10 @@ try {
     check($report['stats']['rooms'] === 2 && $report['stats']['items'] === 2 && $report['stats']['items_poor'] === 1 && $report['stats']['findings_open'] === 1 && $report['stats']['stock_take_active'] === 1, 'the report counts rooms, items, findings and the running stock take');
     check($report['features']['kir_pdf'] === 2 && !isset($report['features']['not_a_feature']) && $report['features']['damage_reports'] === 1, 'features are counted, unknown ones ignored');
     check($report['environment']['migration'] === 8 && $report['environment']['slims_version'] === 'v9.8.0', 'the report carries versions and the migration level');
-    check(!str_contains($json, 'RAHASIA') && !str_contains($json, 'TRAP01') && !str_contains($json, 'Duplikat'), 'no room name, item name or item code ever appears in the report');
+    check($report['stats']['rooms_with_area'] === 1 && $report['stats']['rooms_with_functions'] === 1 && $report['stats']['items_categorized'] === 1 && $report['stats']['software'] === 2 && $report['stats']['facility_profiles'] === 1, 'the report counts how much of the Rekap Sarpras data is filled in');
+    check(!str_contains($json, 'RAHASIA') && !str_contains($json, 'TRAP01') && !str_contains($json, 'Duplikat'), 'no room name, item name, item code or software name ever appears in the report');
+    $counts = json_encode([$report['stats'], $report['features']]);
+    check(!str_contains($json, 'sivitas') && !str_contains($json, 'bandwidth') && !str_contains($counts, '987654') && !str_contains($counts, '4321'), 'no building or network figure ever appears in the report');
     check(count($report['errors']) === 1 && $report['errors'][0]['category'] === 'db' && $report['errors'][0]['count'] === 1, 'a database error is remembered');
     check(Telemetry::clean("Duplicate entry 'P01-INV-000012' for key 'inventory_items.PRIMARY' at /srv/www/slims/plugins/x.php line 12") === 'Duplicate entry ? for key ? at ? line ?', 'error messages lose quoted values, paths and numbers');
     check(Telemetry::clean('Gagal mengirim ke kepala@sekolah.sch.id') === 'Gagal mengirim ke ?', 'error messages lose e-mail addresses');

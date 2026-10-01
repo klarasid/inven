@@ -8,9 +8,12 @@ use PDO;
  * The daily usage report this plugin sends to Klaras, which keeps it working for every library.
  *
  * What is sent: the library's name and SLiMS address, versions of the plugin, SLiMS, PHP and the
- * database, counts (rooms, items by condition, inspections, findings, stock take sessions), how
- * often each feature was used, and recent technical errors with any data stripped from them.
- * What is never sent: inventory records, item names or codes, members, staff or anything typed in.
+ * database, counts (rooms, items by condition, inspections, findings, stock take sessions, and how
+ * much of the data behind Rekap Sarpras is filled in: rooms with an area or a function, items with
+ * a category, software in the register, locations with building figures), how often each feature
+ * was used, and recent technical errors with any data stripped from them.
+ * What is never sent: inventory records, item names or codes, software names, building and network
+ * figures, members, staff or anything typed in.
  *
  * On by default; an administrator sees exactly what is sent and can switch it off under
  * Stock Take → Data pemakaian. Switching off tells Klaras once, which then forgets who the
@@ -174,6 +177,20 @@ final class Telemetry
         }
     }
 
+    /**
+     * How many library locations have Gedung & Jaringan filled in: only the number, never the
+     * figures. Figures saved before locations were told apart count as one (see Sarpras::profiles).
+     */
+    private static function facilityProfiles(PDO $db): ?int
+    {
+        try {
+            $stored = self::read($db, 'inventory_sarpras');
+            return is_array($stored['locations'] ?? null) ? count($stored['locations']) : ($stored ? 1 : 0);
+        } catch (\Throwable $error) {
+            return null;
+        }
+    }
+
     /** Exactly what is sent; the Data pemakaian page shows this same array. */
     public static function report(PDO $db): array
     {
@@ -204,6 +221,11 @@ final class Telemetry
             'stock_takes' => $count('SELECT COUNT(*) FROM stock_take'),
             'stock_take_active' => $count('SELECT COUNT(*) FROM stock_take WHERE is_active = 1'),
             'stock_take_items' => $count('SELECT COUNT(*) FROM stock_take_item'),
+            'rooms_with_area' => $count('SELECT COUNT(*) FROM inventory_locations WHERE area_m2 IS NOT NULL'),
+            'rooms_with_functions' => $count("SELECT COUNT(*) FROM inventory_locations WHERE room_functions <> ''"),
+            'items_categorized' => $count('SELECT COUNT(*) FROM inventory_items WHERE category IS NOT NULL'),
+            'software' => $count('SELECT COUNT(*) FROM inventory_software'),
+            'facility_profiles' => self::facilityProfiles($db),
         ];
         $counters = self::read($db, self::COUNTERS);
         $features = [];

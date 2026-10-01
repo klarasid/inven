@@ -91,6 +91,11 @@ $place = static function () use ($places, $library): ?array {
 
 $schemaMessage = 'Struktur data sarpras belum tersedia. Jalankan migrasi plugin hingga versi 9 melalui System → Plugins.';
 $isSchema = static fn(Throwable $e): bool => $e instanceof PDOException && in_array((int) ($e->errorInfo[1] ?? 0), [1054, 1146], true);
+// An unexpected error goes into the daily usage report, stripped of its data. A schema not migrated
+// yet is not one: the report already carries the migration level.
+$report = static function (Throwable $e, ?string $category = null) use ($isSchema): void {
+    if (!$isSchema($e)) \SLiMS\Plugins\Inventory\Telemetry::error($category ?? ($e instanceof PDOException ? 'db' : 'workspace'), $e);
+};
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $token = (string) filter_input(INPUT_POST, 'csrf', FILTER_UNSAFE_RAW);
@@ -124,11 +129,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $log('Perangkat lunak #' . $id . ' dihapus.', 'Delete');
             $json(['ok' => true, 'message' => 'Aplikasi dihapus.']);
         }
-    } catch (RuntimeException $error) {
-        $json(['ok' => false, 'message' => $error->getMessage()], 422);
     } catch (Throwable $error) {
-        error_log('[sarpras] ' . $error->getMessage());
-        $json(['ok' => false, 'message' => $isSchema($error) ? $schemaMessage : 'Data tidak tersimpan. Periksa log PHP.'], 500);
+        // A PDOException is a RuntimeException too: only the others carry a message meant for the form.
+        if ($error instanceof RuntimeException && !$error instanceof PDOException) {
+            $json(['ok' => false, 'message' => $error->getMessage()], 422);
+        } else {
+            error_log('[sarpras] ' . $error->getMessage());
+            $report($error);
+            $json(['ok' => false, 'message' => $isSchema($error) ? $schemaMessage : 'Data tidak tersimpan. Periksa log PHP.'], 500);
+        }
     }
     exit;
 }
@@ -182,7 +191,10 @@ if ($page === 'recap' && isset($_GET['pdf'])) {
         \SLiMS\Plugins\Inventory\Telemetry::count('sarpras_pdf');
         $pdf->Output('rekap-sarpras-' . ($library !== '' ? $library . '-' : '') . date('Ymd') . '.pdf', 'I');
     } catch (Throwable $error) {
-        if (!$error instanceof RuntimeException || $error instanceof PDOException) error_log('[sarpras] pdf: ' . $error->getMessage());
+        if (!$error instanceof RuntimeException || $error instanceof PDOException) {
+            error_log('[sarpras] pdf: ' . $error->getMessage());
+            $report($error, 'pdf');
+        }
         header('Content-Type: text/html; charset=utf-8');
         echo '<div class="alert alert-danger">' . htmlspecialchars($isSchema($error) ? $schemaMessage : ($error instanceof RuntimeException && !$error instanceof PDOException ? $error->getMessage() : 'PDF tidak dapat dibuat. Periksa log PHP.'), ENT_QUOTES, 'UTF-8') . '</div>';
     }
@@ -220,6 +232,7 @@ if (($_GET['format'] ?? '') === 'json') {
         }
     } catch (Throwable $error) {
         if (!$isSchema($error)) error_log('[sarpras] read: ' . $error->getMessage());
+        $report($error);
         $json(['ok' => false, 'message' => $isSchema($error) ? $schemaMessage : 'Data belum bisa dibaca. Periksa log PHP.'], 500);
     }
     exit;
