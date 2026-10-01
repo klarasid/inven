@@ -27,7 +27,7 @@ import { formData, request, url } from "./api";
 import { Blank, ErrorBox, Loading, PageHeader, Panel } from "./shared";
 
 /** GET ?format=json on this page's own PHP file, and POST actions back to it. */
-function usePage<T>() {
+export function usePage<T>() {
   const { config } = useWorkspace();
   const [data, setData] = useState<T>();
   const [error, setError] = useState("");
@@ -44,7 +44,7 @@ function usePage<T>() {
 }
 
 /** One confirmation dialog for actions that cut someone off. */
-function Confirm({
+export function Confirm({
   open,
   title,
   description,

@@ -444,11 +444,14 @@ export function Pdf({
   room,
   period,
   label = "Cetak PDF",
+  href,
 }: {
   record?: unknown;
   room?: unknown;
   period?: Route;
   label?: string;
+  /** PDF address per style, for pages outside the supervision reports. */
+  href?: (style: string) => string;
 }) {
   const { config } = useWorkspace();
   const [letterheads, setLetterheads] = useState<{ id: string; name: string }[]>();
@@ -463,7 +466,7 @@ export function Pdf({
       </Button>
     );
   // Reports and inspection documents come in two typesetting styles, plus any institution letterheads.
-  const target = (style: string) => url(config.watch, { ...period, tab: "pdf", record: record ?? "", style });
+  const target = href ?? ((style: string) => url(config.watch, { ...period, tab: "pdf", record: record ?? "", style }));
   const styles = [
     { value: "latex", title: "Gaya LaTeX", text: "Huruf serif, tabel booktabs, ringkas dan formal." },
     { value: "iso", title: "Dokumen ISO", text: "Kepala dokumen terkendali, tabel bergaris, lembar pengesahan." },

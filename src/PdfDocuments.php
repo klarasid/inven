@@ -14,11 +14,12 @@ require_once __DIR__ . '/PdfLayout.php';
 final class PdfDocuments
 {
     public const SETTING = 'inventory_pdf_documents';
-    public const TYPES = ['period' => 'Laporan periode', 'inspection' => 'Dokumen pemeriksaan', 'report' => 'Laporan kerusakan'];
+    public const TYPES = ['period' => 'Laporan periode', 'inspection' => 'Dokumen pemeriksaan', 'report' => 'Laporan kerusakan', 'sarpras' => 'Rekap sarpras'];
     public const DEFAULTS = [
         'period' => ['number' => 'LAP-SARPRAS/{dari}-{sampai}', 'revision' => '00', 'issued' => ''],
         'inspection' => ['number' => 'PMR-{id}', 'revision' => '00', 'issued' => ''],
         'report' => ['number' => 'LK-{id}', 'revision' => '00', 'issued' => ''],
+        'sarpras' => ['number' => 'REKAP-SARPRAS/{romawi}/{tahun}', 'revision' => '00', 'issued' => ''],
     ];
     /** Placeholders accepted in number formats, with their meaning for the settings form. */
     public const PLACEHOLDERS = [

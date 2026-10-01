@@ -1,0 +1,526 @@
+<?php
+
+declare(strict_types=1);
+
+namespace SLiMS\Plugins\Inventory;
+
+use PDO;
+use RuntimeException;
+
+/**
+ * Rekap Sarpras: eleven indicators of the library's facilities, each computed from the inventory
+ * (room area and functions, item categories and conditions), the software register, the figures
+ * kept in the `inventory_sarpras` setting (sivitas, bandwidth), and supervision history. Each
+ * indicator reports the level its data reaches (a = Sangat baik … d = Kurang), with the checks
+ * that decided it, so the library can see what is missing.
+ */
+final class Sarpras
+{
+    public const SETTING = 'inventory_sarpras';
+    public const LEVELS = ['a' => 'Sangat baik', 'b' => 'Baik', 'c' => 'Cukup', 'd' => 'Kurang'];
+
+    /** Room service functions: the four basic service areas first, then supporting ones. */
+    public const ROOM_FUNCTIONS = [
+        'koleksi' => ['label' => 'Area koleksi', 'group' => 'dasar'],
+        'baca' => ['label' => 'Area baca', 'group' => 'dasar'],
+        'kerja' => ['label' => 'Area kerja staf', 'group' => 'dasar'],
+        'layanan' => ['label' => 'Area layanan (sirkulasi dan referensi)', 'group' => 'dasar'],
+        'diskusi' => ['label' => 'Ruang diskusi', 'group' => 'pendukung'],
+        'multimedia' => ['label' => 'Ruang multimedia / audio visual', 'group' => 'pendukung'],
+        'belajar' => ['label' => 'Ruang belajar mandiri / carrel', 'group' => 'pendukung'],
+        'seminar' => ['label' => 'Ruang seminar / pertemuan', 'group' => 'pendukung'],
+        'literasi' => ['label' => 'Area literasi / pojok baca', 'group' => 'pendukung'],
+        'pimpinan' => ['label' => 'Ruang pimpinan / administrasi', 'group' => 'pendukung'],
+        'gudang' => ['label' => 'Ruang penyimpanan / gudang', 'group' => 'pendukung'],
+        'lainnya' => ['label' => 'Area pendukung lainnya', 'group' => 'pendukung'],
+    ];
+
+    public const CATEGORIES = [
+        'perabot' => 'Perabot (meja, kursi, rak)',
+        'peralatan' => 'Peralatan perpustakaan',
+        'komputer' => 'Komputer',
+        'multimedia' => 'Perangkat multimedia',
+        'keamanan' => 'Sarana keamanan dan keselamatan',
+        'fasilitas_umum' => 'Fasilitas umum',
+        'lainnya' => 'Lainnya',
+    ];
+
+    /** Common types per category, offered as suggestions; any text is accepted. */
+    public const TYPES = [
+        'komputer' => ['PC', 'Laptop', 'Server', 'Kiosk OPAC', 'Thin client'],
+        'multimedia' => ['Proyektor', 'Layar proyektor', 'Televisi / monitor besar', 'Panel interaktif', 'Pengeras suara', 'Mikrofon', 'Kamera', 'Pemindai (scanner)', 'Printer', 'Headphone', 'Perangkat VR'],
+        'keamanan' => ['APAR', 'CCTV', 'Security gate', 'Alarm kebakaran', 'Detektor asap', 'Hidran', 'Rambu dan jalur evakuasi', 'Kotak P3K', 'Loker penitipan', 'Pintu darurat'],
+        'fasilitas_umum' => ['Toilet', 'Musala', 'Area parkir', 'Kantin / pantri', 'Ruang laktasi', 'Akses difabel (ramp)', 'Wi-Fi publik', 'Dispenser air minum', 'Stasiun pengisian daya', 'Tempat sampah terpilah'],
+        'perabot' => ['Meja baca', 'Kursi', 'Rak buku', 'Meja sirkulasi', 'Lemari katalog', 'Sofa', 'Meja komputer'],
+        'peralatan' => ['Troli buku', 'Book drop', 'Mesin fotokopi', 'Barcode scanner', 'Label printer', 'Tangga rak'],
+    ];
+
+    public const LICENCES = [
+        'komersial' => 'Komersial (berbayar)',
+        'langganan' => 'Langganan / SaaS',
+        'open_source' => 'Open source',
+        'freeware' => 'Gratis (freeware)',
+        'hibah' => 'Lisensi hibah / pendidikan',
+        'tidak' => 'Tidak berlisensi / tidak jelas',
+    ];
+
+    public const COVERAGE = ['all' => 'Seluruh area layanan', 'partial' => 'Sebagian area layanan'];
+
+    private const DEFAULTS = [
+        'sivitas' => 0, 'designed' => false, 'building_area' => 0.0,
+        'bandwidth_mbps' => 0.0, 'bandwidth_users' => 0, 'bandwidth_coverage' => 'all', 'bandwidth_date' => '',
+        'evidence' => null,
+    ];
+    private const EVIDENCE_TYPES = ['application/pdf' => 'pdf', 'image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
+    public const EVIDENCE_MAX = 5 * 1024 * 1024;
+
+    /** Classification lists for the room and item forms. */
+    public static function lists(): array
+    {
+        return ['roomFunctions' => self::ROOM_FUNCTIONS, 'categories' => self::CATEGORIES, 'types' => self::TYPES];
+    }
+
+    /** Comma-separated room functions, keeping only known codes in a fixed order. */
+    public static function functions($value): string
+    {
+        $codes = is_array($value) ? $value : explode(',', (string) $value);
+        $codes = array_map(static fn($code) => trim((string) $code), $codes);
+        return implode(',', array_values(array_filter(array_keys(self::ROOM_FUNCTIONS), static fn($code) => in_array($code, $codes, true))));
+    }
+
+    /** Room area in m², or null when left empty. */
+    public static function area($value): ?float
+    {
+        $text = str_replace(',', '.', trim((string) ($value ?? '')));
+        if ($text === '') return null;
+        if (!is_numeric($text) || (float) $text < 0 || (float) $text > 99999999) throw new RuntimeException('Luas ruangan tidak valid.');
+        return round((float) $text, 2);
+    }
+
+    public static function category($value): ?string
+    {
+        $value = trim((string) ($value ?? ''));
+        if ($value === '') return null;
+        if (!isset(self::CATEGORIES[$value])) throw new RuntimeException('Kategori barang tidak valid.');
+        return $value;
+    }
+
+    public static function type($value): string
+    {
+        $value = trim((string) ($value ?? ''));
+        if (mb_strlen($value) > 100) throw new RuntimeException('Jenis barang maksimal 100 karakter.');
+        return $value;
+    }
+
+    // ---- Settings ------------------------------------------------------------------------------
+
+    public static function settings(PDO $db): array
+    {
+        $query = $db->prepare('SELECT setting_value FROM setting WHERE setting_name=?');
+        $query->execute([self::SETTING]);
+        $value = $query->fetchColumn();
+        $stored = is_string($value) ? @unserialize($value, ['allowed_classes' => false]) : [];
+        return array_merge(self::DEFAULTS, array_intersect_key(is_array($stored) ? $stored : [], self::DEFAULTS));
+    }
+
+    private static function store(PDO $db, array $settings): void
+    {
+        $db->prepare('INSERT INTO setting (setting_name,setting_value) VALUES (?,?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)')
+            ->execute([self::SETTING, serialize($settings)]);
+    }
+
+    private static function number($value, string $label, float $max): float
+    {
+        $text = str_replace(',', '.', trim((string) ($value ?? '')));
+        if ($text === '') return 0.0;
+        if (!is_numeric($text) || (float) $text < 0 || (float) $text > $max) throw new RuntimeException("$label tidak valid.");
+        return round((float) $text, 2);
+    }
+
+    public static function saveSettings(PDO $db, array $input): array
+    {
+        $settings = self::settings($db);
+        $settings['sivitas'] = (int) self::number($input['sivitas'] ?? '', 'Jumlah sivitas akademika', 10000000);
+        $settings['designed'] = ($input['designed'] ?? '') === '1';
+        $settings['building_area'] = self::number($input['building_area'] ?? '', 'Luas gedung', 99999999);
+        $settings['bandwidth_mbps'] = self::number($input['bandwidth_mbps'] ?? '', 'Bandwidth', 1000000);
+        $settings['bandwidth_users'] = (int) self::number($input['bandwidth_users'] ?? '', 'Jumlah pengguna serentak', 1000000);
+        $coverage = (string) ($input['bandwidth_coverage'] ?? 'all');
+        $settings['bandwidth_coverage'] = isset(self::COVERAGE[$coverage]) ? $coverage : 'all';
+        $date = trim((string) ($input['bandwidth_date'] ?? ''));
+        if ($date !== '') {
+            $parsed = \DateTimeImmutable::createFromFormat('!Y-m-d', $date);
+            if (!$parsed || $parsed->format('Y-m-d') !== $date) throw new RuntimeException('Tanggal pengukuran tidak valid.');
+        }
+        $settings['bandwidth_date'] = $date;
+        self::store($db, $settings);
+        return $settings;
+    }
+
+    // ---- Bandwidth evidence --------------------------------------------------------------------
+
+    /** Kept with the inventory photos, so it inherits their web-server denial and is only served through the page. */
+    public static function evidenceDir(): string
+    {
+        return SB . 'images' . DIRECTORY_SEPARATOR . 'inventaris-barang' . DIRECTORY_SEPARATOR . 'sarpras';
+    }
+
+    public static function uploadEvidence(PDO $db, array $file): array
+    {
+        if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || !is_string($file['tmp_name'] ?? null) || !is_uploaded_file($file['tmp_name'])) {
+            throw new RuntimeException('Pilih berkas bukti (PDF, JPEG, PNG, atau WebP) maksimal 5 MB.');
+        }
+        if ((int) $file['size'] > self::EVIDENCE_MAX) throw new RuntimeException('Berkas bukti maksimal 5 MB.');
+        $mime = (string) (new \finfo(FILEINFO_MIME_TYPE))->file($file['tmp_name']);
+        if (!isset(self::EVIDENCE_TYPES[$mime])) throw new RuntimeException('Format bukti harus PDF, JPEG, PNG, atau WebP.');
+        $dir = self::evidenceDir();
+        if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) throw new RuntimeException('Folder bukti tidak dapat dibuat.');
+        $name = 'bandwidth-' . bin2hex(random_bytes(8)) . '.' . self::EVIDENCE_TYPES[$mime];
+        if (!move_uploaded_file($file['tmp_name'], $dir . DIRECTORY_SEPARATOR . $name)) throw new RuntimeException('Berkas bukti tidak dapat disimpan.');
+        $settings = self::settings($db);
+        $old = $settings['evidence']['file'] ?? null;
+        $original = mb_substr(basename((string) ($file['name'] ?? 'bukti')), 0, 150);
+        $settings['evidence'] = ['file' => $name, 'name' => $original, 'mime' => $mime, 'uploaded_at' => date('Y-m-d H:i:s')];
+        self::store($db, $settings);
+        if (is_string($old)) self::removeFile($old);
+        return $settings;
+    }
+
+    public static function deleteEvidence(PDO $db): array
+    {
+        $settings = self::settings($db);
+        $old = $settings['evidence']['file'] ?? null;
+        $settings['evidence'] = null;
+        self::store($db, $settings);
+        if (is_string($old)) self::removeFile($old);
+        return $settings;
+    }
+
+    private static function removeFile(string $name): void
+    {
+        if (preg_match('/\Abandwidth-[0-9a-f]{16}\.(pdf|jpg|png|webp)\z/', $name)) @unlink(self::evidenceDir() . DIRECTORY_SEPARATOR . $name);
+    }
+
+    /** @return array{path:string,mime:string,name:string}|null */
+    public static function evidenceFile(PDO $db): ?array
+    {
+        $evidence = self::settings($db)['evidence'];
+        if (!is_array($evidence) || !preg_match('/\Abandwidth-[0-9a-f]{16}\.(pdf|jpg|png|webp)\z/', (string) ($evidence['file'] ?? ''))) return null;
+        $path = self::evidenceDir() . DIRECTORY_SEPARATOR . $evidence['file'];
+        return is_file($path) ? ['path' => $path, 'mime' => (string) $evidence['mime'], 'name' => (string) $evidence['name']] : null;
+    }
+
+    // ---- Software register ---------------------------------------------------------------------
+
+    public static function software(PDO $db): array
+    {
+        return $db->query('SELECT * FROM inventory_software ORDER BY name, id')->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    public static function saveSoftware(PDO $db, array $input, int $id, ?int $uid): int
+    {
+        $text = static function (string $key, string $label, int $max, bool $required = false) use ($input): string {
+            $value = trim((string) ($input[$key] ?? ''));
+            if ($required && $value === '') throw new RuntimeException("$label wajib diisi.");
+            if (mb_strlen($value) > $max) throw new RuntimeException("$label maksimal $max karakter.");
+            return $value;
+        };
+        $licence = (string) ($input['licence'] ?? '');
+        if (!isset(self::LICENCES[$licence])) throw new RuntimeException('Pilih jenis lisensi.');
+        $until = trim((string) ($input['valid_until'] ?? ''));
+        if ($until !== '') {
+            $parsed = \DateTimeImmutable::createFromFormat('!Y-m-d', $until);
+            if (!$parsed || $parsed->format('Y-m-d') !== $until) throw new RuntimeException('Tanggal berlaku lisensi tidak valid.');
+        }
+        $installs = (int) ($input['installs'] ?? 1);
+        if ($installs < 1 || $installs > 100000) throw new RuntimeException('Jumlah instalasi tidak valid.');
+        $notes = (string) ($input['notes'] ?? '');
+        if (strlen($notes) > 5000) throw new RuntimeException('Catatan maksimal 5.000 karakter.');
+        $values = [
+            'name' => $text('name', 'Nama aplikasi', 150, true),
+            'version' => $text('version', 'Versi', 50),
+            'purpose' => $text('purpose', 'Kegunaan', 255),
+            'licence' => $licence,
+            'licence_ref' => $text('licence_ref', 'Nomor / bukti lisensi', 255),
+            'valid_until' => $until === '' ? null : $until,
+            'installs' => $installs,
+            'notes' => $notes,
+            'updated_at' => date('Y-m-d H:i:s'),
+        ];
+        if ($id > 0) {
+            $values['id'] = $id;
+            $query = $db->prepare('UPDATE inventory_software SET name=:name, version=:version, purpose=:purpose, licence=:licence, licence_ref=:licence_ref, valid_until=:valid_until, installs=:installs, notes=:notes, updated_at=:updated_at WHERE id=:id');
+            $query->execute($values);
+            if (!$db->query('SELECT 1 FROM inventory_software WHERE id=' . $id)->fetchColumn()) throw new RuntimeException('Aplikasi tidak ditemukan.');
+            return $id;
+        }
+        $values['created_by'] = $uid;
+        $values['created_at'] = $values['updated_at'];
+        $db->prepare('INSERT INTO inventory_software (name, version, purpose, licence, licence_ref, valid_until, installs, notes, created_by, created_at, updated_at)
+            VALUES (:name, :version, :purpose, :licence, :licence_ref, :valid_until, :installs, :notes, :created_by, :created_at, :updated_at)')->execute($values);
+        return (int) $db->lastInsertId();
+    }
+
+    public static function deleteSoftware(PDO $db, int $id): void
+    {
+        $db->prepare('DELETE FROM inventory_software WHERE id=?')->execute([$id]);
+    }
+
+    /** A licence counts as legal unless it is marked unlicensed or has expired. */
+    public static function licensed(array $row, string $today): bool
+    {
+        return $row['licence'] !== 'tidak' && ($row['valid_until'] === null || (string) $row['valid_until'] >= $today);
+    }
+
+    // ---- Recap ---------------------------------------------------------------------------------
+
+    private static function pct(int $part, int $total): ?float
+    {
+        return $total > 0 ? round($part * 100 / $total, 1) : null;
+    }
+
+    /** a: more than 75 %, b: 51–75 %, c: 50 %, d: below 50 % (the percentage scale used by every percentage indicator). */
+    private static function percentLevel(?float $pct): ?string
+    {
+        if ($pct === null) return null;
+        return $pct > 75 ? 'a' : ($pct >= 51 ? 'b' : ($pct >= 50 ? 'c' : 'd'));
+    }
+
+    private static function typeKey(array $item): string
+    {
+        $type = trim((string) $item['item_type']);
+        return mb_strtolower($type !== '' ? $type : trim((string) $item['item_name']));
+    }
+
+    /** Distinct types among working items (not Rusak berat) of a category: type => item count. */
+    private static function types(array $items, string $category): array
+    {
+        $types = [];
+        foreach ($items as $item) {
+            if ($item['category'] !== $category || $item['item_condition'] === 'RB') continue;
+            $key = self::typeKey($item);
+            $label = trim((string) $item['item_type']) !== '' ? trim((string) $item['item_type']) : trim((string) $item['item_name']);
+            $types[$key] ??= ['type' => $label, 'count' => 0];
+            $types[$key]['count']++;
+        }
+        ksort($types);
+        return array_values($types);
+    }
+
+    private static function fmt(float $value, int $decimals = 0): string
+    {
+        return number_format($value, $decimals, ',', '.');
+    }
+
+    /**
+     * @return array{generated_at:string,settings:array,indicators:list<array>,summary:array}
+     */
+    public static function recap(PDO $db, Supervision $watch): array
+    {
+        $settings = self::settings($db);
+        $today = date('Y-m-d');
+        $rooms = $db->query('SELECT l.id, l.room_name, l.location_code, l.area_m2, l.room_functions, (SELECT location_name FROM mst_location WHERE location_id=l.slims_location_id) library_name FROM inventory_locations l ORDER BY l.room_name, l.id')->fetchAll(PDO::FETCH_ASSOC);
+        $items = $db->query('SELECT id, location_id, item_name, category, item_type, item_condition FROM inventory_items')->fetchAll(PDO::FETCH_ASSOC);
+        $roomFunctions = [];
+        foreach ($rooms as $room) $roomFunctions[(int) $room['id']] = array_filter(explode(',', (string) $room['room_functions']));
+        $label = static fn(string $code) => self::ROOM_FUNCTIONS[$code]['label'] ?? $code;
+        $split = static function (array $codes): array {
+            $basic = array_values(array_filter($codes, static fn($c) => (self::ROOM_FUNCTIONS[$c]['group'] ?? '') === 'dasar'));
+            return [$basic, array_values(array_diff($codes, $basic))];
+        };
+        $indicators = [];
+
+        // 1. Luas gedung atau ruang
+        $roomArea = 0.0; $measured = 0;
+        foreach ($rooms as $room) if ($room['area_m2'] !== null) { $roomArea += (float) $room['area_m2']; $measured++; }
+        $area = (float) $settings['building_area'] > 0 ? (float) $settings['building_area'] : $roomArea;
+        $ratio = $settings['sivitas'] > 0 && $area > 0 ? $area / $settings['sivitas'] : null;
+        $large = $area > 750 || ($ratio !== null && $ratio > 0.5);
+        $indicators[] = [
+            'no' => 1, 'section' => 'Gedung dan ruang', 'title' => 'Luas gedung atau ruang perpustakaan',
+            'value' => $area > 0 ? self::fmt($area, $area == floor($area) ? 0 : 2) . ' m²' . ($ratio !== null ? ' · ' . self::fmt($ratio, 2) . ' m²/sivitas' : '') : 'Belum diisi',
+            'level' => $area <= 0 ? null : ($large && $settings['designed'] ? 'a' : ($large ? 'b' : ($area >= 750 || ($ratio !== null && $ratio >= 0.5) ? 'c' : 'd'))),
+            'basis' => (float) $settings['building_area'] > 0 ? 'Luas gedung dari data pendukung.' : "Jumlah luas $measured dari " . count($rooms) . ' ruangan yang sudah diisi luasnya.',
+            'checks' => [
+                ['label' => 'Luas lebih dari 750 m² atau lebih dari 0,5 m² per sivitas', 'ok' => $large],
+                ['label' => 'Jumlah sivitas akademika diisi', 'ok' => $settings['sivitas'] > 0],
+                ['label' => 'Gedung didesain khusus untuk perpustakaan', 'ok' => (bool) $settings['designed']],
+            ],
+            'rows' => array_map(static fn($r) => [$r['room_name'], $r['area_m2'] === null ? '—' : self::fmt((float) $r['area_m2'], 2) . ' m²'], $rooms),
+            'columns' => ['Ruangan', 'Luas'],
+            'fix' => 'Isi luas tiap ruangan di Ruangan & Barang, atau isi luas gedung dan jumlah sivitas di Data pendukung.',
+        ];
+
+        // 2. Ruang atau area layanan
+        $present = array_values(array_unique(array_merge(...array_values($roomFunctions ?: [[]]))));
+        [$basic, $support] = $split($present);
+        $classified = count(array_filter($roomFunctions));
+        $indicators[] = [
+            'no' => 2, 'section' => 'Gedung dan ruang', 'title' => 'Ruang atau area layanan perpustakaan',
+            'value' => count($basic) . ' dari 4 area dasar · ' . count($support) . ' area pendukung',
+            'level' => $classified === 0 ? null : (count($basic) < 4 ? 'd' : (count($support) > 1 ? 'a' : (count($support) === 1 ? 'b' : 'c'))),
+            'basis' => "Dari fungsi ruang yang diisi pada $classified dari " . count($rooms) . ' ruangan.',
+            'checks' => array_merge(
+                array_map(static fn($code) => ['label' => self::ROOM_FUNCTIONS[$code]['label'], 'ok' => in_array($code, $basic, true)], array_keys(array_filter(self::ROOM_FUNCTIONS, static fn($f) => $f['group'] === 'dasar'))),
+                [['label' => 'Lebih dari 1 area pendukung' . ($support ? ': ' . implode(', ', array_map($label, $support)) : ''), 'ok' => count($support) > 1]]
+            ),
+            'rows' => array_map(static fn($r) => [$r['room_name'], implode(', ', array_map($label, array_filter(explode(',', (string) $r['room_functions'])))) ?: '—'], $rooms),
+            'columns' => ['Ruangan', 'Fungsi'],
+            'fix' => 'Pilih fungsi tiap ruangan (bisa lebih dari satu) di formulir ruangan.',
+        ];
+
+        // 3. Sarana dan prasarana berfungsi baik
+        $good = count(array_filter($items, static fn($i) => $i['item_condition'] === 'B'));
+        $fair = count(array_filter($items, static fn($i) => $i['item_condition'] === 'KB'));
+        $pct = self::pct($good, count($items));
+        $indicators[] = [
+            'no' => 3, 'section' => 'Kondisi sarana dan prasarana', 'title' => 'Sarana dan prasarana berfungsi baik',
+            'value' => $pct === null ? 'Belum ada barang' : self::fmt($pct, 1) . '% berfungsi baik',
+            'level' => self::percentLevel($pct),
+            'basis' => "$good barang kondisi Baik dari " . count($items) . " barang ($fair Kurang baik, " . (count($items) - $good - $fair) . ' Rusak berat).',
+            'checks' => [['label' => 'Lebih dari 75% barang dalam kondisi Baik', 'ok' => $pct !== null && $pct > 75]],
+            'rows' => [], 'columns' => [],
+            'fix' => 'Perbarui kondisi barang setelah pemeriksaan, atau perbaiki barang yang rusak.',
+        ];
+
+        // Functions served by working items of some categories, through the rooms they stand in.
+        $served = static function (array $categories) use ($items, $roomFunctions): array {
+            $codes = [];
+            foreach ($items as $item) {
+                if (!in_array($item['category'], $categories, true) || $item['item_condition'] === 'RB') continue;
+                foreach ($roomFunctions[(int) $item['location_id']] ?? [] as $code) $codes[$code] = true;
+            }
+            return array_keys($codes);
+        };
+
+        // 4. Perabot dan peralatan
+        [$fBasic, $fSupport] = $split($served(['perabot', 'peralatan']));
+        $furnished = count(array_filter($items, static fn($i) => in_array($i['category'], ['perabot', 'peralatan'], true)));
+        $indicators[] = [
+            'no' => 4, 'section' => 'Perabot dan peralatan', 'title' => 'Perabot dan peralatan per fungsi layanan',
+            'value' => count($fBasic) . ' dari 4 fungsi dasar · ' . count($fSupport) . ' fungsi pendukung',
+            'level' => $furnished === 0 || $classified === 0 ? null : (count($fBasic) < 4 ? 'd' : (count($fSupport) > 4 ? 'a' : (count($fSupport) >= 3 ? 'b' : 'c'))),
+            'basis' => "$furnished barang berkategori perabot atau peralatan, dihitung menurut fungsi ruangan tempatnya berada.",
+            'checks' => array_merge(
+                array_map(static fn($code) => ['label' => self::ROOM_FUNCTIONS[$code]['label'], 'ok' => in_array($code, $fBasic, true)], array_keys(array_filter(self::ROOM_FUNCTIONS, static fn($f) => $f['group'] === 'dasar'))),
+                [['label' => 'Lebih dari 4 fungsi pendukung' . ($fSupport ? ': ' . implode(', ', array_map($label, $fSupport)) : ''), 'ok' => count($fSupport) > 4]]
+            ),
+            'rows' => [], 'columns' => [],
+            'fix' => 'Beri kategori Perabot atau Peralatan pada barang, dan isi fungsi ruangannya.',
+        ];
+
+        // 5. Komputer per fungsi layanan
+        $withComputer = $served(['komputer']);
+        $computerPct = self::pct(count(array_intersect($withComputer, $present)), count($present));
+        $computers = count(array_filter($items, static fn($i) => $i['category'] === 'komputer'));
+        $indicators[] = [
+            'no' => 5, 'section' => 'Perangkat TI dan multimedia', 'title' => 'Komputer untuk mendukung fungsi layanan',
+            'value' => $computerPct === null ? 'Belum ada fungsi ruang' : self::fmt($computerPct, 1) . '% fungsi layanan',
+            'level' => $computers === 0 ? ($present ? 'd' : null) : self::percentLevel($computerPct),
+            'basis' => "$computers komputer; " . count(array_intersect($withComputer, $present)) . ' dari ' . count($present) . ' fungsi layanan memiliki komputer yang berfungsi.',
+            'checks' => array_map(static fn($code) => ['label' => self::ROOM_FUNCTIONS[$code]['label'], 'ok' => in_array($code, $withComputer, true)], $present),
+            'rows' => [], 'columns' => [],
+            'fix' => 'Beri kategori Komputer pada PC dan laptop layanan, lalu pastikan fungsi ruangannya terisi.',
+        ];
+
+        // 6. Jaringan internet
+        $perUser = $settings['bandwidth_users'] > 0 && $settings['bandwidth_mbps'] > 0 ? $settings['bandwidth_mbps'] / $settings['bandwidth_users'] : null;
+        $all = $settings['bandwidth_coverage'] === 'all';
+        $indicators[] = [
+            'no' => 6, 'section' => 'Perangkat TI dan multimedia', 'title' => 'Ketersediaan jaringan internet',
+            'value' => $perUser === null ? 'Belum diisi' : self::fmt($perUser, 2) . ' Mbps/orang · ' . mb_strtolower(self::COVERAGE[$settings['bandwidth_coverage']]),
+            'level' => $perUser === null ? null : ($perUser > 5 && $all ? 'a' : ($perUser >= 4 && $all ? 'b' : ($perUser >= 3 ? 'c' : 'd'))),
+            'basis' => $perUser === null ? 'Isi bandwidth dan jumlah pengguna serentak di Data pendukung.' : self::fmt((float) $settings['bandwidth_mbps'], 0) . ' Mbps untuk ' . $settings['bandwidth_users'] . ' pengguna serentak' . ($settings['bandwidth_date'] ? ', diukur ' . PdfLayout::date($settings['bandwidth_date']) : '') . '.',
+            'checks' => [
+                ['label' => 'Lebih dari 5 Mbps per orang', 'ok' => $perUser !== null && $perUser > 5],
+                ['label' => 'Menjangkau seluruh area layanan', 'ok' => $all && $perUser !== null],
+                ['label' => 'Bukti pengukuran diunggah', 'ok' => is_array($settings['evidence'])],
+            ],
+            'rows' => [], 'columns' => [],
+            'fix' => 'Ukur bandwidth saat jam sibuk, lalu isi dan unggah buktinya di Data pendukung.',
+        ];
+
+        // 7. Perangkat multimedia
+        $multimedia = self::types($items, 'multimedia');
+        $indicators[] = self::typeIndicator(7, 'Perangkat TI dan multimedia', 'Perangkat multimedia tersedia, digunakan, dan terpelihara', $multimedia,
+            count($multimedia) > 5 ? 'a' : (count($multimedia) >= 4 ? 'b' : (count($multimedia) === 3 ? 'c' : 'd')),
+            'Lebih dari 5 jenis perangkat multimedia yang berfungsi', 'Beri kategori Multimedia dan isi jenisnya (mis. Proyektor). Pemeliharaannya dibuktikan lewat pemeriksaan pada indikator 11.');
+
+        // 8. Legalitas perangkat lunak
+        $software = self::software($db);
+        $legal = count(array_filter($software, static fn($s) => self::licensed($s, $today)));
+        $softwarePct = self::pct($legal, count($software));
+        $indicators[] = [
+            'no' => 8, 'section' => 'Perangkat TI dan multimedia', 'title' => 'Legalitas perangkat lunak',
+            'value' => $softwarePct === null ? 'Belum ada aplikasi' : self::fmt($softwarePct, 1) . '% berlisensi resmi',
+            'level' => self::percentLevel($softwarePct),
+            'basis' => "$legal dari " . count($software) . ' aplikasi berlisensi resmi (termasuk open source); lisensi kedaluwarsa dihitung tidak berlisensi.',
+            'checks' => [['label' => 'Lebih dari 75% aplikasi berlisensi resmi', 'ok' => $softwarePct !== null && $softwarePct > 75]],
+            'rows' => array_map(static fn($s) => [$s['name'] . ($s['version'] !== '' ? ' ' . $s['version'] : ''), (self::LICENCES[$s['licence']] ?? $s['licence']) . (self::licensed($s, $today) ? '' : ($s['licence'] === 'tidak' ? '' : ' (kedaluwarsa)'))], $software),
+            'columns' => ['Aplikasi', 'Lisensi'],
+            'fix' => 'Catat semua aplikasi yang dipakai perpustakaan di tab Perangkat lunak.',
+        ];
+
+        // 9. Sarana keamanan
+        $security = self::types($items, 'keamanan');
+        $indicators[] = self::typeIndicator(9, 'Keamanan dan fasilitas umum', 'Sarana keamanan dan keselamatan', $security,
+            count($security) > 5 ? 'a' : (count($security) === 5 ? 'b' : (count($security) === 4 ? 'c' : 'd')),
+            'Lebih dari 5 jenis sarana keamanan', 'Beri kategori Keamanan dan isi jenisnya (APAR, CCTV, security gate, alarm, jalur evakuasi, …).');
+
+        // 10. Fasilitas umum
+        $public = self::types($items, 'fasilitas_umum');
+        $indicators[] = self::typeIndicator(10, 'Keamanan dan fasilitas umum', 'Ketersediaan fasilitas umum', $public,
+            count($public) > 6 ? 'a' : (count($public) === 6 ? 'b' : (count($public) === 5 ? 'c' : 'd')),
+            'Lebih dari 6 jenis fasilitas umum', 'Catat fasilitas umum sebagai barang berkategori Fasilitas umum (toilet, musala, parkir, ruang laktasi, …).');
+
+        // 11. Pengawasan dan pemeliharaan, over the last twelve months.
+        $filter = $watch->filter(['from' => (new \DateTimeImmutable('-1 year +1 day'))->format('Y-m-d'), 'to' => $today]);
+        $summary = $watch->summary($filter);
+        [$where, $args] = $watch->where($filter);
+        $findingTotal = (int) $summary['findings']['open'] + (int) $summary['findings']['closed'];
+        $documented = (int) $watch->query("SELECT COUNT(*) FROM inventory_watch_findings f JOIN inventory_watch_inspections i ON i.id=f.inspection_id WHERE $where AND (f.status='closed' OR EXISTS (SELECT 1 FROM inventory_watch_actions a WHERE a.finding_id=f.id AND a.submitted_at IS NOT NULL))", $args)->fetchColumn();
+        $routine = (int) $summary['counts']['routine_final'];
+        $planned = (int) $summary['planned'];
+        $donePct = self::pct($routine, $planned);
+        $allRooms = count($summary['missing_rooms']) === 0 && count($rooms) > 0;
+        $followed = $documented >= $findingTotal;
+        $any = (int) $summary['counts']['total'] > 0;
+        $indicators[] = [
+            'no' => 11, 'section' => 'Pengawasan dan pemeliharaan', 'title' => 'Pengawasan berkala dan tindak lanjut',
+            'value' => $planned ? "$routine dari $planned pemeriksaan terjadwal selesai" : ($any ? 'Hanya pemeriksaan insidental' : 'Belum ada pemeriksaan'),
+            'level' => !$any && !$planned ? 'd' : ($routine === 0 ? 'c' : ($allRooms && $donePct !== null && $donePct >= 90 && $followed ? 'a' : 'b')),
+            'basis' => '12 bulan terakhir (' . PdfLayout::date($filter['from']) . ' – ' . PdfLayout::date($filter['to']) . "). $documented dari $findingTotal temuan memiliki tindak lanjut terdokumentasi.",
+            'checks' => [
+                ['label' => 'Semua ruangan memiliki jadwal pemeriksaan rutin' . ($allRooms ? '' : ' (' . count($summary['missing_rooms']) . ' belum)'), 'ok' => $allRooms],
+                ['label' => 'Minimal 90% pemeriksaan terjadwal selesai' . ($donePct !== null ? ' (' . self::fmt($donePct, 1) . '%)' : ''), 'ok' => $donePct !== null && $donePct >= 90],
+                ['label' => 'Semua temuan memiliki tindak lanjut terdokumentasi', 'ok' => $followed],
+            ],
+            'rows' => array_map(static fn($r) => [$r['room_name'], (string) ($r['location_name'] ?? '—')], $summary['missing_rooms']),
+            'columns' => ['Ruangan tanpa jadwal', 'Perpustakaan'],
+            'fix' => 'Buat jadwal untuk ruangan yang belum, selesaikan pemeriksaan tepat waktu, dan catat pekerjaan untuk setiap temuan.',
+        ];
+
+        $levels = array_count_values(array_map(static fn($i) => $i['level'] ?? '-', $indicators));
+        return [
+            'generated_at' => date('Y-m-d H:i:s'),
+            'settings' => $settings,
+            'indicators' => $indicators,
+            'summary' => ['a' => $levels['a'] ?? 0, 'b' => $levels['b'] ?? 0, 'c' => $levels['c'] ?? 0, 'd' => $levels['d'] ?? 0, 'empty' => $levels['-'] ?? 0],
+            'counts' => ['rooms' => count($rooms), 'items' => count($items), 'uncategorized' => count(array_filter($items, static fn($i) => $i['category'] === null)), 'unclassified_rooms' => count($rooms) - $classified, 'no_area' => count($rooms) - $measured],
+        ];
+    }
+
+    private static function typeIndicator(int $no, string $section, string $title, array $types, string $level, string $check, string $fix): array
+    {
+        return [
+            'no' => $no, 'section' => $section, 'title' => $title,
+            'value' => count($types) . ' jenis',
+            'level' => $types ? $level : null,
+            'basis' => 'Jenis berbeda dari barang yang berfungsi (tidak Rusak berat).',
+            'checks' => [['label' => $check, 'ok' => $level === 'a']],
+            'rows' => array_map(static fn($t) => [$t['type'], (string) $t['count']], $types),
+            'columns' => ['Jenis', 'Jumlah'],
+            'fix' => $fix,
+        ];
+    }
+}

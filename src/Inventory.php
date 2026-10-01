@@ -5,6 +5,8 @@ namespace SLiMS\Plugins\Inventory;
 use PDO;
 use RuntimeException;
 
+require_once __DIR__ . '/Sarpras.php';
+
 /**
  * Saving an inventory item, shared by the admin page and the Klaras InvenSync API
  * so both apply the same rules: validation, the item code allocator, and photos.
@@ -57,6 +59,7 @@ final class Inventory
             throw new RuntimeException('Keterangan maksimal 5.000 karakter.');
         }
 
+        // Category and type feed Rekap Sarpras; callers that do not send them pass the stored row (see ItemController::fields).
         return [
             'location_id' => $locationId,
             'item_name' => $itemName,
@@ -70,6 +73,8 @@ final class Inventory
             'acquisition_price' => (float) $priceText,
             'item_condition' => $condition,
             'notes' => self::text($input, 'notes'),
+            'category' => Sarpras::category($input['category'] ?? null),
+            'item_type' => Sarpras::type($input['item_type'] ?? ''),
         ];
     }
 
@@ -113,7 +118,7 @@ final class Inventory
                      serial_number=:serial_number, item_size=:item_size, material=:material,
                      acquisition_year=:acquisition_year, item_code=:item_code, quantity_register=:quantity_register,
                      acquisition_price=:acquisition_price, item_condition=:item_condition, notes=:notes,
-                     updated_at=:updated_at WHERE id=:id'
+                     category=:category, item_type=:item_type, updated_at=:updated_at WHERE id=:id'
                 )->execute($values);
             } else {
                 $values['created_by'] = $uid;
@@ -121,9 +126,9 @@ final class Inventory
                 $db->prepare(
                     'INSERT INTO inventory_items
                      (location_id, item_name, brand_model, serial_number, item_size, material, acquisition_year,
-                      item_code, quantity_register, acquisition_price, item_condition, notes, created_by, created_at, updated_at)
+                      item_code, quantity_register, acquisition_price, item_condition, notes, category, item_type, created_by, created_at, updated_at)
                      VALUES (:location_id, :item_name, :brand_model, :serial_number, :item_size, :material, :acquisition_year,
-                      :item_code, :quantity_register, :acquisition_price, :item_condition, :notes, :created_by, :created_at, :updated_at)'
+                      :item_code, :quantity_register, :acquisition_price, :item_condition, :notes, :category, :item_type, :created_by, :created_at, :updated_at)'
                 )->execute($values);
                 $id = (int) $db->lastInsertId();
             }

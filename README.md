@@ -74,8 +74,20 @@ Semua menu tersedia di modul **Stock Take**. Pengguna dengan hak baca dapat meli
 | **Jadwal** | Menjadwalkan pemeriksaan ruangan, harian hingga tahunan. Jadwal mengikuti hari libur di **System → Hari Libur**. |
 | **Checklist** | Menyusun template checklist pemeriksaan beserta riwayat versinya. |
 | **Laporan** | Melihat cakupan dan keterlambatan pemeriksaan, serta mencetak laporan periode atau dokumen pemeriksaan dalam gaya LaTeX atau ISO. |
+| **Rekap Sarpras** | Menghitung sebelas indikator sarana dan prasarana (luas dan fungsi ruang, kondisi barang, perabot, komputer, jaringan, multimedia, lisensi perangkat lunak, keamanan, fasilitas umum, serta pengawasan), mencatat data pendukung dan register perangkat lunak, dan mencetak rekapnya. |
 | **Aplikasi InvenSync** | Mengizinkan aplikasi HP dan mengelola perangkat yang masuk. |
 | **Data pemakaian** | Melihat dan mengatur data pemakaian yang dikirim ke Klaras. |
+
+### Rekap Sarpras
+
+Rekap dihitung dari data yang sudah ada, jadi lengkapi dulu klasifikasinya:
+
+1. Di **Ruangan & Barang**, ubah tiap ruangan dan isi **Luas (m²)** serta **fungsi ruang**. Ada empat fungsi layanan dasar (koleksi, baca, kerja staf, layanan); fungsi lainnya termasuk pendukung.
+2. Beri **Kategori** dan **Jenis** pada barang (perabot, peralatan, komputer, multimedia, keamanan, fasilitas umum). Centang beberapa barang di tabel ruangan, lalu klik **Beri kategori** untuk mengisinya sekaligus.
+3. Di **Rekap Sarpras → Data pendukung**, isi jumlah sivitas akademika, luas gedung bila diketahui, serta bandwidth beserta bukti pengukurannya.
+4. Di tab **Perangkat lunak**, catat aplikasi yang dipakai beserta jenis lisensinya.
+
+Setiap indikator menampilkan tingkat (Sangat baik, Baik, Cukup, Kurang), butir yang sudah dan belum terpenuhi, rincian datanya, dan saran perbaikan. Klik **Cetak rekap** untuk PDF dalam gaya LaTeX, ISO, atau kop institusi.
 
 ### Label QR code
 

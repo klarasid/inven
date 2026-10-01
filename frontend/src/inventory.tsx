@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Plus,
@@ -17,6 +17,7 @@ import {
   FileText,
   ChevronDown,
   QrCode,
+  Tags,
   X,
 } from "lucide-react";
 import { Button } from "./components/ui/button";
@@ -69,6 +70,49 @@ import {
   previewPdf,
 } from "./shared";
 import type { Page, Values, Photo, Route } from "./types";
+
+const NONE = "__none";
+
+/** Item category for Rekap Sarpras, with suggested types for the chosen category. */
+function CategoryFields({
+  category,
+  type,
+  onCategory,
+  onType,
+  typeHint = "Contoh: Proyektor, APAR, Toilet. Barang sejenis dihitung satu jenis.",
+}: {
+  category: unknown;
+  type: unknown;
+  onCategory: (v: string) => void;
+  onType: (v: string) => void;
+  typeHint?: string;
+}) {
+  const w = useWorkspace();
+  const lists = w.options.sarpras;
+  const id = useId();
+  const suggestions = lists.types[String(category || "")] || [];
+  return (
+    <FieldGroup className="grid sm:grid-cols-2">
+      <Choice
+        label="Kategori"
+        value={String(category || NONE)}
+        onChange={(v) => onCategory(v === NONE ? "" : v)}
+        items={[{ value: NONE, label: "Tanpa kategori" }, ...Object.entries(lists.categories).map(([value, label]) => ({ value, label }))]}
+        description="Dipakai di Rekap Sarpras."
+      />
+      <Field>
+        <FieldLabel htmlFor={id}>Jenis</FieldLabel>
+        <Input id={id} list={`${id}-types`} maxLength={100} value={String(type ?? "")} onChange={(e) => onType(e.target.value)} />
+        <datalist id={`${id}-types`}>
+          {suggestions.map((t) => (
+            <option key={t} value={t} />
+          ))}
+        </datalist>
+        <FieldDescription>{typeHint}</FieldDescription>
+      </Field>
+    </FieldGroup>
+  );
+}
 
 const home: Route = { view: "inventory" };
 const homeCrumb = { label: "Ruangan & Barang", route: home };
@@ -317,6 +361,7 @@ function RoomItems() {
   const [picked, setPicked] = useState<Record<string, string>>({});
   const [labelItems, setLabelItems] = useState<{ id: string; name: string }[] | null | undefined>(undefined);
   const pickedCount = Object.keys(picked).length;
+  const [categorize, setCategorize] = useState(false);
   const toggle = (id: string, name: string) =>
     setPicked((p) => {
       const { [id]: had, ...rest } = p;
@@ -415,6 +460,12 @@ function RoomItems() {
             <QrCode data-icon="inline-start" />
             Cetak label terpilih
           </Button>
+          {w.config.write && (
+            <Button size="sm" variant="outline" onClick={() => setCategorize(true)}>
+              <Tags data-icon="inline-start" />
+              Beri kategori
+            </Button>
+          )}
           <Button size="sm" variant="ghost" onClick={() => setPicked({})}>
             <X data-icon="inline-start" />
             Batalkan pilihan
@@ -554,6 +605,16 @@ function RoomItems() {
           w.refresh();
         }}
       />
+      <CategorizeDialog
+        open={categorize}
+        ids={Object.keys(picked)}
+        onClose={() => setCategorize(false)}
+        onDone={() => {
+          setCategorize(false);
+          setPicked({});
+          w.refresh();
+        }}
+      />
       <LabelDialog
         open={labelItems !== undefined}
         onOpenChange={(open) => !open && setLabelItems(undefined)}
@@ -572,6 +633,64 @@ function RoomItems() {
         }}
       />
     </>
+  );
+}
+
+function CategorizeDialog({
+  open,
+  ids,
+  onClose,
+  onDone,
+}: {
+  open: boolean;
+  ids: string[];
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const w = useWorkspace();
+  const [category, setCategory] = useState("");
+  const [type, setType] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function save() {
+    setBusy(true);
+    setError("");
+    try {
+      const reply = await w.mutate({ form_action: "categorize_items", itemID: ids, category, item_type: type }, undefined, true);
+      toast.success(reply.message || "Kategori tersimpan.");
+      setType("");
+      onDone();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && !busy && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Beri kategori {ids.length} barang</DialogTitle>
+          <DialogDescription>Kategori dan jenis dipakai untuk menghitung Rekap Sarpras.</DialogDescription>
+        </DialogHeader>
+        <ErrorBox message={error} />
+        <CategoryFields
+          category={category}
+          type={type}
+          onCategory={setCategory}
+          onType={setType}
+          typeHint="Kosongkan untuk mempertahankan jenis masing-masing barang."
+        />
+        <DialogFooter>
+          <Button variant="outline" disabled={busy} onClick={onClose}>
+            Batal
+          </Button>
+          <Button disabled={busy} onClick={save}>
+            {busy ? "Menyimpan…" : "Simpan"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -662,6 +781,10 @@ function ItemDetails({ record, photos }: { record: Values; photos: Photo[] }) {
   const w = useWorkspace();
   const fields: [string, unknown][] = [
     ["Ruangan", w.options.rooms.find((r) => String(r.id) === String(record.location_id))?.room_name],
+    [
+      "Kategori",
+      [record.category ? w.options.sarpras.categories[String(record.category)] : "", record.item_type].filter(Boolean).join(" · "),
+    ],
     ["Merk / model", record.brand_model],
     ["Nomor seri", record.serial_number],
     ["Jumlah / register", record.quantity_register],
@@ -940,6 +1063,12 @@ function InventoryEditor({ record, photos: initialPhotos = [] }: { record?: Valu
                         ))}
                       </ToggleGroup>
                     </Field>
+                    <CategoryFields
+                      category={values.category}
+                      type={values.item_type}
+                      onCategory={(v) => update("category", v)}
+                      onType={(v) => update("item_type", v)}
+                    />
                     <FieldGroup className="grid sm:grid-cols-2">
                       {text("brand_model", "Merk / model")}
                       {text("quantity_register", "Jumlah / register")}
@@ -1020,6 +1149,43 @@ function InventoryEditor({ record, photos: initialPhotos = [] }: { record?: Valu
                   {text("regency_city", "Kabupaten / kota")}
                   {text("unit_name", "Unit")}
                   {text("work_unit", "Satuan kerja")}
+                </FieldGroup>
+              </Panel>
+              <Panel
+                title="Luas dan fungsi ruang"
+                description="Dipakai di Rekap Sarpras. Satu ruangan bisa memiliki lebih dari satu fungsi."
+                className="lg:col-span-2"
+              >
+                <FieldGroup>
+                  <div className="sm:max-w-xs">{text("area_m2", "Luas (m²)", { type: "number", placeholder: "Contoh: 120" })}</div>
+                  <div className="grid gap-6 sm:grid-cols-2">
+                    {(["dasar", "pendukung"] as const).map((group) => {
+                      const chosen = String(values.room_functions || "").split(",").filter(Boolean);
+                      return (
+                        <Field key={group}>
+                          <FieldLabel>{group === "dasar" ? "Fungsi layanan dasar" : "Fungsi pendukung"}</FieldLabel>
+                          <div className="flex flex-col gap-2">
+                            {Object.entries(w.options.sarpras.roomFunctions)
+                              .filter(([, f]) => f.group === group)
+                              .map(([code, f]) => (
+                                <label key={code} className="flex items-center gap-2 text-sm">
+                                  <Checkbox
+                                    checked={chosen.includes(code)}
+                                    onCheckedChange={(on) =>
+                                      update(
+                                        "room_functions",
+                                        (on ? [...chosen, code] : chosen.filter((c) => c !== code)).join(","),
+                                      )
+                                    }
+                                  />
+                                  {f.label}
+                                </label>
+                              ))}
+                          </div>
+                        </Field>
+                      );
+                    })}
+                  </div>
                 </FieldGroup>
               </Panel>
               <Panel title="Penandatangan KIR" description="Tercetak di bagian tanda tangan kartu." className="lg:col-span-2">

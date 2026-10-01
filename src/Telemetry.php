@@ -26,7 +26,7 @@ final class Telemetry
     public const COUNTERS = 'inventory_usage_counters';
     public const ERRORS = 'inventory_telemetry_errors';
     public const DEFAULT_PANEL = 'https://panel.klaras.id';
-    public const FEATURES = ['kir_pdf', 'labels_pdf', 'report_pdf', 'inspection_pdf', 'history_import'];
+    public const FEATURES = ['kir_pdf', 'labels_pdf', 'report_pdf', 'inspection_pdf', 'history_import', 'sarpras_pdf'];
     public const ERROR_CATEGORIES = ['pdf', 'db', 'photo', 'workspace', 'other'];
     private const INTERVAL = 86400;
     private const RETRY = 3600;

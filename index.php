@@ -278,10 +278,13 @@ try {
                 }
             }
 
+            require_once __DIR__ . '/src/Sarpras.php';
             $values = [
                 'slims_location_id' => $slimsLocationId === '' ? null : $slimsLocationId,
                 'location_code' => inventory_post('location_code') ?: null,
                 'room_name' => $roomName,
+                'area_m2' => \SLiMS\Plugins\Inventory\Sarpras::area($_POST['area_m2'] ?? null),
+                'room_functions' => \SLiMS\Plugins\Inventory\Sarpras::functions($_POST['room_functions'] ?? ''),
                 'province' => inventory_post('province'),
                 'regency_city' => inventory_post('regency_city'),
                 'unit_name' => inventory_post('unit_name', 'PERPUSTAKAAN'),
@@ -299,7 +302,7 @@ try {
             if ($id > 0) {
                 $values['id'] = $id;
                 $statement = $db->prepare(
-                    'UPDATE inventory_locations SET slims_location_id=:slims_location_id, location_code=:location_code, room_name=:room_name, province=:province,
+                    'UPDATE inventory_locations SET slims_location_id=:slims_location_id, location_code=:location_code, room_name=:room_name, area_m2=:area_m2, room_functions=:room_functions, province=:province,
                      regency_city=:regency_city, unit_name=:unit_name, work_unit=:work_unit, signature_city=:signature_city,
                      knowing_title=:knowing_title, knowing_name=:knowing_name, knowing_identity=:knowing_identity,
                      manager_title=:manager_title, manager_name=:manager_name, manager_identity=:manager_identity,
@@ -313,10 +316,10 @@ try {
                 $values['created_at'] = $now;
                 $statement = $db->prepare(
                     'INSERT INTO inventory_locations
-                     (slims_location_id, location_code, room_name, province, regency_city, unit_name, work_unit, signature_city,
+                     (slims_location_id, location_code, room_name, area_m2, room_functions, province, regency_city, unit_name, work_unit, signature_city,
                       knowing_title, knowing_name, knowing_identity, manager_title, manager_name, manager_identity,
                       created_by, created_at, updated_at)
-                     VALUES (:slims_location_id, :location_code, :room_name, :province, :regency_city, :unit_name, :work_unit, :signature_city,
+                     VALUES (:slims_location_id, :location_code, :room_name, :area_m2, :room_functions, :province, :regency_city, :unit_name, :work_unit, :signature_city,
                       :knowing_title, :knowing_name, :knowing_identity, :manager_title, :manager_name, :manager_identity,
                       :created_by, :created_at, :updated_at)'
                 );
@@ -345,6 +348,24 @@ try {
             $_GET['location_id'] = $locationId;
             unset($_GET['page']);
             $_SERVER['QUERY_STRING'] = http_build_query($_GET);
+        } elseif ($postAction === 'categorize_items') {
+            require_once __DIR__ . '/src/Sarpras.php';
+            $ids = $_POST['itemID'] ?? [];
+            if (!is_array($ids) || !$ids || count($ids) > 500) {
+                throw new RuntimeException('Pilih barang yang akan diberi kategori.');
+            }
+            $ids = array_values(array_unique(array_map('intval', $ids)));
+            if (min($ids) < 1) {
+                throw new RuntimeException('Data yang dipilih tidak valid.');
+            }
+            $category = \SLiMS\Plugins\Inventory\Sarpras::category($_POST['category'] ?? null);
+            $type = \SLiMS\Plugins\Inventory\Sarpras::type($_POST['item_type'] ?? '');
+            // An empty type keeps each item's own type, so one category can be set across mixed items.
+            $sql = 'UPDATE inventory_items SET category=?' . ($type !== '' ? ', item_type=?' : '') . ', updated_at=? WHERE id IN (' . implode(',', array_fill(0, count($ids), '?')) . ')';
+            $statement = $db->prepare($sql);
+            $statement->execute(array_merge([$category], $type !== '' ? [$type] : [], [$now], $ids));
+            inventory_log('', $statement->rowCount() . ' barang diberi kategori ' . ($category ?? 'kosong') . '.', 'Update');
+            $message = $statement->rowCount() . ' barang diperbarui.';
         } elseif (in_array($postAction, ['delete_item', 'delete_location'], true)) {
             $ids = $_POST['itemID'] ?? [$_POST['record_id'] ?? 0];
             if (!is_array($ids) || !$ids) {
@@ -424,11 +445,12 @@ try {
     $messageType = 'danger';
     $schemaError = in_array((int) ($exception->errorInfo[1] ?? 0), [1054, 1146, 1364], true) && str_contains($exception->getMessage(), 'filename');
     $codeSchemaError = str_contains($exception->getMessage(), 'inventory_item_code_');
-    $message = $codeSchemaError ? 'Struktur kode barang belum tersedia. Jalankan migrasi plugin hingga versi 6 melalui System → Plugins.' : ($schemaError ? 'Struktur foto belum diperbarui. Jalankan migrasi plugin hingga versi 4 melalui System → Plugins.' : (str_contains(strtolower($exception->getMessage()), 'doesn\'t exist')
+    $sarprasSchemaError = (int) ($exception->errorInfo[1] ?? 0) === 1054 && preg_match('/area_m2|room_functions|category|item_type/', $exception->getMessage());
+    $message = $sarprasSchemaError ? 'Kolom luas, fungsi ruang, dan kategori barang belum tersedia. Jalankan migrasi plugin hingga versi 9 melalui System → Plugins.' : ($codeSchemaError ? 'Struktur kode barang belum tersedia. Jalankan migrasi plugin hingga versi 6 melalui System → Plugins.' : ($schemaError ? 'Struktur foto belum diperbarui. Jalankan migrasi plugin hingga versi 4 melalui System → Plugins.' : (str_contains(strtolower($exception->getMessage()), 'doesn\'t exist')
         ? 'Tabel inventaris belum tersedia. Aktifkan plugin Inventaris Barang dari menu System → Plugins.'
         : ((int) ($exception->errorInfo[1] ?? 0) === 1062 && str_contains($exception->getMessage(), 'inventory_locations_code_unique')
             ? 'Kode lokasi masih dibatasi unik oleh struktur database lama. Jalankan migrasi plugin hingga versi 5 melalui System → Plugins agar beberapa ruangan dapat memakai kode lokasi yang sama.'
-            : 'Operasi database gagal. Periksa data yang dimasukkan dan log PHP.')));
+            : 'Operasi database gagal. Periksa data yang dimasukkan dan log PHP.'))));
 } catch (RuntimeException $exception) {
     if ($db->inTransaction()) { $db->rollBack(); }
     $photoStorage->cleanup($createdPhotos);

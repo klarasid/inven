@@ -80,7 +80,7 @@ final class Workspace
                 'libraries'=>$w->query('SELECT location_id,location_name FROM mst_location ORDER BY location_name')->fetchAll(\PDO::FETCH_ASSOC),
                 'templates'=>$w->query('SELECT id,name,source_id FROM inventory_watch_templates ORDER BY id DESC')->fetchAll(\PDO::FETCH_ASSOC),
                 'csrf'=>$_SESSION['inventory_watch_csrf'],'inventoryCsrf'=>$_SESSION['inventory_csrf'],
-                'frequencies'=>WatchRecurrence::FREQUENCIES,'outcomes'=>Supervision::OUTCOMES,'priorities'=>Supervision::PRIORITIES];
+                'sarpras'=>(function(){require_once __DIR__.'/Sarpras.php';return Sarpras::lists();})(),'frequencies'=>WatchRecurrence::FREQUENCIES,'outcomes'=>Supervision::OUTCOMES,'priorities'=>Supervision::PRIORITIES];
         }
         if($resource==='tasks') {
             $kind=(string)($g['kind']??'inspections');$history=($g['history']??'')==='1';
