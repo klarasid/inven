@@ -42,6 +42,8 @@ Paket rilis sudah berisi dependensi PHP dan aset yang telah dibangun, sehingga A
 2. Ekstrak paket rilis terbaru dan timpa folder `plugins/inventaris-barang`.
 3. Buka **System → Plugins** dan jalankan migrasi yang tersedia.
 
+Data **Gedung & Jaringan** yang diisi sebelum plugin membedakan lokasi menjadi milik lokasi dengan ruangan terbanyak. Periksa dan pindahkan bila perlu.
+
 Menu **Perangkat Lunak**, **Gedung & Jaringan**, dan **Pengaturan Cetak** dulu berada di dalam Rekap Sarpras dan Laporan. Migrasi memberikan menu-menu itu kepada grup pengguna yang sudah boleh membuka halaman asalnya; petugas melihatnya setelah masuk ulang. Untuk mengaturnya sendiri, buka **System → User Group**.
 
 Plugin memeriksa rilis baru di GitHub setiap 12 jam. Jika tersedia, pengguna dengan hak tulis melihat pemberitahuan **Versi X tersedia** beserta catatan rilisnya.
@@ -85,7 +87,7 @@ Semua menu tersedia di modul **Stock Take**, dalam tiga bagian. Pengguna dengan 
 | --- | --- |
 | **Ruangan & Barang** | Mencatat ruangan dan barang, mengunggah hingga 5 foto per barang, membuat kode barang otomatis (misalnya `P01-INV-000001`), dan mencetak KIR. |
 | **Perangkat Lunak** | Mencatat aplikasi yang dipakai perpustakaan beserta jenis dan masa berlaku lisensinya. |
-| **Gedung & Jaringan** | Mengisi jumlah sivitas akademika, luas gedung, dan bandwidth internet beserta bukti pengukurannya. |
+| **Gedung & Jaringan** | Mengisi jumlah sivitas akademika, luas gedung, dan bandwidth internet beserta bukti pengukurannya, untuk tiap lokasi perpustakaan. |
 
 **Pengaturan Inven**
 
@@ -101,8 +103,16 @@ Rekap dihitung dari data yang sudah ada, jadi lengkapi dulu klasifikasinya:
 
 1. Di **Ruangan & Barang**, ubah tiap ruangan dan isi **Luas (m²)** serta **fungsi ruang**. Ada empat fungsi layanan dasar (koleksi, baca, kerja staf, layanan); fungsi lainnya termasuk pendukung.
 2. Beri **Kategori** dan **Jenis** pada barang (perabot, peralatan, komputer, multimedia, keamanan, fasilitas umum). Centang beberapa barang di tabel ruangan, lalu klik **Beri kategori** untuk mengisinya sekaligus.
-3. Di **Gedung & Jaringan**, isi jumlah sivitas akademika, luas gedung bila diketahui, serta bandwidth beserta bukti pengukurannya.
+3. Di **Gedung & Jaringan**, isi jumlah sivitas akademika, luas gedung bila diketahui, serta bandwidth beserta bukti pengukurannya. Bila ada beberapa lokasi, pilih lokasinya dulu.
 4. Di **Perangkat Lunak**, catat aplikasi yang dipakai beserta jenis lisensinya.
+
+Rekap dihitung per **lokasi perpustakaan** (lokasi SLiMS yang dipilih pada tiap ruangan). Perpustakaan dengan satu lokasi langsung melihat rekapnya. Bila ruangan tersebar di beberapa lokasi:
+
+- Halaman dibuka pada **Semua lokasi**: perbandingan jumlah aspek yang sudah baik, perlu perhatian, dan belum ada data di tiap lokasi, lalu kondisi gabungan institusi.
+- Kondisi gabungan tiap aspek adalah rata-rata lokasi yang memiliki data (Sangat baik 4, Baik 3, Cukup 2, Kurang 1; dibulatkan ke kondisi terdekat). Lokasi yang belum memiliki data tidak ikut dirata-rata, tetapi jumlahnya ditampilkan.
+- Pilih sebuah lokasi untuk melihat rekapnya sendiri. **Cetak rekap** mencetak yang sedang dibuka: satu lokasi, atau gabungan beserta tabel perbandingannya.
+- **Gedung & Jaringan** diisi untuk tiap lokasi. **Perangkat Lunak** tetap satu daftar dan dihitung sama di semua lokasi.
+- Ruangan yang belum diberi lokasi tidak masuk ke rekap lokasi mana pun; tetapkan lokasinya di **Ruangan & Barang**.
 
 Bagian atas halaman merangkum berapa aspek yang sudah baik dan berapa yang perlu perhatian; saring daftarnya dengan tombol **Perlu perhatian**, **Belum ada data**, atau **Sudah baik**. Setiap aspek menampilkan kondisinya (Sangat baik, Baik, Cukup, Kurang). Klik sebuah aspek untuk melihat syarat yang sudah dan belum terpenuhi, rincian datanya, dan saran perbaikan dengan tombol menuju menu tempat datanya diisi. Klik **Cetak rekap** untuk PDF dalam gaya LaTeX, ISO, atau kop institusi.
 
@@ -168,6 +178,7 @@ Tes tanpa database dapat langsung dijalankan dari folder plugin:
 php tests/pdf_template_test.php
 php tests/security_controls_test.php
 php tests/menu_structure_test.php
+php tests/sarpras_combine_test.php
 node tests/watch_forms_test.cjs
 ```
 

@@ -28,23 +28,26 @@ import { Blank, ErrorBox, Loading, PageHeader, Panel } from "./shared";
 
 /**
  * GET ?format=json on a page's own PHP file, and POST actions back to it: the file that mounted
- * the workspace, or the one given for a view that opens from other menus too.
+ * the workspace, or the one given for a view that opens from other menus too. `params` narrow
+ * what the page is about (a library location) and go with every request; what was loaded for
+ * other params is never shown.
  */
-export function usePage<T>(endpoint?: string) {
+export function usePage<T>(endpoint?: string, params: Record<string, string> = {}) {
   const { config } = useWorkspace();
   const page = endpoint ?? config.page!;
-  const [data, setData] = useState<T>();
-  const [error, setError] = useState("");
+  const scope = `${page} ${JSON.stringify(params)}`;
+  const [loaded, setLoaded] = useState<{ scope: string; data?: T; error?: string }>();
   const [revision, setRevision] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
-    request<{ data: T }>(url(page, { format: "json" }), undefined, controller.signal)
-      .then((r) => setData(r.data))
-      .catch((e) => e.name !== "AbortError" && setError(e.message));
+    request<{ data: T }>(url(page, { ...params, format: "json" }), undefined, controller.signal)
+      .then((r) => setLoaded({ scope, data: r.data }))
+      .catch((e) => e.name !== "AbortError" && setLoaded((was) => ({ scope, data: was?.scope === scope ? was.data : undefined, error: e.message })));
     return () => controller.abort();
-  }, [page, revision]);
-  const post = (values: Record<string, unknown>) => request(page, formData(values));
-  return { data, error, reload: () => setRevision((n) => n + 1), post };
+  }, [scope, revision]);
+  const current = loaded?.scope === scope ? loaded : undefined;
+  const post = (values: Record<string, unknown>) => request(page, formData({ ...params, ...values }));
+  return { data: current?.data, error: current?.error ?? "", reload: () => setRevision((n) => n + 1), post };
 }
 
 /** One confirmation dialog for actions that cut someone off. */

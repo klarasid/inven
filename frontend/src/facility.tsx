@@ -7,7 +7,7 @@ import { Input } from "./components/ui/input";
 import { Switch } from "./components/ui/switch";
 import { useWorkspace } from "./context";
 import { dateLabel, url } from "./api";
-import { ActionBar, Choice, ErrorBox, Loading, PageHeader, Panel, TextField } from "./shared";
+import { ActionBar, Choice, ErrorBox, Loading, LocationSelect, PageHeader, Panel, TextField } from "./shared";
 import { Confirm, usePage } from "./settings";
 
 type Settings = {
@@ -20,12 +20,22 @@ type Settings = {
   bandwidth_date: string;
   evidence: { name: string; mime: string; uploaded_at: string } | null;
 };
-type Data = { settings: Settings; coverage: Record<string, string>; write: boolean; csrf: string };
+type Location = { code: string; name: string; rooms: number };
+type Data = {
+  settings: Settings;
+  coverage: Record<string, string>;
+  /** The library locations these figures are kept for, and the one shown; none while the library is one unit. */
+  locations: Location[];
+  location: Location | null;
+  write: boolean;
+  csrf: string;
+};
 type Post = (values: Record<string, unknown>) => Promise<{ message?: string }>;
 
 function FacilityForm({ data, page, post, reload }: { data: Data; page: string; post: Post; reload: () => void }) {
   const w = useWorkspace();
   const s = data.settings;
+  const library = data.location?.code ?? "";
   const num = (v: number) => (v ? String(v) : "");
   const [values, setValues] = useState({
     sivitas: num(s.sivitas),
@@ -54,7 +64,7 @@ function FacilityForm({ data, page, post, reload }: { data: Data; page: string; 
     setBusy(true);
     setError("");
     try {
-      const reply = await post({ ...body, csrf: data.csrf });
+      const reply = await post({ ...body, library, csrf: data.csrf });
       toast.success(reply.message);
       done?.();
       reload();
@@ -123,7 +133,7 @@ function FacilityForm({ data, page, post, reload }: { data: Data; page: string; 
                   <span className="min-w-0 flex-1 truncate">{s.evidence.name}</span>
                   <span className="text-xs text-muted-foreground">{dateLabel(s.evidence.uploaded_at)}</span>
                   <Button size="sm" variant="outline" asChild>
-                    <a href={url(page, { evidence: 1 })} target="_blank" rel="noopener" className="notAJAX">
+                    <a href={url(page, { evidence: 1, library: library || undefined })} target="_blank" rel="noopener" className="notAJAX">
                       <ExternalLink data-icon="inline-start" />
                       Lihat
                     </a>
@@ -192,21 +202,32 @@ function FacilityForm({ data, page, post, reload }: { data: Data; page: string; 
 export function FacilityPage() {
   const w = useWorkspace();
   const page = w.config.pages!.facility;
-  const { data, error, reload, post } = usePage<Data>(page);
+  const library = String(w.route.library || "");
+  const { data, error, reload, post } = usePage<Data>(page, library ? { library } : {});
+  const several = !!data && data.locations.length > 1;
+  const code = data?.location?.code ?? "";
   return (
     <>
       <PageHeader
         title="Gedung & Jaringan"
-        description="Angka yang tidak tercatat di inventaris: jumlah sivitas, luas gedung, dan bandwidth internet beserta bukti pengukurannya. Dipakai untuk menghitung Rekap Sarpras."
+        description={
+          "Angka yang tidak tercatat di inventaris: jumlah sivitas, luas gedung, dan bandwidth internet beserta bukti pengukurannya. Dipakai untuk menghitung Rekap Sarpras." +
+          (several ? " Isi untuk tiap lokasi perpustakaan." : "")
+        }
         actions={
-          <Button variant="outline" onClick={() => w.go({ view: "sarpras" })}>
-            <ChartNoAxesColumn data-icon="inline-start" />
-            Lihat Rekap Sarpras
-          </Button>
+          <>
+            {data && several && (
+              <LocationSelect locations={data.locations} value={code} onChange={(next) => w.go({ view: "facility", library: next }, true)} />
+            )}
+            <Button variant="outline" onClick={() => w.go(code ? { view: "sarpras", library: code } : { view: "sarpras" })}>
+              <ChartNoAxesColumn data-icon="inline-start" />
+              Lihat Rekap Sarpras
+            </Button>
+          </>
         }
       />
       <ErrorBox message={error} />
-      {!data ? !error && <Loading /> : <FacilityForm data={data} page={page} post={post} reload={reload} />}
+      {!data ? !error && <Loading /> : <FacilityForm key={code} data={data} page={page} post={post} reload={reload} />}
     </>
   );
 }

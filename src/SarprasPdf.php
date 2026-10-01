@@ -7,7 +7,11 @@ namespace SLiMS\Plugins\Inventory;
 require_once __DIR__ . '/WatchPdf.php';
 require_once __DIR__ . '/Sarpras.php';
 
-/** Rekap Sarpras as a printable document, in the same typesetting styles as the supervision reports. */
+/**
+ * Rekap Sarpras as a printable document, in the same typesetting styles as the supervision reports:
+ * one location's recap ($context['location'] names it), or the institution's, which opens with
+ * its locations compared ($context['locations']).
+ */
 final class SarprasPdf
 {
     private const ROW_LIMIT = 80;
@@ -24,15 +28,19 @@ final class SarprasPdf
         $t = WatchPdf::STYLES[$style] ?? PdfLatex::class;
         $date = substr($recap['generated_at'], 0, 10);
         $s = $recap['summary'];
+        $locations = $context['locations'] ?? [];
+        $location = (string) ($context['location'] ?? '');
+        $scope = $locations ? 'Semua lokasi' : $location;
         $h = $t::begin() . $t::titleBlock(
             'Rekap Sarana dan Prasarana Perpustakaan',
             ($context['printed_by'] ?? '') !== '' ? self::e($context['printed_by']) : '',
-            'Per ' . PdfLayout::date($date),
+            ($scope !== '' ? self::e($scope) . ' · ' : '') . 'Per ' . PdfLayout::date($date),
             PdfDocuments::identity($context['documents'] ?? PdfDocuments::DEFAULTS, 'sarpras', ['date' => $date], $date)
         );
         $h .= $t::abstract(
-            'Rekap ini menyajikan kondisi sarana dan prasarana perpustakaan, dihitung dari data inventaris ruangan dan barang, '
+            'Rekap ini menyajikan kondisi sarana dan prasarana ' . ($location !== '' ? self::e($location) : 'perpustakaan') . ', dihitung dari data inventaris ruangan dan barang, '
             . 'register perangkat lunak, data jaringan, serta riwayat pengawasan dan pemeliharaan pada tanggal ' . PdfLayout::date($date) . '. '
+            . ($locations ? 'Kondisi tiap aspek adalah rata-rata dari ' . count($locations) . ' lokasi perpustakaan; lokasi yang belum memiliki data untuk suatu aspek tidak ikut dirata-rata. ' : '')
             . 'Dari ' . count($recap['aspects']) . ' aspek yang direkap, <b>' . (int) $s['a'] . '</b> dalam kondisi Sangat baik, ' . (int) $s['b'] . ' Baik, ' . (int) $s['c'] . ' Cukup, dan ' . (int) $s['d'] . ' Kurang'
             . ((int) $s['empty'] ? ', sedangkan ' . (int) $s['empty'] . ' aspek belum memiliki data' : '') . '.'
         );
@@ -43,6 +51,14 @@ final class SarprasPdf
             $overview[] = [(string) $aspect['no'], self::e($aspect['title']), self::e($aspect['value']), self::level($aspect['level'])];
         }
         $h .= $t::table('Ringkasan kondisi sarana dan prasarana', [['No.', 'r'], 'Aspek', 'Capaian', 'Kondisi'], $overview);
+        if ($locations) {
+            $compared = [];
+            foreach ($locations as $place) {
+                $counts = $place['summary'];
+                $compared[] = [self::e($place['name']), (string) (int) $place['rooms'], (string) ($counts['a'] + $counts['b']), (string) ($counts['c'] + $counts['d']), (string) (int) $counts['empty']];
+            }
+            $h .= $t::table('Jumlah aspek menurut kondisi di tiap lokasi', ['Lokasi', ['Ruangan', 'r'], ['Sudah baik', 'r'], ['Perlu perhatian', 'r'], ['Belum ada data', 'r']], $compared);
+        }
 
         $section = '';
         foreach ($recap['aspects'] as $aspect) {

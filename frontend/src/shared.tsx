@@ -310,6 +310,7 @@ function ChoiceSelect({
   invalid,
   className = "w-full",
   label,
+  clearable = true,
 }: {
   id?: string;
   value: unknown;
@@ -320,6 +321,8 @@ function ChoiceSelect({
   invalid?: boolean;
   className?: string;
   label?: string;
+  /** Whether the placeholder is itself a choice (of nothing). */
+  clearable?: boolean;
 }) {
   return (
     <Select
@@ -332,7 +335,7 @@ function ChoiceSelect({
       </SelectTrigger>
       <SelectContent>
         <SelectGroup>
-          <SelectItem value="__empty">{placeholder}</SelectItem>
+          {clearable && <SelectItem value="__empty">{placeholder}</SelectItem>}
           {items
             .filter((x) => String(x.value) !== "")
             .map((x) => (
@@ -598,6 +601,31 @@ export function LibraryFilter() {
       onChange={(library) => go({ ...route, library, page: 1 }, true)}
       placeholder="Semua perpustakaan"
       items={options.libraries.map((x) => ({ value: x.location_id, label: x.location_name }))}
+    />
+  );
+}
+
+/** The library location a page works on. `all` names the choice of every location; without it one must be chosen. */
+export function LocationSelect({
+  locations,
+  value,
+  onChange,
+  all,
+}: {
+  locations: { code: string; name: string }[];
+  value: string;
+  onChange: (code: string) => void;
+  all?: string;
+}) {
+  return (
+    <ChoiceSelect
+      label="Lokasi perpustakaan"
+      className="w-full sm:w-72"
+      value={value}
+      onChange={onChange}
+      placeholder={all ?? "Pilih lokasi"}
+      clearable={!!all}
+      items={locations.map((x) => ({ value: x.code, label: x.name }))}
     />
   );
 }

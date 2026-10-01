@@ -10,6 +10,10 @@
  *   facility  Gedung & Jaringan: the figures that do not live in the inventory (sivitas, building
  *             area, bandwidth) and the bandwidth evidence file (?evidence=1).
  *
+ * Rekap Sarpras and Gedung & Jaringan work on one library location, named by ?library=<code>
+ * (see Sarpras::locations). Where several locations hold rooms, the recap without one is the
+ * institution's: the locations compared, and their recaps combined.
+ *
  * Loaded by admin/plugin_container.php, which checks nothing itself, so the session, IP and
  * privilege checks here are the pages' only protection. Each page is a view of the React
  * workspace; it reads ?format=json and posts its changes back to its own menu file as JSON.
@@ -61,6 +65,30 @@ $json = static function (array $body, int $status = 200): void {
 $log = static function (string $message, string $action): void {
     writeLog('staff', (string) ($_SESSION['uid'] ?? 0), 'Klaras Inven', $message, 'stock_take', $action);
 };
+// The location this request is about. '' is the library as one unit, or the institution.
+$places = null;
+$library = '';
+try {
+    $places = Sarpras::locations($db);
+    $codes = array_column($places['locations'], 'code');
+    $library = trim((string) ($_POST['library'] ?? $_GET['library'] ?? ''));
+    if ($library !== '' && !in_array($library, $codes, true)) {
+        $json(['ok' => false, 'message' => 'Lokasi perpustakaan tidak dikenal.'], 422);
+        exit;
+    }
+    // A lone location needs no choosing; with no rooms yet the recap has nothing to show for one.
+    if ($library === '' && count($codes) === 1 && $places['rooms'] > 0) $library = $codes[0];
+    // Facility figures always belong to one location where there are any.
+    if ($library === '' && $codes && $page === 'facility') $library = $codes[0];
+} catch (PDOException $error) {
+    // Tables not migrated yet: the page's own queries report that below.
+}
+$several = $places !== null && $places['rooms'] > 0 && count($places['locations']) > 1;
+$place = static function () use ($places, $library): ?array {
+    foreach ($places['locations'] ?? [] as $location) if ($location['code'] === $library) return $location;
+    return null;
+};
+
 $schemaMessage = 'Struktur data sarpras belum tersedia. Jalankan migrasi plugin hingga versi 9 melalui System → Plugins.';
 $isSchema = static fn(Throwable $e): bool => $e instanceof PDOException && in_array((int) ($e->errorInfo[1] ?? 0), [1054, 1146], true);
 
@@ -75,16 +103,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!in_array($action, $actions[$page], true)) {
             $json(['ok' => false, 'message' => 'Aksi tidak dikenal.'], 400);
         } elseif ($action === 'settings') {
-            Sarpras::saveSettings($db, $_POST);
-            $log('Data gedung dan jaringan diperbarui.', 'Update');
+            Sarpras::saveSettings($db, $_POST, $library);
+            $log('Data gedung dan jaringan' . ($library !== '' ? ' lokasi ' . $library : '') . ' diperbarui.', 'Update');
             $json(['ok' => true, 'message' => 'Data gedung dan jaringan tersimpan.']);
         } elseif ($action === 'evidence') {
-            Sarpras::uploadEvidence($db, $_FILES['evidence'] ?? []);
-            $log('Bukti pengukuran bandwidth diunggah.', 'Update');
+            Sarpras::uploadEvidence($db, $_FILES['evidence'] ?? [], $library);
+            $log('Bukti pengukuran bandwidth' . ($library !== '' ? ' lokasi ' . $library : '') . ' diunggah.', 'Update');
             $json(['ok' => true, 'message' => 'Bukti pengukuran tersimpan.']);
         } elseif ($action === 'evidence_delete') {
-            Sarpras::deleteEvidence($db);
-            $log('Bukti pengukuran bandwidth dihapus.', 'Delete');
+            Sarpras::deleteEvidence($db, $library);
+            $log('Bukti pengukuran bandwidth' . ($library !== '' ? ' lokasi ' . $library : '') . ' dihapus.', 'Delete');
             $json(['ok' => true, 'message' => 'Bukti pengukuran dihapus.']);
         } elseif ($action === 'software') {
             $id = Sarpras::saveSoftware($db, $_POST, (int) ($_POST['record_id'] ?? 0), isset($_SESSION['uid']) ? (int) $_SESSION['uid'] : null);
@@ -106,7 +134,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 if ($page === 'facility' && ($_GET['evidence'] ?? '') === '1') {
-    $file = Sarpras::evidenceFile($db);
+    $file = Sarpras::evidenceFile($db, $library);
     if (!$file) {
         http_response_code(404);
         echo 'Bukti tidak ditemukan.';
@@ -138,15 +166,21 @@ if ($page === 'recap' && isset($_GET['pdf'])) {
         } elseif ($style === 'kop' || !isset(\SLiMS\Plugins\Inventory\WatchPdf::STYLES[$style])) {
             $style = 'latex';
         }
-        $html = \SLiMS\Plugins\Inventory\SarprasPdf::render(Sarpras::recap($db, $watch()), [
-            'printed_by' => (string) ($_SESSION['realname'] ?? ''),
-            'documents' => \SLiMS\Plugins\Inventory\PdfDocuments::load($db),
-        ], $style);
+        $context = ['printed_by' => (string) ($_SESSION['realname'] ?? ''), 'documents' => \SLiMS\Plugins\Inventory\PdfDocuments::load($db)];
+        if ($several && $library === '') {
+            $overview = Sarpras::overview($db, $watch(), $places['locations']);
+            $recap = $overview['recap'];
+            $context['locations'] = $overview['locations'];
+        } else {
+            $recap = Sarpras::recap($db, $watch(), $library);
+            $context['location'] = (string) ($place()['name'] ?? '');
+        }
+        $html = \SLiMS\Plugins\Inventory\SarprasPdf::render($recap, $context, $style);
         $pdf = \SLiMS\Plugins\Inventory\WatchPdf::mpdf(SB . FLS . DS . 'cache', 'Rekap Sarana dan Prasarana', $style);
         $pdf->WriteHTML($html);
-        $log('Rekap Sarpras dicetak.', 'Print');
+        $log('Rekap Sarpras' . ($library !== '' ? ' lokasi ' . $library : '') . ' dicetak.', 'Print');
         \SLiMS\Plugins\Inventory\Telemetry::count('sarpras_pdf');
-        $pdf->Output('rekap-sarpras-' . date('Ymd') . '.pdf', 'I');
+        $pdf->Output('rekap-sarpras-' . ($library !== '' ? $library . '-' : '') . date('Ymd') . '.pdf', 'I');
     } catch (Throwable $error) {
         if (!$error instanceof RuntimeException || $error instanceof PDOException) error_log('[sarpras] pdf: ' . $error->getMessage());
         header('Content-Type: text/html; charset=utf-8');
@@ -161,13 +195,23 @@ if (($_GET['format'] ?? '') === 'json') {
         if ($page === 'software') {
             $json(['ok' => true, 'data' => ['software' => Sarpras::software($db), 'licences' => Sarpras::LICENCES] + $access]);
         } elseif ($page === 'facility') {
-            $settings = Sarpras::settings($db);
+            if ($places === null) $places = Sarpras::locations($db);
+            $settings = Sarpras::settings($db, $library);
             $settings['evidence'] = is_array($settings['evidence']) ? ['name' => $settings['evidence']['name'], 'mime' => $settings['evidence']['mime'], 'uploaded_at' => $settings['evidence']['uploaded_at']] : null;
-            $json(['ok' => true, 'data' => ['settings' => $settings, 'coverage' => Sarpras::COVERAGE] + $access]);
+            $json(['ok' => true, 'data' => ['settings' => $settings, 'coverage' => Sarpras::COVERAGE, 'locations' => $places['locations'], 'location' => $place()] + $access]);
         } else {
-            $recap = Sarpras::recap($db, $watch());
-            unset($recap['settings']);
-            $json(['ok' => true, 'data' => ['recap' => $recap, 'levels' => Sarpras::LEVELS]]);
+            if ($places === null) $places = Sarpras::locations($db);
+            $shared = ['levels' => Sarpras::LEVELS, 'locations' => $places['rooms'] > 0 ? $places['locations'] : [], 'unassigned' => $places['unassigned']];
+            if ($places['rooms'] === 0) {
+                $json(['ok' => true, 'data' => ['mode' => 'empty'] + $shared]);
+            } elseif ($several && $library === '') {
+                $overview = Sarpras::overview($db, $watch(), $places['locations']);
+                $json(['ok' => true, 'data' => ['mode' => 'overview', 'recap' => $overview['recap'], 'locations' => $overview['locations']] + $shared]);
+            } else {
+                $recap = Sarpras::recap($db, $watch(), $library);
+                unset($recap['settings']);
+                $json(['ok' => true, 'data' => ['mode' => 'location', 'recap' => $recap, 'location' => $place()] + $shared]);
+            }
         }
     } catch (Throwable $error) {
         if (!$isSchema($error)) error_log('[sarpras] read: ' . $error->getMessage());

@@ -1,5 +1,15 @@
 import { useId, useState } from "react";
-import { ArrowRight, CheckCircle2, CircleAlert, CircleDashed, Info, XCircle, type LucideIcon } from "lucide-react";
+import {
+  ArrowRight,
+  Building2,
+  CheckCircle2,
+  ChevronRight,
+  CircleAlert,
+  CircleDashed,
+  Info,
+  XCircle,
+  type LucideIcon,
+} from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
@@ -9,7 +19,7 @@ import { ToggleGroup, ToggleGroupItem } from "./components/ui/toggle-group";
 import { cn } from "./lib/utils";
 import { useWorkspace } from "./context";
 import { dateLabel, url } from "./api";
-import { ErrorBox, Loading, PageHeader, Pdf } from "./shared";
+import { Blank, ErrorBox, Loading, LocationSelect, PageHeader, Pdf } from "./shared";
 import { usePage } from "./settings";
 import type { Route } from "./types";
 
@@ -27,15 +37,22 @@ type Aspect = {
   columns: string[];
   fix: string;
   sources: Source[];
+  /** In the institution's recap: the locations to look at for this aspect. */
+  targets?: { code: string; name: string }[];
 };
-type Data = {
-  recap: {
-    generated_at: string;
-    aspects: Aspect[];
-    counts: { rooms: number; items: number; uncategorized: number; unclassified_rooms: number; no_area: number };
-  };
-  levels: Record<Level, string>;
+type Recap = {
+  generated_at: string;
+  aspects: Aspect[];
+  /** Data still missing from the rooms and items; a location's recap only. */
+  counts?: { rooms: number; items: number; uncategorized: number; unclassified_rooms: number; no_area: number };
 };
+type Location = { code: string; name: string; rooms: number };
+type Compared = Location & { summary: Record<Level | "empty", number> };
+type Data = { levels: Record<Level, string>; unassigned: number } & (
+  | { mode: "empty"; locations: Location[] }
+  | { mode: "overview"; recap: Recap; locations: Compared[] }
+  | { mode: "location"; recap: Recap; locations: Location[]; location: Location | null }
+);
 
 /** Where the data behind an aspect is entered; the recap itself changes nothing. */
 const sources: Record<Source, { label: string; route: Route }> = {
@@ -65,8 +82,26 @@ function LevelBadge({ level, levels }: { level: Level | null; levels: Record<Lev
   return level ? <Badge variant={tone[level]}>{levels[level]}</Badge> : <Badge variant="outline">Belum ada data</Badge>;
 }
 
+/** How many of `total` aspects are fine: one hue on a lighter track of the same hue. */
+function GoodMeter({ good, total, label, labelledBy }: { good: number; total: number; label?: string; labelledBy?: string }) {
+  return (
+    <div
+      role="meter"
+      aria-label={label}
+      aria-labelledby={labelledBy}
+      aria-valuemin={0}
+      aria-valuemax={total}
+      aria-valuenow={good}
+      aria-valuetext={`${good} dari ${total} aspek`}
+      className="h-2 overflow-hidden rounded-full bg-success/15"
+    >
+      <div className="h-full rounded-full bg-success transition-all" style={{ width: `${total ? (good / total) * 100 : 0}%` }} />
+    </div>
+  );
+}
+
 /** The page's one headline: how many aspects are fine, and what to do about the rest. */
-function Summary({ counts, total }: { counts: Record<State, number>; total: number }) {
+function Summary({ counts, total, places }: { counts: Record<State, number>; total: number; places?: number }) {
   const label = useId();
   const state: State = counts.attention ? "attention" : counts.empty ? "empty" : "good";
   const { icon: Icon, ink, tint } = states[state];
@@ -75,11 +110,12 @@ function Summary({ counts, total }: { counts: Record<State, number>; total: numb
     empty: `${counts.empty} aspek belum memiliki data`,
     good: "Semua aspek sudah baik",
   }[state];
+  const open = places ? "Buka tiap aspek untuk melihat kondisi tiap lokasi." : "Buka tiap aspek untuk melihat penyebabnya dan cara memperbaikinya.";
   const text = {
-    attention:
-      "Buka tiap aspek untuk melihat penyebabnya dan cara memperbaikinya." +
-      (counts.empty ? ` ${counts.empty} aspek lainnya belum memiliki data.` : ""),
-    empty: "Aspek tanpa data belum bisa dinilai. Buka tiap aspek untuk melihat data yang perlu dilengkapi.",
+    attention: open + (counts.empty ? ` ${counts.empty} aspek lainnya belum memiliki data.` : ""),
+    empty: places
+      ? "Aspek tanpa data belum bisa dinilai. Buka tiap aspek untuk melihat lokasi yang perlu melengkapi datanya."
+      : "Aspek tanpa data belum bisa dinilai. Buka tiap aspek untuk melihat data yang perlu dilengkapi.",
     good: "Pertahankan dengan memeriksa ruangan secara rutin dan memperbarui data setiap ada perubahan.",
   }[state];
   return (
@@ -90,7 +126,10 @@ function Summary({ counts, total }: { counts: Record<State, number>; total: numb
         </span>
         <div className="flex min-w-0 flex-col gap-1">
           <h2 className="text-xl font-semibold tracking-tight">{headline}</h2>
-          <p className="text-sm text-muted-foreground">{text}</p>
+          <p className="text-sm text-muted-foreground">
+            {places ? `Kondisi gabungan ${places} lokasi perpustakaan. ` : ""}
+            {text}
+          </p>
         </div>
       </div>
       <div className="flex flex-col gap-2">
@@ -102,23 +141,78 @@ function Summary({ counts, total }: { counts: Record<State, number>; total: numb
             <strong className="text-base">{counts.good}</strong> <span className="text-muted-foreground">dari {total}</span>
           </span>
         </div>
-        <div
-          role="meter"
-          aria-labelledby={label}
-          aria-valuemin={0}
-          aria-valuemax={total}
-          aria-valuenow={counts.good}
-          aria-valuetext={`${counts.good} dari ${total} aspek`}
-          className="h-2 overflow-hidden rounded-full bg-success/15"
-        >
-          <div className="h-full rounded-full bg-success transition-all" style={{ width: `${total ? (counts.good / total) * 100 : 0}%` }} />
-        </div>
+        <GoodMeter good={counts.good} total={total} labelledBy={label} />
       </div>
     </section>
   );
 }
 
-function AspectRow({ aspect: x, levels }: { aspect: Aspect; levels: Record<Level, string> }) {
+/** One row per location, each opening that location's recap. */
+function Comparison({ locations, open }: { locations: Compared[]; open: (code: string) => void }) {
+  const count = (state: State, n: number) => {
+    const { icon: Icon, ink } = states[state];
+    return (
+      <span className="inline-flex items-center gap-1.5 tabular-nums">
+        <Icon className={cn("size-4", ink)} aria-hidden />
+        {n}
+      </span>
+    );
+  };
+  return (
+    <section className="flex flex-col gap-2">
+      <div className="flex flex-col gap-0.5">
+        <h2 className="text-lg font-semibold tracking-tight">Perbandingan lokasi</h2>
+        <p className="text-sm text-muted-foreground">Jumlah aspek menurut kondisinya di tiap lokasi. Pilih lokasi untuk membuka rekapnya.</p>
+      </div>
+      <div className="overflow-hidden rounded-xl border">
+        <Table>
+          <TableHeader className="bg-muted/50">
+            <TableRow>
+              <TableHead>Lokasi</TableHead>
+              <TableHead className="text-right">{states.good.label}</TableHead>
+              <TableHead className="text-right">{states.attention.label}</TableHead>
+              <TableHead className="text-right">{states.empty.label}</TableHead>
+              <TableHead className="hidden w-40 md:table-cell">
+                <span className="sr-only">Aspek yang sudah baik</span>
+              </TableHead>
+              <TableHead className="w-10">
+                <span className="sr-only">Buka</span>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {locations.map((x) => {
+              const good = x.summary.a + x.summary.b;
+              const attention = x.summary.c + x.summary.d;
+              const total = good + attention + x.summary.empty;
+              return (
+                <TableRow key={x.code} className="cursor-pointer" onClick={() => open(x.code)}>
+                  <TableCell className="whitespace-normal">
+                    <button type="button" className="cursor-pointer rounded-sm text-left font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                      {x.name}
+                    </button>
+                    <p className="text-xs text-muted-foreground">{x.rooms} ruangan</p>
+                  </TableCell>
+                  <TableCell className="text-right">{count("good", good)}</TableCell>
+                  <TableCell className="text-right">{count("attention", attention)}</TableCell>
+                  <TableCell className="text-right">{count("empty", x.summary.empty)}</TableCell>
+                  <TableCell className="hidden md:table-cell">
+                    <GoodMeter good={good} total={total} label={`Aspek yang sudah baik di ${x.name}`} />
+                  </TableCell>
+                  <TableCell>
+                    <ChevronRight className="size-4 text-muted-foreground" aria-hidden />
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+    </section>
+  );
+}
+
+function AspectRow({ aspect: x, levels, library }: { aspect: Aspect; levels: Record<Level, string>; library: string }) {
   const w = useWorkspace();
   const state = states[stateOf(x.level)];
   const Icon = state.icon;
@@ -166,8 +260,26 @@ function AspectRow({ aspect: x, levels }: { aspect: Aspect; levels: Record<Level
             <div>{x.fix}</div>
             <div className="flex flex-wrap gap-2">
               {x.sources.map((source) => (
-                <Button key={source} size="sm" variant="outline" className="bg-background" onClick={() => w.go(sources[source].route)}>
+                <Button
+                  key={source}
+                  size="sm"
+                  variant="outline"
+                  className="bg-background"
+                  onClick={() => w.go(library ? { ...sources[source].route, library } : sources[source].route)}
+                >
                   Buka {sources[source].label}
+                  <ArrowRight data-icon="inline-end" />
+                </Button>
+              ))}
+              {x.targets?.map((target) => (
+                <Button
+                  key={target.code}
+                  size="sm"
+                  variant="outline"
+                  className="bg-background"
+                  onClick={() => w.go({ view: "sarpras", library: target.code })}
+                >
+                  Buka {target.name}
                   <ArrowRight data-icon="inline-end" />
                 </Button>
               ))}
@@ -208,22 +320,40 @@ function AspectRow({ aspect: x, levels }: { aspect: Aspect; levels: Record<Level
   );
 }
 
-function Recap({ data }: { data: Data }) {
+function Recap({ data }: { data: Extract<Data, { recap: Recap }> }) {
   const w = useWorkspace();
   const [filter, setFilter] = useState<State | "all">("all");
   const { counts, aspects } = data.recap;
+  const overview = data.mode === "overview";
+  const library = data.mode === "location" ? (data.location?.code ?? "") : "";
+  const inventory: Route = library ? { view: "inventory", library } : { view: "inventory" };
   const totals = aspects.reduce<Record<State, number>>((all, x) => (all[stateOf(x.level)]++, all), { attention: 0, empty: 0, good: 0 });
-  const gaps = [
-    counts.no_area > 0 && `${counts.no_area} ruangan belum memiliki luas`,
-    counts.unclassified_rooms > 0 && `${counts.unclassified_rooms} ruangan belum memiliki fungsi`,
-    counts.uncategorized > 0 && `${counts.uncategorized} dari ${counts.items} barang belum berkategori`,
-  ].filter(Boolean) as string[];
+  const gaps = counts
+    ? ([
+        counts.no_area > 0 && `${counts.no_area} ruangan belum memiliki luas`,
+        counts.unclassified_rooms > 0 && `${counts.unclassified_rooms} ruangan belum memiliki fungsi`,
+        counts.uncategorized > 0 && `${counts.uncategorized} dari ${counts.items} barang belum berkategori`,
+      ].filter(Boolean) as string[])
+    : [];
   const sections = aspects
     .filter((x) => filter === "all" || stateOf(x.level) === filter)
     .reduce<Record<string, Aspect[]>>((all, x) => ((all[x.section] ||= []).push(x), all), {});
   return (
     <>
-      <Summary counts={totals} total={aspects.length} />
+      <Summary counts={totals} total={aspects.length} places={overview ? data.locations.length : undefined} />
+      {data.unassigned > 0 && (
+        <Alert>
+          <Info />
+          <AlertTitle>{data.unassigned} ruangan belum ditetapkan lokasinya</AlertTitle>
+          <AlertDescription>
+            Ruangan tanpa lokasi perpustakaan tidak masuk ke rekap lokasi mana pun.
+            <Button size="sm" variant="outline" className="mt-2" onClick={() => w.go({ view: "inventory" })}>
+              Tetapkan di Ruangan & Barang
+              <ArrowRight data-icon="inline-end" />
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
       {gaps.length > 0 && (
         <Alert>
           <Info />
@@ -234,12 +364,21 @@ function Recap({ data }: { data: Data }) {
                 <li key={g}>{g}</li>
               ))}
             </ul>
-            <Button size="sm" variant="outline" className="mt-2" onClick={() => w.go({ view: "inventory" })}>
+            <Button size="sm" variant="outline" className="mt-2" onClick={() => w.go(inventory)}>
               Lengkapi di Ruangan & Barang
               <ArrowRight data-icon="inline-end" />
             </Button>
           </AlertDescription>
         </Alert>
+      )}
+      {overview && <Comparison locations={data.locations} open={(code) => w.go({ view: "sarpras", library: code })} />}
+      {overview && (
+        <div className="flex flex-col gap-0.5">
+          <h2 className="text-lg font-semibold tracking-tight">Kondisi gabungan</h2>
+          <p className="text-sm text-muted-foreground">
+            Tiap aspek adalah rata-rata dari lokasi yang memiliki data. Buka sebuah aspek untuk melihat kondisi tiap lokasi.
+          </p>
+        </div>
       )}
       <ToggleGroup
         type="single"
@@ -266,10 +405,10 @@ function Recap({ data }: { data: Data }) {
       </ToggleGroup>
       {Object.entries(sections).map(([section, list]) => (
         <section key={section} className="flex flex-col gap-2">
-          <h2 className="text-sm font-medium text-muted-foreground">{section}</h2>
+          <h3 className="text-sm font-medium text-muted-foreground">{section}</h3>
           <Accordion type="multiple" className="overflow-hidden rounded-xl border bg-card">
             {list.map((x) => (
-              <AspectRow key={x.no} aspect={x} levels={data.levels} />
+              <AspectRow key={x.no} aspect={x} levels={data.levels} library={library} />
             ))}
           </Accordion>
         </section>
@@ -281,17 +420,52 @@ function Recap({ data }: { data: Data }) {
 export function SarprasPage() {
   const w = useWorkspace();
   const page = w.config.pages!.sarpras;
-  const { data, error } = usePage<Data>(page);
+  const library = String(w.route.library || "");
+  const { data, error } = usePage<Data>(page, library ? { library } : {});
+  // Several locations hold rooms: the page then offers each one, and all of them together.
+  const several = !!data && data.mode !== "empty" && data.locations.length > 1;
+  const location = data?.mode === "location" ? data.location : null;
   return (
     <>
       <PageHeader
+        crumbs={several && location ? [{ label: "Semua lokasi", route: { view: "sarpras" } }] : []}
+        current={location?.name}
         title="Rekap Sarpras"
         description="Pantau kondisi sarana dan prasarana perpustakaan Anda di satu tempat. Rekap dihitung otomatis dari data ruangan, barang, perangkat lunak, jaringan, dan pemeriksaan."
-        meta={data && <span className="text-xs text-muted-foreground">Data per {dateLabel(data.recap.generated_at)}</span>}
-        actions={<Pdf label="Cetak rekap" href={(style) => url(page, { pdf: style })} />}
+        meta={
+          data &&
+          data.mode !== "empty" && <span className="text-xs text-muted-foreground">Data per {dateLabel(data.recap.generated_at)}</span>
+        }
+        actions={
+          data &&
+          data.mode !== "empty" && (
+            <>
+              {several && (
+                <LocationSelect
+                  all="Semua lokasi"
+                  locations={data.locations}
+                  value={location?.code ?? ""}
+                  onChange={(code) => w.go(code ? { view: "sarpras", library: code } : { view: "sarpras" }, true)}
+                />
+              )}
+              <Pdf label="Cetak rekap" href={(style) => url(page, { pdf: style, library: location?.code })} />
+            </>
+          )
+        }
       />
       <ErrorBox message={error} />
-      {!data ? !error && <Loading /> : <Recap data={data} />}
+      {!data ? (
+        !error && <Loading />
+      ) : data.mode === "empty" ? (
+        <Blank icon={Building2} title="Belum ada ruangan" description="Rekap muncul setelah ruangan dan barang perpustakaan Anda dicatat.">
+          <Button onClick={() => w.go({ view: "inventory" })}>
+            Buka Ruangan & Barang
+            <ArrowRight data-icon="inline-end" />
+          </Button>
+        </Blank>
+      ) : (
+        <Recap data={data} />
+      )}
     </>
   );
 }

@@ -13,6 +13,10 @@ use RuntimeException;
  * kept in the `inventory_sarpras` setting (sivitas, bandwidth), and supervision history. Each
  * aspect reports the level its data reaches (a = Sangat baik … d = Kurang), with the checks
  * that decided it, so the library can see what is missing.
+ *
+ * A recap is computed for one SLiMS library location: its rooms, its items and its own facility
+ * figures. Where several locations hold rooms, their recaps are also combined into one for the
+ * institution, each aspect taking the average of the locations that have data for it.
  */
 final class Sarpras
 {
@@ -119,21 +123,81 @@ final class Sarpras
         return $value;
     }
 
+    // ---- Library locations ---------------------------------------------------------------------
+
+    /**
+     * The locations a recap is computed for: SLiMS library locations that hold rooms. Rooms without
+     * a location belong to none of them and are counted as unassigned; when no room has a location
+     * the library is one unit (no locations, code ''). With no rooms at all, every SLiMS location
+     * is listed so its facility figures can be entered first.
+     *
+     * @return array{locations:list<array{code:string,name:string,rooms:int}>,unassigned:int,rooms:int}
+     */
+    public static function locations(PDO $db): array
+    {
+        $all = array_map(
+            static fn($row) => ['code' => (string) $row['code'], 'name' => (string) $row['name'], 'rooms' => (int) $row['rooms']],
+            $db->query('SELECT ml.location_id code, ml.location_name name, COUNT(l.id) rooms FROM mst_location ml LEFT JOIN inventory_locations l ON l.slims_location_id=ml.location_id GROUP BY ml.location_id, ml.location_name ORDER BY ml.location_name, ml.location_id')->fetchAll(PDO::FETCH_ASSOC)
+        );
+        $used = array_values(array_filter($all, static fn($location) => $location['rooms'] > 0));
+        $rooms = (int) $db->query('SELECT COUNT(*) FROM inventory_locations')->fetchColumn();
+        return [
+            'locations' => $used ?: ($rooms === 0 ? $all : []),
+            'unassigned' => $used ? $rooms - array_sum(array_column($used, 'rooms')) : 0,
+            'rooms' => $rooms,
+        ];
+    }
+
+    /** The location with the most rooms (the lowest code on a tie), or '' when no room has one. */
+    private static function main(PDO $db): string
+    {
+        return (string) $db->query('SELECT l.slims_location_id FROM inventory_locations l JOIN mst_location ml ON ml.location_id=l.slims_location_id GROUP BY l.slims_location_id ORDER BY COUNT(*) DESC, l.slims_location_id LIMIT 1')->fetchColumn();
+    }
+
     // ---- Settings ------------------------------------------------------------------------------
 
-    public static function settings(PDO $db): array
+    /**
+     * Facility figures per location code, from what the setting holds. Figures saved before
+     * locations were told apart, or while no room had a location, sit under '' and belong to the
+     * main location once there is one.
+     *
+     * @return array<string,array>
+     */
+    public static function profiles(array $stored, string $main): array
+    {
+        $profiles = is_array($stored['locations'] ?? null) ? $stored['locations'] : ($stored ? ['' => $stored] : []);
+        if ($main !== '') {
+            if (isset($profiles['']) && !isset($profiles[$main])) $profiles[$main] = $profiles[''];
+            unset($profiles['']);
+        }
+        return $profiles;
+    }
+
+    /** @return array<string,array> */
+    private static function all(PDO $db): array
     {
         $query = $db->prepare('SELECT setting_value FROM setting WHERE setting_name=?');
         $query->execute([self::SETTING]);
         $value = $query->fetchColumn();
         $stored = is_string($value) ? @unserialize($value, ['allowed_classes' => false]) : [];
-        return array_merge(self::DEFAULTS, array_intersect_key(is_array($stored) ? $stored : [], self::DEFAULTS));
+        return self::profiles(is_array($stored) ? $stored : [], self::main($db));
     }
 
-    private static function store(PDO $db, array $settings): void
+    private static function profile(array $profiles, string $library): array
+    {
+        return array_merge(self::DEFAULTS, array_intersect_key(is_array($profiles[$library] ?? null) ? $profiles[$library] : [], self::DEFAULTS));
+    }
+
+    /** Facility figures of one location ('' while the library is one unit). */
+    public static function settings(PDO $db, string $library = ''): array
+    {
+        return self::profile(self::all($db), $library);
+    }
+
+    private static function store(PDO $db, array $profiles): void
     {
         $db->prepare('INSERT INTO setting (setting_name,setting_value) VALUES (?,?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)')
-            ->execute([self::SETTING, serialize($settings)]);
+            ->execute([self::SETTING, serialize(['locations' => $profiles])]);
     }
 
     private static function number($value, string $label, float $max): float
@@ -144,9 +208,10 @@ final class Sarpras
         return round((float) $text, 2);
     }
 
-    public static function saveSettings(PDO $db, array $input): array
+    public static function saveSettings(PDO $db, array $input, string $library = ''): array
     {
-        $settings = self::settings($db);
+        $profiles = self::all($db);
+        $settings = self::profile($profiles, $library);
         $settings['sivitas'] = (int) self::number($input['sivitas'] ?? '', 'Jumlah sivitas akademika', 10000000);
         $settings['designed'] = ($input['designed'] ?? '') === '1';
         $settings['building_area'] = self::number($input['building_area'] ?? '', 'Luas gedung', 99999999);
@@ -160,7 +225,8 @@ final class Sarpras
             if (!$parsed || $parsed->format('Y-m-d') !== $date) throw new RuntimeException('Tanggal pengukuran tidak valid.');
         }
         $settings['bandwidth_date'] = $date;
-        self::store($db, $settings);
+        $profiles[$library] = $settings;
+        self::store($db, $profiles);
         return $settings;
     }
 
@@ -172,7 +238,7 @@ final class Sarpras
         return SB . 'images' . DIRECTORY_SEPARATOR . 'inventaris-barang' . DIRECTORY_SEPARATOR . 'sarpras';
     }
 
-    public static function uploadEvidence(PDO $db, array $file): array
+    public static function uploadEvidence(PDO $db, array $file, string $library = ''): array
     {
         if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || !is_string($file['tmp_name'] ?? null) || !is_uploaded_file($file['tmp_name'])) {
             throw new RuntimeException('Pilih berkas bukti (PDF, JPEG, PNG, atau WebP) maksimal 5 MB.');
@@ -184,21 +250,25 @@ final class Sarpras
         if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) throw new RuntimeException('Folder bukti tidak dapat dibuat.');
         $name = 'bandwidth-' . bin2hex(random_bytes(8)) . '.' . self::EVIDENCE_TYPES[$mime];
         if (!move_uploaded_file($file['tmp_name'], $dir . DIRECTORY_SEPARATOR . $name)) throw new RuntimeException('Berkas bukti tidak dapat disimpan.');
-        $settings = self::settings($db);
+        $profiles = self::all($db);
+        $settings = self::profile($profiles, $library);
         $old = $settings['evidence']['file'] ?? null;
         $original = mb_substr(basename((string) ($file['name'] ?? 'bukti')), 0, 150);
         $settings['evidence'] = ['file' => $name, 'name' => $original, 'mime' => $mime, 'uploaded_at' => date('Y-m-d H:i:s')];
-        self::store($db, $settings);
+        $profiles[$library] = $settings;
+        self::store($db, $profiles);
         if (is_string($old)) self::removeFile($old);
         return $settings;
     }
 
-    public static function deleteEvidence(PDO $db): array
+    public static function deleteEvidence(PDO $db, string $library = ''): array
     {
-        $settings = self::settings($db);
+        $profiles = self::all($db);
+        $settings = self::profile($profiles, $library);
         $old = $settings['evidence']['file'] ?? null;
         $settings['evidence'] = null;
-        self::store($db, $settings);
+        $profiles[$library] = $settings;
+        self::store($db, $profiles);
         if (is_string($old)) self::removeFile($old);
         return $settings;
     }
@@ -209,9 +279,9 @@ final class Sarpras
     }
 
     /** @return array{path:string,mime:string,name:string}|null */
-    public static function evidenceFile(PDO $db): ?array
+    public static function evidenceFile(PDO $db, string $library = ''): ?array
     {
-        $evidence = self::settings($db)['evidence'];
+        $evidence = self::settings($db, $library)['evidence'];
         if (!is_array($evidence) || !preg_match('/\Abandwidth-[0-9a-f]{16}\.(pdf|jpg|png|webp)\z/', (string) ($evidence['file'] ?? ''))) return null;
         $path = self::evidenceDir() . DIRECTORY_SEPARATOR . $evidence['file'];
         return is_file($path) ? ['path' => $path, 'mime' => (string) $evidence['mime'], 'name' => (string) $evidence['name']] : null;
@@ -320,14 +390,21 @@ final class Sarpras
     }
 
     /**
-     * @return array{generated_at:string,settings:array,aspects:list<array>,summary:array}
+     * The recap of one location, or of every room when $library is '' (the library as one unit).
+     *
+     * @return array{generated_at:string,settings:array,aspects:list<array>,summary:array,counts:array}
      */
-    public static function recap(PDO $db, Supervision $watch): array
+    public static function recap(PDO $db, Supervision $watch, string $library = ''): array
     {
-        $settings = self::settings($db);
+        $settings = self::settings($db, $library);
         $today = date('Y-m-d');
-        $rooms = $db->query('SELECT l.id, l.room_name, l.location_code, l.area_m2, l.room_functions, (SELECT location_name FROM mst_location WHERE location_id=l.slims_location_id) library_name FROM inventory_locations l ORDER BY l.room_name, l.id')->fetchAll(PDO::FETCH_ASSOC);
-        $items = $db->query('SELECT id, location_id, item_name, category, item_type, item_condition FROM inventory_items')->fetchAll(PDO::FETCH_ASSOC);
+        [$where, $args] = $library === '' ? ['', []] : [' WHERE l.slims_location_id=?', [$library]];
+        $query = $db->prepare('SELECT l.id, l.room_name, l.location_code, l.area_m2, l.room_functions, (SELECT location_name FROM mst_location WHERE location_id=l.slims_location_id) library_name FROM inventory_locations l' . $where . ' ORDER BY l.room_name, l.id');
+        $query->execute($args);
+        $rooms = $query->fetchAll(PDO::FETCH_ASSOC);
+        $query = $db->prepare('SELECT i.id, i.location_id, i.item_name, i.category, i.item_type, i.item_condition FROM inventory_items i JOIN inventory_locations l ON l.id=i.location_id' . $where);
+        $query->execute($args);
+        $items = $query->fetchAll(PDO::FETCH_ASSOC);
         $roomFunctions = [];
         foreach ($rooms as $room) $roomFunctions[(int) $room['id']] = array_filter(explode(',', (string) $room['room_functions']));
         $label = static fn(string $code) => self::ROOM_FUNCTIONS[$code]['label'] ?? $code;
@@ -464,7 +541,8 @@ final class Sarpras
         $legal = count(array_filter($software, static fn($s) => self::licensed($s, $today)));
         $softwarePct = self::pct($legal, count($software));
         $aspects[] = [
-            'no' => 8, 'section' => 'Perangkat TI dan multimedia', 'title' => 'Legalitas perangkat lunak',
+            // The register is one for the institution, so this aspect is the same at every location.
+            'no' => 8, 'shared' => true, 'section' => 'Perangkat TI dan multimedia', 'title' => 'Legalitas perangkat lunak',
             'value' => $softwarePct === null ? 'Belum ada aplikasi' : self::fmt($softwarePct, 1) . '% berlisensi resmi',
             'level' => self::percentLevel($softwarePct),
             'basis' => "$legal dari " . count($software) . ' aplikasi berlisensi resmi (termasuk open source); lisensi kedaluwarsa dihitung tidak berlisensi.',
@@ -488,7 +566,7 @@ final class Sarpras
             'Lebih dari 6 jenis fasilitas umum', 'Catat fasilitas umum sebagai barang berkategori Fasilitas umum, misalnya toilet, musala, parkir, atau ruang laktasi.');
 
         // 11. Pengawasan dan pemeliharaan, over the last twelve months.
-        $filter = $watch->filter(['from' => (new \DateTimeImmutable('-1 year +1 day'))->format('Y-m-d'), 'to' => $today]);
+        $filter = $watch->filter(['from' => (new \DateTimeImmutable('-1 year +1 day'))->format('Y-m-d'), 'to' => $today, 'library' => $library]);
         $summary = $watch->summary($filter);
         [$where, $args] = $watch->where($filter);
         $findingTotal = (int) $summary['findings']['open'] + (int) $summary['findings']['closed'];
@@ -517,13 +595,88 @@ final class Sarpras
 
         foreach ($aspects as &$aspect) $aspect['name'] = self::NAMES[$aspect['no']];
         unset($aspect);
-        $levels = array_count_values(array_map(static fn($i) => $i['level'] ?? '-', $aspects));
         return [
             'generated_at' => date('Y-m-d H:i:s'),
             'settings' => $settings,
             'aspects' => $aspects,
-            'summary' => ['a' => $levels['a'] ?? 0, 'b' => $levels['b'] ?? 0, 'c' => $levels['c'] ?? 0, 'd' => $levels['d'] ?? 0, 'empty' => $levels['-'] ?? 0],
+            'summary' => self::summary($aspects),
             'counts' => ['rooms' => count($rooms), 'items' => count($items), 'uncategorized' => count(array_filter($items, static fn($i) => $i['category'] === null)), 'unclassified_rooms' => count($rooms) - $classified, 'no_area' => count($rooms) - $measured],
+        ];
+    }
+
+    /** How many aspects reach each level, and how many have no data. */
+    private static function summary(array $aspects): array
+    {
+        $levels = array_count_values(array_map(static fn($aspect) => $aspect['level'] ?? '-', $aspects));
+        return ['a' => $levels['a'] ?? 0, 'b' => $levels['b'] ?? 0, 'c' => $levels['c'] ?? 0, 'd' => $levels['d'] ?? 0, 'empty' => $levels['-'] ?? 0];
+    }
+
+    // ---- Institution ---------------------------------------------------------------------------
+
+    private const SCORES = ['a' => 4, 'b' => 3, 'c' => 2, 'd' => 1];
+
+    /**
+     * One recap for the institution out of its locations' recaps, in the shape of a location's
+     * recap. An aspect takes the average of the locations that have data for it (Sangat baik 4 …
+     * Kurang 1, rounded to the nearest level, a half going up); locations without data are left
+     * out of the average and named beside it. Its rows are the locations, the weakest first.
+     *
+     * @param array<string,array> $recaps location code => its recap
+     * @param array<string,string> $names location code => its name
+     */
+    public static function combine(array $recaps, array $names): array
+    {
+        $aspects = [];
+        foreach ((reset($recaps) ?: ['aspects' => []])['aspects'] as $index => $base) {
+            if (!empty($base['shared'])) {
+                $aspects[] = $base;
+                continue;
+            }
+            $rows = [];
+            foreach ($recaps as $code => $recap) {
+                $aspect = $recap['aspects'][$index];
+                $rows[] = ['code' => (string) $code, 'name' => $names[$code] ?? (string) $code, 'level' => $aspect['level'], 'value' => $aspect['value']];
+            }
+            // Weakest first; locations without data come last.
+            usort($rows, static fn($x, $y) => [$x['level'] === null, $x['level'] === null ? 0 : self::SCORES[$x['level']], $x['name']] <=> [$y['level'] === null, $y['level'] === null ? 0 : self::SCORES[$y['level']], $y['name']]);
+            $scored = array_values(array_filter($rows, static fn($row) => $row['level'] !== null));
+            $empty = count($rows) - count($scored);
+            $average = $scored ? array_sum(array_map(static fn($row) => self::SCORES[$row['level']], $scored)) / count($scored) : null;
+            $spread = array_count_values(array_column($scored, 'level'));
+            $parts = [];
+            foreach (self::LEVELS as $level => $label) if (!empty($spread[$level])) $parts[] = $label . ' ' . $spread[$level];
+            if ($empty) $parts[] = $empty . ' belum ada data';
+            // Where to look first: the weakest locations.
+            $targets = array_filter($scored, static fn($row) => $row['level'] === $scored[0]['level']);
+            $aspects[] = [
+                'no' => $base['no'], 'section' => $base['section'], 'title' => $base['title'], 'name' => $base['name'],
+                'value' => $scored ? 'Rata-rata ' . count($scored) . ($empty ? ' dari ' . count($rows) : '') . ' lokasi' : 'Belum ada data',
+                'level' => $average === null ? null : ($average >= 3.5 ? 'a' : ($average >= 2.5 ? 'b' : ($average >= 1.5 ? 'c' : 'd'))),
+                'basis' => 'Dari ' . count($rows) . ' lokasi: ' . implode(' · ', $parts) . '.',
+                'checks' => [],
+                'rows' => array_map(static fn($row) => [$row['name'], $row['level'] === null ? 'Belum ada data' : self::LEVELS[$row['level']], $row['value']], $rows),
+                'columns' => ['Lokasi', 'Kondisi', 'Capaian'],
+                'fix' => $scored ? 'Buka rekap lokasi dengan kondisi terendah untuk melihat cara memperbaikinya.' : 'Belum ada lokasi yang memiliki data untuk aspek ini. Pilih lokasi di Perbandingan lokasi untuk melihat data yang perlu dilengkapi.',
+                'sources' => [],
+                'targets' => array_map(static fn($row) => ['code' => $row['code'], 'name' => $row['name']], array_slice(array_values($targets), 0, 3)),
+            ];
+        }
+        return ['generated_at' => date('Y-m-d H:i:s'), 'aspects' => $aspects, 'summary' => self::summary($aspects)];
+    }
+
+    /**
+     * Every location's recap in brief, and the institution's recap combined from them.
+     *
+     * @param list<array{code:string,name:string,rooms:int}> $locations
+     * @return array{locations:list<array>,recap:array}
+     */
+    public static function overview(PDO $db, Supervision $watch, array $locations): array
+    {
+        $recaps = [];
+        foreach ($locations as $location) $recaps[$location['code']] = self::recap($db, $watch, $location['code']);
+        return [
+            'locations' => array_map(static fn($location) => $location + ['summary' => $recaps[$location['code']]['summary']], $locations),
+            'recap' => self::combine($recaps, array_column($locations, 'name', 'code')),
         ];
     }
 
