@@ -40,7 +40,7 @@ $json = static function (array $body, int $status = 200): void {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $token = (string) filter_input(INPUT_POST, 'csrf', FILTER_UNSAFE_RAW);
     if (!$canManage || !hash_equals($_SESSION['inventory_telemetry_csrf'], $token)) {
-        $json(['ok' => false, 'message' => 'Anda perlu hak tulis System untuk mengubah pengaturan ini.'], 403);
+        $json(['ok' => false, 'message' => 'Untuk mengubah pengaturan ini, Anda memerlukan hak tulis System.'], 403);
         exit;
     }
     // The notice banner's "Mengerti" button: seen once, gone for every administrator.
@@ -52,7 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $enable = ($_POST['action'] ?? '') === 'enable';
     Telemetry::setEnabled($db, $enable);
     writeLog('staff', (string) $_SESSION['uid'], 'Klaras Inven', $enable ? 'Pengiriman data pemakaian diaktifkan.' : 'Pengiriman data pemakaian dimatikan.', 'stock_take', 'Update');
-    $json(['ok' => true, 'message' => $enable ? 'Pengiriman data pemakaian aktif kembali.' : 'Pengiriman dimatikan. Klaras menghapus nama dan alamat perpustakaan ini dari datanya.']);
+    $json(['ok' => true, 'message' => $enable ? 'Data pemakaian diaktifkan.' : 'Data pemakaian dinonaktifkan. Klaras menghapus nama dan alamat perpustakaan Anda dari datanya.']);
     exit;
 }
 

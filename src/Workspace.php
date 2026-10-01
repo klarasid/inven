@@ -47,9 +47,9 @@ final class Workspace
             // acknowledgement, so it stays gone; opening Data pemakaian does the same.
             echo '<div id="klaras-telemetry-banner" role="region" aria-label="Pemberitahuan data pemakaian" style="position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:1050;width:calc(100% - 32px);max-width:760px;box-sizing:border-box;display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px;padding:14px 16px;background:#18181b;color:#f4f4f5;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.25);font-size:13px;line-height:1.5">'
                 .'<div style="flex:1 1 320px;min-width:0"><strong style="display:block;margin-bottom:2px;color:#fff">Klaras Inven mengirim data pemakaian</strong>'
-                .'Sekali sehari: nama perpustakaan, alamat SLiMS, versi, jumlah ruangan dan barang, pemakaian fitur, dan ringkasan galat. Isi inventaris, data anggota, dan data petugas tidak pernah dikirim.</div>'
+                .'Sekali sehari: nama perpustakaan, alamat SLiMS, versi, jumlah ruangan dan barang, pemakaian fitur, dan ringkasan error. Isi inventaris, data anggota, dan data petugas tidak pernah dikirim.</div>'
                 .'<div style="display:flex;gap:8px;flex:0 0 auto;margin-left:auto">'
-                .'<a href="'.htmlspecialchars($privacy,ENT_QUOTES,'UTF-8').'" class="notAJAX" style="display:inline-flex;align-items:center;padding:6px 12px;border-radius:8px;border:1px solid #3f3f46;color:#f4f4f5;text-decoration:none">Lihat atau matikan</a>'
+                .'<a href="'.htmlspecialchars($privacy,ENT_QUOTES,'UTF-8').'" class="notAJAX" style="display:inline-flex;align-items:center;padding:6px 12px;border-radius:8px;border:1px solid #3f3f46;color:#f4f4f5;text-decoration:none">Lihat atau nonaktifkan</a>'
                 .'<button type="button" data-ack style="padding:6px 14px;border-radius:8px;border:0;background:#fafafa;color:#18181b;font-weight:600;cursor:pointer">Mengerti</button>'
                 .'</div></div>'
                 .'<script>(function(){var b=document.querySelectorAll("#klaras-telemetry-banner");for(var i=0;i<b.length-1;i++)b[i].remove();var el=b[b.length-1];if(!el)return;'
