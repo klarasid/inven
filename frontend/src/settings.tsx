@@ -3,16 +3,14 @@ import { toast } from "sonner";
 import {
   CheckCircle2,
   CircleAlert,
-  Copy,
   LogOut,
   Power,
   ShieldCheck,
   Smartphone,
-  XCircle,
 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
-import { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
+import { Alert, AlertDescription } from "./components/ui/alert";
 import {
   Dialog,
   DialogContent,
@@ -286,160 +284,6 @@ export function InvenSyncPage() {
         busy={busy}
         onCancel={() => setConfirm(null)}
         onConfirm={() => confirm?.kind === "revoke" && act({ action: "revoke", session: confirm.id })}
-      />
-    </>
-  );
-}
-
-type Privacy = {
-  enabled: boolean;
-  last_sent: string | null;
-  last_result: string;
-  endpoint: string;
-  install_id: string;
-  report: unknown;
-  manage: boolean;
-  csrf: string;
-};
-const results: Record<string, string> = {
-  ok: "Berhasil dikirim",
-  failed: "Belum terkirim. Plugin akan mencoba lagi dalam 1 jam.",
-  off: "Nonaktif",
-};
-
-function InfoRow({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
-  return (
-    <div className="flex flex-col gap-1 border-b py-3 last:border-b-0 sm:flex-row sm:items-start sm:gap-4">
-      <span className="text-sm font-medium sm:w-48 sm:shrink-0">{label}</span>
-      <div className="flex min-w-0 flex-col gap-1 text-sm">
-        {children}
-        {hint && <p className="text-muted-foreground">{hint}</p>}
-      </div>
-    </div>
-  );
-}
-
-export function PrivacyPage() {
-  const { data, error, reload, post } = usePage<Privacy>();
-  const [busy, setBusy] = useState(false);
-  const [confirm, setConfirm] = useState(false);
-  const json = data ? JSON.stringify(data.report, null, 2) : "";
-
-  async function toggle(enable: boolean) {
-    if (!data) return;
-    setBusy(true);
-    try {
-      const reply = await post({ action: enable ? "enable" : "disable", csrf: data.csrf });
-      toast.success(reply.message);
-      setConfirm(false);
-      reload();
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const header = (
-    <PageHeader
-      title="Data pemakaian"
-      description="Bantu sempurnakan Klaras Inven. Sekali sehari, plugin mengirim ringkasan pemakaian ke Klaras: versi yang Anda pakai, fitur yang paling berguna, dan error yang perlu diperbaiki. Pengiriman dapat dinonaktifkan kapan saja."
-      meta={data && <Badge variant={data.enabled ? "success" : "secondary"}>{data.enabled ? "Aktif" : "Nonaktif"}</Badge>}
-      actions={
-        data?.manage &&
-        (data.enabled ? (
-          <Button variant="outline" disabled={busy} onClick={() => setConfirm(true)}>
-            <XCircle data-icon="inline-start" />
-            Nonaktifkan
-          </Button>
-        ) : (
-          <Button disabled={busy} onClick={() => toggle(true)}>
-            <Power data-icon="inline-start" />
-            Aktifkan
-          </Button>
-        ))
-      }
-    />
-  );
-  if (error)
-    return (
-      <>
-        {header}
-        <ErrorBox message={error} />
-      </>
-    );
-  if (!data)
-    return (
-      <>
-        {header}
-        <Loading />
-      </>
-    );
-
-  return (
-    <>
-      {header}
-      <Alert>
-        <ShieldCheck />
-        <AlertTitle>Isi inventaris Anda tidak pernah dikirim</AlertTitle>
-        <AlertDescription>
-          Nama dan kode barang, nama ruangan, nama aplikasi, angka gedung dan jaringan, data anggota, dan data petugas
-          tetap berada di SLiMS Anda. Yang dikirim hanya nama perpustakaan, alamat SLiMS, versi software, jumlah data
-          (ruangan, barang, pemeriksaan, temuan, stock opname, dan data Rekap Sarpras yang sudah diisi), fitur yang
-          dipakai, serta info error tanpa isi datanya.
-        </AlertDescription>
-      </Alert>
-      {!data.manage && (
-        <Alert>
-          <AlertDescription>Pengaturan ini dikelola oleh administrator. Untuk mengubahnya, Anda memerlukan hak tulis System.</AlertDescription>
-        </Alert>
-      )}
-      <Panel title="Status">
-        <InfoRow label="Terakhir dikirim">
-          {data.last_sent ? (
-            <span>
-              {when(data.last_sent)} · {results[data.last_result] ?? data.last_result}
-            </span>
-          ) : (
-            <span className="text-muted-foreground">Belum ada data yang dikirim</span>
-          )}
-        </InfoRow>
-        <InfoRow label="Dikirim ke">
-          <code className="break-all rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{data.endpoint}</code>
-        </InfoRow>
-        <InfoRow label="ID instalasi" hint="ID acak yang dibuat di SLiMS ini. ID ini tidak terkait dengan siapa pun.">
-          <code className="break-all rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{data.install_id}</code>
-        </InfoRow>
-      </Panel>
-      <Panel
-        title="Lihat data yang dikirim"
-        description="Inilah seluruh data yang dikirim, dalam format JSON. Tidak ada data lain."
-        action={
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() =>
-              navigator.clipboard
-                .writeText(json)
-                .then(() => toast.success("Disalin ke papan klip"))
-                .catch(() => toast.error("Tidak dapat menyalin. Coba lagi."))
-            }
-          >
-            <Copy data-icon="inline-start" />
-            Salin
-          </Button>
-        }
-      >
-        <pre className="max-h-[480px] overflow-auto rounded-lg border bg-muted/40 p-4 font-mono text-xs leading-relaxed">{json}</pre>
-      </Panel>
-      <Confirm
-        open={confirm}
-        title="Nonaktifkan data pemakaian?"
-        description="Plugin akan berhenti mengirim data pemakaian. Klaras diberi tahu satu kali, lalu menghapus nama dan alamat perpustakaan Anda dari datanya. Anda dapat mengaktifkannya lagi kapan saja."
-        action="Nonaktifkan"
-        busy={busy}
-        onCancel={() => setConfirm(false)}
-        onConfirm={() => toggle(false)}
       />
     </>
   );

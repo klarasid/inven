@@ -42,7 +42,7 @@ $checks = [
         && str_contains($read('src/Api/Context.php'), 'PublicLink::host()')
         && !str_contains($read('labels.php'), "\$_SERVER['HTTP_HOST']"),
     'jawaban JSON tidak ditebak jenisnya oleh browser' => array_reduce(
-        ['index.php', 'app.php', 'privacy.php', 'inventory.plugin.php', 'src/SarprasController.php', 'src/WatchController.php'],
+        ['index.php', 'app.php', 'inventory.plugin.php', 'src/SarprasController.php', 'src/WatchController.php'],
         static fn (bool $ok, string $file): bool => $ok && substr_count($read($file), "Content-Type: application/json") <= substr_count($read($file), 'X-Content-Type-Options: nosniff'),
         true
     ),

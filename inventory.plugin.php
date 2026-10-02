@@ -29,7 +29,6 @@ foreach ([
     'Pengaturan Inven' => [
         ['Pengaturan Cetak','print-settings.php','Kelola template kop institusi dan nomor dokumen PDF.'],
         ['Aplikasi InvenSync','app.php','Izinkan aplikasi Klaras InvenSync dan kelola perangkat yang masuk.'],
-        ['Data pemakaian','privacy.php','Lihat dan atur data pemakaian yang dikirim ke Klaras.'],
     ],
 ] as $group => $menus) {
     Plugins::group($group, function() use ($menus) {

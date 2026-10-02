@@ -11,7 +11,7 @@ $failures = [];
 $expected = [
     'Klaras Inven' => ['Rekap Sarpras' => 'sarpras.php', 'Tugas' => 'inspection.php', 'Jadwal' => 'checklist-and-schedule.php', 'Checklist' => 'findings-and-follow-up.php', 'Laporan' => 'report.php'],
     'Data Sarpras' => ['Ruangan & Barang' => 'index.php', 'Perangkat Lunak' => 'software.php', 'Gedung & Jaringan' => 'facility.php'],
-    'Pengaturan Inven' => ['Pengaturan Cetak' => 'print-settings.php', 'Aplikasi InvenSync' => 'app.php', 'Data pemakaian' => 'privacy.php'],
+    'Pengaturan Inven' => ['Pengaturan Cetak' => 'print-settings.php', 'Aplikasi InvenSync' => 'app.php'],
 ];
 preg_match_all("/^    '([^']+)' => \\[$/m", $plugin, $groups);
 preg_match_all("/^        \\['([^']+)','([^']+\\.php)',/m", $plugin, $menus, PREG_SET_ORDER);

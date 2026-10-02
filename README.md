@@ -103,7 +103,6 @@ Semua menu tersedia di modul **Stock Take**, dalam tiga bagian. Pengguna dengan 
 | --- | --- |
 | **Pengaturan Cetak** | Mengelola template kop institusi dan nomor dokumen yang tercetak di PDF. |
 | **Aplikasi InvenSync** | Mengizinkan aplikasi HP dan mengelola perangkat yang masuk. |
-| **Data pemakaian** | Melihat dan mengatur data pemakaian yang dikirim ke Klaras. |
 
 ### Rekap Sarpras
 
@@ -165,7 +164,7 @@ Sekali sehari, plugin mengirim ringkasan pemakaian ke Klaras agar plugin gratis 
 
 Plugin **tidak pernah** mengirim isi inventaris, nama atau kode barang, nama ruangan, nama aplikasi, angka gedung dan jaringan, data anggota, maupun data petugas.
 
-Untuk melihat data persis yang dikirim atau mematikan pengiriman, buka **Stock Take → Data pemakaian**. Saat Anda mematikannya, Klaras menghapus nama dan alamat perpustakaan Anda dari datanya.
+Bila Anda ingin data perpustakaan Anda dihapus, tulis ke [privasi@klaras.id](mailto:privasi@klaras.id) dengan menyebut nama perpustakaan dan alamat SLiMS Anda.
 
 ## Pemecahan masalah
 

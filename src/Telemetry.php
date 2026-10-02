@@ -15,10 +15,10 @@ use PDO;
  * What is never sent: inventory records, item names or codes, software names, building and network
  * figures, members, staff or anything typed in.
  *
- * On by default; an administrator sees exactly what is sent and can switch it off under
- * Stock Take → Data pemakaian. Switching off tells Klaras once, which then forgets who the
- * library is. Sent at most once a day, after the page has been delivered, so it never slows a page
- * and a failure is never seen.
+ * On by default. There is no page for it in SLiMS: what is sent is described in the README, and a
+ * library that wants its data removed writes to Klaras. An installation that switched reporting
+ * off while there was a page for it stays off (setEnabled). Sent at most once a day, after the
+ * page has been delivered, so it never slows a page and a failure is never seen.
  *
  * Runs on PHP 7.4 like the rest of the plugin.
  */
@@ -57,7 +57,7 @@ final class Telemetry
             ->execute([$name, serialize($value)]);
     }
 
-    /** @return array{enabled:bool,install_id:string,notice_ack:bool,last_sent:int,last_result:string,leased_until:int} */
+    /** @return array{enabled:bool,install_id:string,last_sent:int,last_result:string,leased_until:int} */
     public static function state(PDO $db): array
     {
         $state = self::read($db, self::SETTING);
@@ -69,7 +69,6 @@ final class Telemetry
         return [
             'enabled' => !array_key_exists('enabled', $state) || (bool) $state['enabled'],
             'install_id' => (string) $state['install_id'],
-            'notice_ack' => !empty($state['notice_ack']),
             'last_sent' => (int) ($state['last_sent'] ?? 0),
             'last_result' => (string) ($state['last_result'] ?? ''),
             'leased_until' => (int) ($state['leased_until'] ?? 0),
@@ -191,7 +190,7 @@ final class Telemetry
         }
     }
 
-    /** Exactly what is sent; the Data pemakaian page shows this same array. */
+    /** Exactly what is sent. */
     public static function report(PDO $db): array
     {
         $state = self::state($db);
@@ -339,14 +338,7 @@ final class Telemetry
         if (!$enabled && $state['enabled']) {
             self::post(['install_id' => $state['install_id'], 'opted_out' => true]);
         }
-        self::update($db, ['enabled' => $enabled, 'notice_ack' => true, 'last_sent' => $enabled ? 0 : $state['last_sent'], 'last_result' => $enabled ? '' : 'off']);
-    }
-
-    /** The administrator has seen what is sent. */
-    public static function acknowledge(PDO $db): void
-    {
-        self::state($db);
-        self::update($db, ['notice_ack' => true]);
+        self::update($db, ['enabled' => $enabled, 'last_sent' => $enabled ? 0 : $state['last_sent'], 'last_result' => $enabled ? '' : 'off']);
     }
 
     private static function post(array $payload): bool

@@ -11,7 +11,7 @@ final class Workspace
     /** @param array<string,mixed> $extra page-specific settings merged into the app config */
     public static function shell(string $view, bool $write, array $extra=[]): void
     {
-        self::telemetryNotice();
+        self::usageReport();
         $config=$extra+['view'=>$view,'query'=>$_GET,'write'=>$write,'uid'=>(int)($_SESSION['uid']??0),
             'api'=>self::endpoint('inspection.php',['workspace'=>'api']),
             'watch'=>self::endpoint('inspection.php'),
@@ -26,39 +26,12 @@ final class Workspace
         echo '<div data-inventory-app data-version="'.htmlspecialchars($version,ENT_QUOTES,'UTF-8').'" data-config="'.htmlspecialchars(json_encode($config,JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT),ENT_QUOTES,'UTF-8').'" data-css="'.htmlspecialchars($asset.'inventory-app.css?v='.$version,ENT_QUOTES,'UTF-8').'"><p role="status">Memuat inventaris…</p></div>';
         echo '<script>(function(){var s=document.createElement("script");s.src='.json_encode($asset.'inventory-app.js?v='.$version).';document.head.appendChild(s);s.onload=function(){s.remove()};s.onerror=function(){document.querySelectorAll("[data-inventory-app]").forEach(function(e){if(!e.shadowRoot)e.textContent="Aplikasi gagal dimuat. Muat ulang halaman."})}})();</script>';
     }
-    /**
-     * The daily usage report: sent after this page has gone out, when one is due. Until an
-     * administrator has opened Data pemakaian, those who may switch it off see a notice saying
-     * what is sent and where to look.
-     */
-    private static function telemetryNotice(): void
+    /** The daily usage report: sent after this page has gone out, when one is due. */
+    private static function usageReport(): void
     {
         require_once __DIR__.'/UpdateCheck.php';
         require_once __DIR__.'/Telemetry.php';
-        try {
-            $db=\SLiMS\DB::getInstance();
-            Telemetry::sendLater();
-            $state=Telemetry::state($db);
-            $canManage=class_exists('utility') && \utility::havePrivilege('system','w');
-            if(!$canManage || $state['notice_ack'] || !$state['enabled']) return;
-            if(empty($_SESSION['inventory_telemetry_csrf'])) $_SESSION['inventory_telemetry_csrf']=bin2hex(random_bytes(24));
-            $privacy=self::endpoint('privacy.php');
-            // A cookie-style banner pinned to the bottom of the window. "Mengerti" records the
-            // acknowledgement, so it stays gone; opening Data pemakaian does the same.
-            echo '<div id="klaras-telemetry-banner" role="region" aria-label="Pemberitahuan data pemakaian" style="position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:1050;width:calc(100% - 32px);max-width:760px;box-sizing:border-box;display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px;padding:14px 16px;background:#18181b;color:#f4f4f5;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.25);font-size:13px;line-height:1.5">'
-                .'<div style="flex:1 1 320px;min-width:0"><strong style="display:block;margin-bottom:2px;color:#fff">Klaras Inven mengirim data pemakaian</strong>'
-                .'Sekali sehari: nama perpustakaan, alamat SLiMS, versi, jumlah ruangan dan barang, pemakaian fitur, dan ringkasan error. Isi inventaris, data anggota, dan data petugas tidak pernah dikirim.</div>'
-                .'<div style="display:flex;gap:8px;flex:0 0 auto;margin-left:auto">'
-                .'<a href="'.htmlspecialchars($privacy,ENT_QUOTES,'UTF-8').'" class="notAJAX" style="display:inline-flex;align-items:center;padding:6px 12px;border-radius:8px;border:1px solid #3f3f46;color:#f4f4f5;text-decoration:none">Lihat atau nonaktifkan</a>'
-                .'<button type="button" data-ack style="padding:6px 14px;border-radius:8px;border:0;background:#fafafa;color:#18181b;font-weight:600;cursor:pointer">Mengerti</button>'
-                .'</div></div>'
-                .'<script>(function(){var b=document.querySelectorAll("#klaras-telemetry-banner");for(var i=0;i<b.length-1;i++)b[i].remove();var el=b[b.length-1];if(!el)return;'
-                .'el.querySelector("a").addEventListener("click",function(e){e.preventDefault();el.remove();if(window.jQuery)jQuery("#mainContent").simbioAJAX(this.href);else location.href=this.href});'
-                .'el.querySelector("[data-ack]").addEventListener("click",function(){el.remove();var f=new FormData();f.append("acknowledge","1");f.append("csrf",'.json_encode($_SESSION['inventory_telemetry_csrf']).');fetch('.json_encode($privacy).',{method:"POST",body:f,credentials:"same-origin"}).catch(function(){})});'
-                .'})();</script>';
-        } catch (\Throwable $error) {
-            // The notice is never worth breaking the page for.
-        }
+        Telemetry::sendLater();
     }
     /** LIKE patterns for a snapshot's assignee id, as a quoted string (pre-PHP 8.1 data) or a JSON integer. */
     private static function assigneeLike(int $uid): array

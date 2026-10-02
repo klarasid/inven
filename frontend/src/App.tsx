@@ -22,7 +22,7 @@ import { Reports } from "./reports";
 import { HistoryImportPage } from "./history-import";
 import { UpdateNotice } from "./updates";
 import { ReportPage } from "./report";
-import { InvenSyncPage, PrivacyPage } from "./settings";
+import { InvenSyncPage } from "./settings";
 import { SarprasPage } from "./sarpras";
 import { SoftwarePage } from "./software";
 import { FacilityPage } from "./facility";
@@ -223,9 +223,6 @@ export function App({ config, host }: { config: Config; host: HTMLElement }) {
       break;
     case "invensync":
       page = <InvenSyncPage />;
-      break;
-    case "privacy":
-      page = <PrivacyPage />;
       break;
     case "sarpras":
       page = <SarprasPage />;
