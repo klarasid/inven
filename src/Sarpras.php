@@ -434,6 +434,8 @@ final class Sarpras
         $roomFunctions = [];
         foreach ($rooms as $room) $roomFunctions[(int) $room['id']] = array_values(array_unique(array_column($roomAreas[(int) $room['id']] ?? [], 'type')));
         $label = static fn(string $code) => self::AREA_TYPES[$code]['label'] ?? $code;
+        // "Area koleksi" inside a sentence: "Komputer di area koleksi".
+        $place = static fn(string $code) => mb_strtolower(mb_substr($label($code), 0, 1)) . mb_substr($label($code), 1);
         $group = static fn(array $codes, string $name) => array_values(array_filter($codes, static fn($c) => (self::AREA_TYPES[$c]['group'] ?? '') === $name));
         // Service functions only: a toilet or a car park is a public facility, counted in aspect 10.
         $split = static fn(array $codes): array => [$group($codes, 'dasar'), $group($codes, 'pendukung')];
@@ -514,7 +516,8 @@ final class Sarpras
             'level' => $furnished === 0 || $classified === 0 ? null : (count($fBasic) < 4 ? 'd' : (count($fSupport) > 4 ? 'a' : (count($fSupport) >= 3 ? 'b' : 'c'))),
             'basis' => "$furnished barang berkategori perabot atau peralatan, dihitung menurut area di ruangan tempatnya berada.",
             'checks' => array_merge(
-                array_map(static fn($code) => ['label' => self::AREA_TYPES[$code]['label'], 'ok' => in_array($code, $fBasic, true)], array_keys(array_filter(self::AREA_TYPES, static fn($f) => $f['group'] === 'dasar'))),
+                // Named for what is checked: a bare "Area koleksi" here would read as the area itself missing (that is aspect 2).
+                array_map(static fn($code) => ['label' => 'Perabot atau peralatan di ' . $place($code), 'ok' => in_array($code, $fBasic, true)], array_keys(array_filter(self::AREA_TYPES, static fn($f) => $f['group'] === 'dasar'))),
                 [['label' => 'Lebih dari 4 fungsi pendukung' . ($fSupport ? ': ' . implode(', ', array_map($label, $fSupport)) : ''), 'ok' => count($fSupport) > 4]]
             ),
             'rows' => [], 'columns' => [],
@@ -531,7 +534,7 @@ final class Sarpras
             'value' => $computerPct === null ? 'Belum ada area layanan' : self::fmt($computerPct, 1) . '% fungsi layanan',
             'level' => $computers === 0 ? ($present ? 'd' : null) : self::percentLevel($computerPct),
             'basis' => "$computers komputer; " . count(array_intersect($withComputer, $present)) . ' dari ' . count($present) . ' fungsi layanan memiliki komputer yang berfungsi.',
-            'checks' => array_map(static fn($code) => ['label' => self::AREA_TYPES[$code]['label'], 'ok' => in_array($code, $withComputer, true)], $present),
+            'checks' => array_map(static fn($code) => ['label' => 'Komputer di ' . $place($code), 'ok' => in_array($code, $withComputer, true)], $present),
             'rows' => [], 'columns' => [],
             'fix' => 'Beri kategori Komputer pada PC dan laptop layanan, lalu pastikan area ruangannya tercatat di tab Area.',
             'sources' => ['inventory'],

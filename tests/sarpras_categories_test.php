@@ -69,7 +69,7 @@ $aspect = static function (int $no) use ($recap): array {
 };
 
 check(str_starts_with($aspect(5)['basis'], '2 komputer;') && str_contains($aspect(5)['basis'], '1 dari 2 fungsi layanan'), 'barang berkategori komputer dan multimedia dihitung sebagai komputer');
-check(array_column($aspect(5)['checks'], 'ok', 'label') === ['Area baca' => true, 'Area koleksi' => false], 'komputer yang rusak berat tidak melayani fungsi ruangannya');
+check(array_column($aspect(5)['checks'], 'ok', 'label') == ['Komputer di area baca' => true, 'Komputer di area koleksi' => false], 'komputer yang rusak berat tidak melayani fungsi ruangannya');
 check($aspect(7)['value'] === '2 jenis' && $aspect(7)['rows'] === [['PC', '1'], ['Proyektor', '1']], 'barang yang sama juga dihitung sebagai perangkat multimedia');
 check($aspect(4)['basis'] !== '' && str_starts_with($aspect(4)['basis'], '1 barang'), 'kategori lain tidak ikut terhitung');
 check($recap['counts']['uncategorized'] === 1 && $recap['counts']['items'] === 5, 'hanya barang tanpa kategori yang dihitung belum berkategori');

@@ -94,7 +94,11 @@ $aspect = static function (array $recap, int $no): array {
 $main = Sarpras::recap($db, $watch, '00');
 check($aspect($main, 2)['value'] === '4 dari 4 area dasar · 3 area pendukung' && $aspect($main, 2)['level'] === 'a', 'area layanan dihitung dari area di tiap ruangan');
 check($aspect($main, 2)['rows'][2] === ['Toilet Lantai 1', 'Toilet'] && str_contains($aspect($main, 2)['rows'][1][1], 'Area literasi / pojok baca (Pojok baca anak)'), 'rincian menampilkan area tiap ruangan beserta namanya');
-check(!in_array('Toilet', array_column($aspect($main, 5)['checks'], 'label'), true) && str_contains($aspect($main, 5)['basis'], 'dari 7 fungsi layanan'), 'toilet bukan fungsi layanan: tidak dituntut memiliki komputer');
+check(!preg_grep('/toilet/i', array_column($aspect($main, 5)['checks'], 'label')) && str_contains($aspect($main, 5)['basis'], 'dari 7 fungsi layanan'), 'toilet bukan fungsi layanan: tidak dituntut memiliki komputer');
+$area = array_column($aspect($main, 2)['checks'], 'ok', 'label');
+$furniture = array_column($aspect($main, 4)['checks'], 'ok', 'label');
+$computers = array_column($aspect($main, 5)['checks'], 'ok', 'label');
+check($area['Area koleksi'] === true && $furniture['Perabot atau peralatan di area koleksi'] === false && $computers['Komputer di area koleksi'] === true && $computers['Komputer di ruang diskusi'] === true && !isset($furniture['Area koleksi'], $computers['Area koleksi']), 'syarat perabot dan komputer menyebut apa yang diperiksa, tidak sekadar nama areanya');
 check($aspect($main, 10)['rows'] === [['Dispenser air minum', '1'], ['Toilet', '1']] && $aspect($main, 10)['value'] === '2 jenis', 'fasilitas umum dihitung dari area dan barang, dan yang tercatat dua kali dihitung sekali');
 check($main['counts']['unclassified_rooms'] === 0, 'ruangan yang memiliki area tidak dihitung belum dicatat');
 $second = Sarpras::recap($db, $watch, '10');
