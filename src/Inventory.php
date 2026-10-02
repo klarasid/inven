@@ -59,7 +59,7 @@ final class Inventory
             throw new RuntimeException('Keterangan maksimal 5.000 karakter.');
         }
 
-        // Category and type feed Rekap Sarpras; callers that do not send them pass the stored row (see ItemController::fields).
+        // Categories and type feed Rekap Sarpras; callers that do not send them pass the stored row (see ItemController::fields).
         return [
             'location_id' => $locationId,
             'item_name' => $itemName,
@@ -73,7 +73,7 @@ final class Inventory
             'acquisition_price' => (float) $priceText,
             'item_condition' => $condition,
             'notes' => self::text($input, 'notes'),
-            'category' => Sarpras::category($input['category'] ?? null),
+            'category' => Sarpras::categories($input['category'] ?? null),
             'item_type' => Sarpras::type($input['item_type'] ?? ''),
         ];
     }

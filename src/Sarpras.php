@@ -110,12 +110,22 @@ final class Sarpras
         return round((float) $text, 2);
     }
 
-    public static function category($value): ?string
+    /**
+     * An item's categories as stored: comma-separated codes in a fixed order, or null for none.
+     * An item may have several, e.g. a computer that is also multimedia equipment.
+     */
+    public static function categories($value): ?string
     {
-        $value = trim((string) ($value ?? ''));
-        if ($value === '') return null;
-        if (!isset(self::CATEGORIES[$value])) throw new RuntimeException('Kategori barang tidak valid.');
-        return $value;
+        $codes = is_array($value) ? $value : explode(',', (string) ($value ?? ''));
+        $codes = array_values(array_filter(array_map(static fn($code) => is_scalar($code) ? trim((string) $code) : '?', $codes), static fn($code) => $code !== ''));
+        if (array_diff($codes, array_keys(self::CATEGORIES))) throw new RuntimeException('Kategori barang tidak valid.');
+        return implode(',', array_values(array_filter(array_keys(self::CATEGORIES), static fn($code) => in_array($code, $codes, true)))) ?: null;
+    }
+
+    /** The category codes in a stored value. @return list<string> */
+    public static function categoryCodes($stored): array
+    {
+        return array_values(array_filter(explode(',', (string) ($stored ?? '')), static fn($code) => isset(self::CATEGORIES[$code])));
     }
 
     public static function type($value): string
@@ -381,7 +391,7 @@ final class Sarpras
     {
         $types = [];
         foreach ($items as $item) {
-            if ($item['category'] !== $category || $item['item_condition'] === 'RB') continue;
+            if (!in_array($category, $item['categories'], true) || $item['item_condition'] === 'RB') continue;
             $key = self::typeKey($item);
             $label = trim((string) $item['item_type']) !== '' ? trim((string) $item['item_type']) : trim((string) $item['item_name']);
             $types[$key] ??= ['type' => $label, 'count' => 0];
@@ -412,6 +422,9 @@ final class Sarpras
         $query = $db->prepare('SELECT i.id, i.location_id, i.item_name, i.category, i.item_type, i.item_condition FROM inventory_items i JOIN inventory_locations l ON l.id=i.location_id' . $where);
         $query->execute($args);
         $items = $query->fetchAll(PDO::FETCH_ASSOC);
+        // An item counts under each of its categories.
+        foreach ($items as &$item) $item['categories'] = self::categoryCodes($item['category']);
+        unset($item);
         $roomFunctions = [];
         foreach ($rooms as $room) $roomFunctions[(int) $room['id']] = array_filter(explode(',', (string) $room['room_functions']));
         $label = static fn(string $code) => self::ROOM_FUNCTIONS[$code]['label'] ?? $code;
@@ -481,7 +494,7 @@ final class Sarpras
         $served = static function (array $categories) use ($items, $roomFunctions): array {
             $codes = [];
             foreach ($items as $item) {
-                if (!in_array($item['category'], $categories, true) || $item['item_condition'] === 'RB') continue;
+                if (!array_intersect($item['categories'], $categories) || $item['item_condition'] === 'RB') continue;
                 foreach ($roomFunctions[(int) $item['location_id']] ?? [] as $code) $codes[$code] = true;
             }
             return array_keys($codes);
@@ -489,7 +502,7 @@ final class Sarpras
 
         // 4. Perabot dan peralatan
         [$fBasic, $fSupport] = $split($served(['perabot', 'peralatan']));
-        $furnished = count(array_filter($items, static fn($i) => in_array($i['category'], ['perabot', 'peralatan'], true)));
+        $furnished = count(array_filter($items, static fn($i) => (bool) array_intersect($i['categories'], ['perabot', 'peralatan'])));
         $aspects[] = [
             'no' => 4, 'section' => 'Perabot dan peralatan', 'title' => 'Perabot dan peralatan per fungsi layanan',
             'value' => count($fBasic) . ' dari 4 fungsi dasar · ' . count($fSupport) . ' fungsi pendukung',
@@ -507,7 +520,7 @@ final class Sarpras
         // 5. Komputer per fungsi layanan
         $withComputer = $served(['komputer']);
         $computerPct = self::pct(count(array_intersect($withComputer, $present)), count($present));
-        $computers = count(array_filter($items, static fn($i) => $i['category'] === 'komputer'));
+        $computers = count(array_filter($items, static fn($i) => in_array('komputer', $i['categories'], true)));
         $aspects[] = [
             'no' => 5, 'section' => 'Perangkat TI dan multimedia', 'title' => 'Komputer untuk mendukung fungsi layanan',
             'value' => $computerPct === null ? 'Belum ada fungsi ruang' : self::fmt($computerPct, 1) . '% fungsi layanan',
@@ -607,7 +620,7 @@ final class Sarpras
             'settings' => $settings,
             'aspects' => $aspects,
             'summary' => self::summary($aspects),
-            'counts' => ['rooms' => count($rooms), 'items' => count($items), 'uncategorized' => count(array_filter($items, static fn($i) => $i['category'] === null)), 'unclassified_rooms' => count($rooms) - $classified, 'no_area' => count($rooms) - $measured],
+            'counts' => ['rooms' => count($rooms), 'items' => count($items), 'uncategorized' => count(array_filter($items, static fn($i) => !$i['categories'])), 'unclassified_rooms' => count($rooms) - $classified, 'no_area' => count($rooms) - $measured],
         ];
     }
 

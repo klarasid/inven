@@ -358,9 +358,9 @@ try {
             if (min($ids) < 1) {
                 throw new RuntimeException('Data yang dipilih tidak valid.');
             }
-            $category = \SLiMS\Plugins\Inventory\Sarpras::category($_POST['category'] ?? null);
+            $category = \SLiMS\Plugins\Inventory\Sarpras::categories($_POST['category'] ?? null);
             $type = \SLiMS\Plugins\Inventory\Sarpras::type($_POST['item_type'] ?? '');
-            // An empty type keeps each item's own type, so one category can be set across mixed items.
+            // An empty type keeps each item's own type, so the same categories can be set across mixed items.
             $sql = 'UPDATE inventory_items SET category=?' . ($type !== '' ? ', item_type=?' : '') . ', updated_at=? WHERE id IN (' . implode(',', array_fill(0, count($ids), '?')) . ')';
             $statement = $db->prepare($sql);
             $statement->execute(array_merge([$category], $type !== '' ? [$type] : [], [$now], $ids));
@@ -446,11 +446,12 @@ try {
     $schemaError = in_array((int) ($exception->errorInfo[1] ?? 0), [1054, 1146, 1364], true) && str_contains($exception->getMessage(), 'filename');
     $codeSchemaError = str_contains($exception->getMessage(), 'inventory_item_code_');
     $sarprasSchemaError = (int) ($exception->errorInfo[1] ?? 0) === 1054 && preg_match('/area_m2|room_functions|category|item_type/', $exception->getMessage());
-    $message = $sarprasSchemaError ? 'Kolom luas, fungsi ruang, dan kategori barang belum tersedia. Jalankan migrasi plugin hingga versi 9 melalui System → Plugins.' : ($codeSchemaError ? 'Struktur kode barang belum tersedia. Jalankan migrasi plugin hingga versi 6 melalui System → Plugins.' : ($schemaError ? 'Struktur foto belum diperbarui. Jalankan migrasi plugin hingga versi 4 melalui System → Plugins.' : (str_contains(strtolower($exception->getMessage()), 'doesn\'t exist')
+    $categoriesSchemaError = (int) ($exception->errorInfo[1] ?? 0) === 1406 && str_contains($exception->getMessage(), 'category');
+    $message = $categoriesSchemaError ? 'Kolom kategori belum dapat menyimpan beberapa kategori. Jalankan migrasi plugin hingga versi 11 melalui System → Plugins.' : ($sarprasSchemaError ? 'Kolom luas, fungsi ruang, dan kategori barang belum tersedia. Jalankan migrasi plugin hingga versi 9 melalui System → Plugins.' : ($codeSchemaError ? 'Struktur kode barang belum tersedia. Jalankan migrasi plugin hingga versi 6 melalui System → Plugins.' : ($schemaError ? 'Struktur foto belum diperbarui. Jalankan migrasi plugin hingga versi 4 melalui System → Plugins.' : (str_contains(strtolower($exception->getMessage()), 'doesn\'t exist')
         ? 'Tabel inventaris belum tersedia. Aktifkan plugin Inventaris Barang dari menu System → Plugins.'
         : ((int) ($exception->errorInfo[1] ?? 0) === 1062 && str_contains($exception->getMessage(), 'inventory_locations_code_unique')
             ? 'Kode lokasi masih dibatasi unik oleh struktur database lama. Jalankan migrasi plugin hingga versi 5 melalui System → Plugins agar beberapa ruangan dapat memakai kode lokasi yang sama.'
-            : 'Operasi database gagal. Periksa data yang dimasukkan dan log PHP.'))));
+            : 'Operasi database gagal. Periksa data yang dimasukkan dan log PHP.')))));
 } catch (RuntimeException $exception) {
     if ($db->inTransaction()) { $db->rollBack(); }
     $photoStorage->cleanup($createdPhotos);

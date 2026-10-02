@@ -71,36 +71,51 @@ import {
 } from "./shared";
 import type { Page, Values, Photo, Route } from "./types";
 
-const NONE = "__none";
+/** An item's categories as the server keeps them: comma-separated codes. */
+const categoryCodes = (category: unknown) => String(category || "").split(",").filter(Boolean);
 
-/** Item category for Rekap Sarpras, with suggested types for the chosen category. */
-function CategoryFields({
+/**
+ * Item categories for Rekap Sarpras, with types suggested for the chosen ones. An item may have
+ * several categories, e.g. a computer that is also multimedia equipment.
+ */
+export function CategoryFields({
   category,
   type,
   onCategory,
   onType,
+  categoryHint = "Dipakai di Rekap Sarpras. Satu barang bisa memiliki lebih dari satu kategori, misalnya komputer yang juga perangkat multimedia.",
   typeHint = "Contoh: Proyektor, APAR, Toilet. Barang sejenis dihitung satu jenis.",
 }: {
   category: unknown;
   type: unknown;
   onCategory: (v: string) => void;
   onType: (v: string) => void;
+  categoryHint?: string;
   typeHint?: string;
 }) {
   const w = useWorkspace();
   const lists = w.options.sarpras;
   const id = useId();
-  const suggestions = lists.types[String(category || "")] || [];
+  const chosen = categoryCodes(category);
+  const suggestions = [...new Set(chosen.flatMap((code) => lists.types[code] || []))];
   return (
-    <FieldGroup className="grid sm:grid-cols-2">
-      <Choice
-        label="Kategori"
-        value={String(category || NONE)}
-        onChange={(v) => onCategory(v === NONE ? "" : v)}
-        items={[{ value: NONE, label: "Tanpa kategori" }, ...Object.entries(lists.categories).map(([value, label]) => ({ value, label }))]}
-        description="Dipakai di Rekap Sarpras."
-      />
+    <FieldGroup>
       <Field>
+        <FieldLabel>Kategori</FieldLabel>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {Object.entries(lists.categories).map(([code, label]) => (
+            <label key={code} className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={chosen.includes(code)}
+                onCheckedChange={(on) => onCategory((on ? [...chosen, code] : chosen.filter((c) => c !== code)).join(","))}
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+        <FieldDescription>{categoryHint}</FieldDescription>
+      </Field>
+      <Field className="sm:max-w-sm">
         <FieldLabel htmlFor={id}>Jenis</FieldLabel>
         <Input id={id} list={`${id}-types`} maxLength={100} value={String(type ?? "")} onChange={(e) => onType(e.target.value)} />
         <datalist id={`${id}-types`}>
@@ -679,6 +694,7 @@ function CategorizeDialog({
           type={type}
           onCategory={setCategory}
           onType={setType}
+          categoryHint="Pilihan ini menggantikan kategori barang yang dipilih. Boleh lebih dari satu; tanpa pilihan, kategorinya dikosongkan."
           typeHint="Kosongkan untuk mempertahankan jenis masing-masing barang."
         />
         <DialogFooter>
@@ -783,7 +799,9 @@ function ItemDetails({ record, photos }: { record: Values; photos: Photo[] }) {
     ["Ruangan", w.options.rooms.find((r) => String(r.id) === String(record.location_id))?.room_name],
     [
       "Kategori",
-      [record.category ? w.options.sarpras.categories[String(record.category)] : "", record.item_type].filter(Boolean).join(" · "),
+      [categoryCodes(record.category).map((code) => w.options.sarpras.categories[code]).filter(Boolean).join(", "), record.item_type]
+        .filter(Boolean)
+        .join(" · "),
     ],
     ["Merk / model", record.brand_model],
     ["Nomor seri", record.serial_number],

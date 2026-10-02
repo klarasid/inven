@@ -108,7 +108,7 @@ Semua menu tersedia di modul **Stock Take**, dalam tiga bagian. Pengguna dengan 
 Rekap dihitung dari data yang sudah ada, jadi lengkapi dulu klasifikasinya:
 
 1. Di **Ruangan & Barang**, ubah tiap ruangan dan isi **Luas (m²)** serta **fungsi ruang**. Ada empat fungsi layanan dasar (koleksi, baca, kerja staf, layanan); fungsi lainnya termasuk pendukung.
-2. Beri **Kategori** dan **Jenis** pada barang (perabot, peralatan, komputer, multimedia, keamanan, fasilitas umum). Centang beberapa barang di tabel ruangan, lalu klik **Beri kategori** untuk mengisinya sekaligus.
+2. Beri **Kategori** dan **Jenis** pada barang (perabot, peralatan, komputer, multimedia, keamanan, fasilitas umum). Satu barang boleh memiliki lebih dari satu kategori dan dihitung di tiap kategorinya, misalnya komputer yang juga perangkat multimedia. Centang beberapa barang di tabel ruangan, lalu klik **Beri kategori** untuk mengisinya sekaligus; pilihan itu menggantikan kategori barang yang dicentang.
 3. Di **Gedung & Jaringan**, isi jumlah sivitas akademika, luas gedung bila diketahui, serta bandwidth beserta bukti pengukurannya. Bila ada beberapa lokasi, pilih lokasinya dulu. Di samping formulir tampil hasilnya di Rekap Sarpras menurut data yang tersimpan.
 4. Di **Perangkat Lunak**, catat aplikasi yang dipakai beserta jenis lisensinya.
 
@@ -188,6 +188,7 @@ php tests/hardening_test.php
 php tests/history_workbook_test.php
 php tests/menu_structure_test.php
 php tests/sarpras_combine_test.php
+php tests/sarpras_categories_test.php
 node tests/watch_forms_test.cjs
 ```
 
