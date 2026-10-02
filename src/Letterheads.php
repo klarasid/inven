@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace SLiMS\Plugins\Inventory;
 
 require_once __DIR__ . '/PdfFonts.php';
+require_once __DIR__ . '/PhotoStorage.php';
 
 /**
  * Institution letterhead templates: an uploaded PDF (letterhead and footer) whose pages become the
@@ -12,8 +13,9 @@ require_once __DIR__ . '/PdfFonts.php';
  * the first report page; page 2, when present, backs the following pages, unless `first_only` is set,
  * in which case the following pages are plain paper (the usual practice for multi-page letters).
  *
- * Files live under images/inventaris-barang/kop, which inherits the web-server denial of the plugin's
- * photo folder; metadata is kept serialized in SLiMS's `setting` table.
+ * Files live under images/inventaris-barang/kop, denied to browsers like the plugin's photo folder
+ * (PhotoStorage::protect) and served only through the page; metadata is kept serialized in SLiMS's
+ * `setting` table.
  */
 final class Letterheads
 {
@@ -113,8 +115,11 @@ final class Letterheads
         if (count($list) >= self::MAX_TEMPLATES) throw new \RuntimeException('Maksimal ' . self::MAX_TEMPLATES . ' template. Hapus template yang tidak dipakai.');
         $info = self::inspect($file['tmp_name'], $tempDir);
 
-        $dir = self::directory();
-        if (!is_dir($dir) && !mkdir($dir, 0770, true) && !is_dir($dir)) throw new \RuntimeException('Folder template tidak dapat dibuat.');
+        try {
+            PhotoStorage::protect(self::directory());
+        } catch (\RuntimeException $error) {
+            throw new \RuntimeException('Folder template tidak dapat dibuat atau dilindungi.');
+        }
         $id = bin2hex(random_bytes(8));
         $template = [
             'id' => $id,
@@ -131,6 +136,7 @@ final class Letterheads
             'created_at' => date('Y-m-d H:i:s'),
         ];
         if (!move_uploaded_file($file['tmp_name'], self::path($template))) throw new \RuntimeException('Berkas template tidak dapat disimpan.');
+        @chmod(self::path($template), 0600);
         $list[$id] = $template;
         self::store($db, $list);
         return $template;

@@ -12,15 +12,20 @@ final class PhotoStorage
         $this->directory = $directory ?? SB . 'images/inventaris-barang';
     }
 
-    private function directory(): string
+    /**
+     * Makes a folder of uploads private: created for the web-server user alone, with rules that
+     * deny browsers. Folders under the photo folder call this too, rather than count on the photo
+     * folder's rules, which exist only once a photo has been stored.
+     */
+    public static function protect(string $directory): void
     {
-        if (is_link($this->directory)) {
+        if (is_link($directory)) {
             throw new \RuntimeException('Direktori foto tidak boleh berupa symbolic link.');
         }
-        if (!is_dir($this->directory) && !mkdir($this->directory, 0700, true) && !is_dir($this->directory)) {
+        if (!is_dir($directory) && !mkdir($directory, 0700, true) && !is_dir($directory)) {
             throw new \RuntimeException('Direktori foto tidak dapat dibuat.');
         }
-        $rules = $this->directory . '/.htaccess';
+        $rules = $directory . '/.htaccess';
         if (!file_exists($rules)) {
             $handle = @fopen($rules, 'x');
             if ($handle) {
@@ -31,6 +36,11 @@ final class PhotoStorage
         if (is_link($rules) || !is_file($rules) || file_get_contents($rules) !== self::RULES) {
             throw new \RuntimeException('Proteksi direktori foto tidak tersedia.');
         }
+    }
+
+    private function directory(): string
+    {
+        self::protect($this->directory);
         return $this->directory;
     }
 

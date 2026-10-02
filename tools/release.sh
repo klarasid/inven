@@ -76,6 +76,11 @@ package() {
   # Free families it uses (font substitution is off, so no other face is ever loaded) and their licences.
   find "$stage/$PLUGIN/vendor/mpdf/mpdf/ttfonts" -type f ! -name 'DejaVu*' ! -name 'Free*' ! -name '*.txt' -delete
   find "$stage/$PLUGIN/vendor" -type d \( -name tests -o -name .github \) -prune -exec rm -rf {} +
+  # Scripts in the libraries that act when a browser requests them: mPDF's legacy download helper and
+  # random_compat's build tools. Nothing loads them, and nginx does not read the .htaccess that
+  # denies PHP in this folder, so they are not shipped.
+  rm -rf "$stage/$PLUGIN/vendor/mpdf/mpdf/data/out.php" "$stage/$PLUGIN/vendor/paragonie/random_compat/other" \
+    "$stage/$PLUGIN/vendor/paragonie/random_compat/psalm-autoload.php" "$stage/$PLUGIN/vendor/paragonie/random_compat/build-phar.sh"
   find "$stage" -name .DS_Store -delete
   echo "Uji asap paket…"
   php tools/smoke.php "$stage/$PLUGIN" || die "uji asap gagal; paket tidak dibuat."

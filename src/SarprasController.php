@@ -60,6 +60,7 @@ $json = static function (array $body, int $status = 200): void {
     http_response_code($status);
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: private, no-store');
+    header('X-Content-Type-Options: nosniff');
     echo json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 };
 $log = static function (string $message, string $action): void {

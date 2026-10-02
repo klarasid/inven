@@ -5,6 +5,7 @@ namespace SLiMS\Plugins\Inventory\Api;
 use PDO;
 use SLiMS\Plugins\Inventory\Documents;
 use SLiMS\Plugins\Inventory\PhotoStorage;
+use SLiMS\Plugins\Inventory\PublicLink;
 use SLiMS\Plugins\Inventory\Supervision;
 use SlimsConnect\Http\Request;
 
@@ -54,10 +55,9 @@ final class Context
     /** The public address of this SLiMS, for links printed on labels. */
     public function siteUrl(): string
     {
-        $host = (string) ($_SERVER['HTTP_HOST'] ?? 'localhost');
         $scheme = $this->request->isSecure() ? 'https' : 'http';
 
-        return $scheme . '://' . $host . rtrim(defined('SWB') ? SWB : '/', '/');
+        return $scheme . '://' . PublicLink::host() . rtrim(defined('SWB') ? SWB : '/', '/');
     }
 
     /** Records the change in SLiMS's system log, as the admin pages do. */

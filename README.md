@@ -51,19 +51,25 @@ Plugin memeriksa rilis baru di GitHub setiap 12 jam. Jika tersedia, pengguna den
 > [!IMPORTANT]
 > Beberapa migrasi tidak dapat dibatalkan karena menyimpan bukti historis. Selalu cadangkan database sebelum menjalankan migrasi.
 
-## Mengamankan folder foto
+## Mengamankan folder foto dan folder plugin
 
-Foto barang dan bukti pemeriksaan disimpan di `images/inventaris-barang` dan hanya dapat dibuka melalui panel admin. Plugin membuat `.htaccess` untuk memblokir akses langsung di Apache (memerlukan `AllowOverride`).
+Foto barang, bukti pemeriksaan, template kop, dan bukti pengukuran bandwidth disimpan di `images/inventaris-barang` dan hanya dapat dibuka melalui panel admin. Plugin membuat `.htaccess` di folder itu dan di tiap subfoldernya untuk memblokir akses langsung di Apache (memerlukan `AllowOverride`).
 
-Jika Anda memakai Nginx, tambahkan aturan berikut, lalu muat ulang konfigurasinya. Sesuaikan awalan `/opac` dengan path instalasi Anda.
+Berkas PHP plugin dijalankan oleh SLiMS, bukan lewat alamatnya sendiri. `.htaccess` di folder plugin menolak permintaan langsung ke berkas PHP di dalamnya; hanya folder `assets` yang perlu dibuka browser.
+
+Nginx dan Caddy tidak membaca `.htaccess`. Jika Anda memakai Nginx, tambahkan aturan berikut, lalu muat ulang konfigurasinya. Sesuaikan awalan `/opac` dengan path instalasi Anda.
 
 ```nginx
 location ^~ /opac/images/inventaris-barang/ {
     deny all;
 }
+location ^~ /opac/plugins/inventaris-barang/ {
+    location ~ \.(php|phar)$ { deny all; }
+    location ~ /composer\.(json|lock)$ { deny all; }
+}
 ```
 
-Untuk memastikan aturan bekerja, buka URL langsung salah satu foto. Server seharusnya menjawab **403 Forbidden**.
+Untuk memastikan aturan bekerja, buka URL langsung salah satu foto dan `plugins/inventaris-barang/index.php`. Server seharusnya menjawab **403 Forbidden** untuk keduanya.
 
 Agar lima foto berukuran 2 MB dapat diunggah sekaligus, atur `upload_max_filesize` ke minimal `2M`, `post_max_size` ke minimal `12M`, dan `max_file_uploads` ke minimal `5`.
 
@@ -178,6 +184,8 @@ Tes tanpa database dapat langsung dijalankan dari folder plugin:
 ```sh
 php tests/pdf_template_test.php
 php tests/security_controls_test.php
+php tests/hardening_test.php
+php tests/history_workbook_test.php
 php tests/menu_structure_test.php
 php tests/sarpras_combine_test.php
 node tests/watch_forms_test.cjs

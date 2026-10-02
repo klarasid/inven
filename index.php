@@ -222,7 +222,7 @@ try {
             throw new RuntimeException('Token formulir tidak valid. Muat ulang halaman lalu coba lagi.');
         }
 
-        if ($isWorkspaceSave && ($cached=\SLiMS\Plugins\Inventory\WorkspaceRequests::cached('inventory'))) { header('Content-Type: application/json; charset=utf-8'); echo json_encode($cached); return; }
+        if ($isWorkspaceSave && ($cached=\SLiMS\Plugins\Inventory\WorkspaceRequests::cached('inventory'))) { header('Content-Type: application/json; charset=utf-8'); header('Cache-Control: private, no-store'); header('X-Content-Type-Options: nosniff'); echo json_encode($cached); return; }
         $postAction = inventory_post('form_action');
         // Merge omitted fields only after authorization. A hidden section must never erase old data.
         if (in_array($postAction,['save_item','save_location'],true) && (int)($_POST['record_id']??0)>0) {
@@ -470,7 +470,7 @@ try {
 }
 
 if ($isWorkspaceSave) {
-    header('Content-Type: application/json; charset=utf-8'); header('Cache-Control: private, no-store');
+    header('Content-Type: application/json; charset=utf-8'); header('Cache-Control: private, no-store'); header('X-Content-Type-Options: nosniff');
     if ($messageType==='danger') http_response_code(str_contains($message,'sesi lain')?409:422);
     echo json_encode(\SLiMS\Plugins\Inventory\WorkspaceRequests::remember('inventory',['ok'=>$messageType!=='danger','message'=>$message,'record'=>$id??null,'location_id'=>$_GET['location_id']??($_POST['location_id']??null),'code'=>$reservedCode,'errors'=>$messageType==='danger'?\SLiMS\Plugins\Inventory\WorkspaceRequests::errors($message):new stdClass()])); return;
 }
@@ -478,13 +478,15 @@ if ($isWorkspaceSave) {
 if ($isCodeRequest) {
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: private, no-store');
+    header('X-Content-Type-Options: nosniff');
     echo json_encode(['ok' => $messageType !== 'danger', 'message' => $message, 'code' => $messageType === 'danger' ? null : $reservedCode], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
     exit;
 }
 
 if ($isPhotoSave || $isPhotoDelete) {
     header('Content-Type: application/json; charset=utf-8');
-    header('Cache-Control: no-store');
+    header('Cache-Control: private, no-store');
+    header('X-Content-Type-Options: nosniff');
     echo json_encode([
         'ok' => $messageType !== 'danger',
         'message' => $message,

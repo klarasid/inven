@@ -7,6 +7,8 @@ namespace SLiMS\Plugins\Inventory;
 use PDO;
 use RuntimeException;
 
+require_once __DIR__ . '/PhotoStorage.php';
+
 /**
  * Rekap Sarpras: eleven aspects of the library's facilities, each computed from the inventory
  * (room area and functions, item categories and conditions), the software register, the figures
@@ -232,7 +234,7 @@ final class Sarpras
 
     // ---- Bandwidth evidence --------------------------------------------------------------------
 
-    /** Kept with the inventory photos, so it inherits their web-server denial and is only served through the page. */
+    /** Kept with the inventory photos and denied to browsers like them (PhotoStorage::protect), so it is only served through the page. */
     public static function evidenceDir(): string
     {
         return SB . 'images' . DIRECTORY_SEPARATOR . 'inventaris-barang' . DIRECTORY_SEPARATOR . 'sarpras';
@@ -247,9 +249,14 @@ final class Sarpras
         $mime = (string) (new \finfo(FILEINFO_MIME_TYPE))->file($file['tmp_name']);
         if (!isset(self::EVIDENCE_TYPES[$mime])) throw new RuntimeException('Format bukti harus PDF, JPEG, PNG, atau WebP.');
         $dir = self::evidenceDir();
-        if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) throw new RuntimeException('Folder bukti tidak dapat dibuat.');
+        try {
+            PhotoStorage::protect($dir);
+        } catch (RuntimeException $error) {
+            throw new RuntimeException('Folder bukti tidak dapat dibuat atau dilindungi.');
+        }
         $name = 'bandwidth-' . bin2hex(random_bytes(8)) . '.' . self::EVIDENCE_TYPES[$mime];
         if (!move_uploaded_file($file['tmp_name'], $dir . DIRECTORY_SEPARATOR . $name)) throw new RuntimeException('Berkas bukti tidak dapat disimpan.');
+        @chmod($dir . DIRECTORY_SEPARATOR . $name, 0600);
         $profiles = self::all($db);
         $settings = self::profile($profiles, $library);
         $old = $settings['evidence']['file'] ?? null;

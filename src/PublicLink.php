@@ -45,6 +45,21 @@ final class PublicLink
         return $itemId > 0 && strlen($token) === self::TOKEN_LENGTH && hash_equals(self::token($db, $itemId), $token);
     }
 
+    /**
+     * The host this SLiMS was reached at, for links printed on labels. A label outlives the
+     * request that printed it, so a Host header that is not a plain host name with an optional
+     * port is refused instead of printed.
+     */
+    public static function host(): string
+    {
+        $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
+        if ($host === '') return 'localhost';
+        if (!preg_match('/\A(?:[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?|\[[0-9A-Fa-f:.]+\])(?::\d{1,5})?\z/', $host)) {
+            throw new \RuntimeException('Alamat situs tidak dikenali. Buka SLiMS melalui alamat resminya, lalu cetak label lagi.');
+        }
+        return $host;
+    }
+
     /** Query string for the OPAC page, appended to the site's index.php URL. */
     public static function query(\PDO $db, int $itemId, array $extra = []): string
     {

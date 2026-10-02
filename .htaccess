@@ -1,0 +1,6 @@
+# SLiMS loads this plugin's PHP from disk (admin/plugin_container.php and index.php?p=…), never by
+# its own address, so nothing here is meant to be requested directly except what is in assets/.
+# Written like the rules in SLiMS's own .htaccess, so it works wherever SLiMS does.
+<FilesMatch "\.(php|phar)$|^composer\.(json|lock)$">
+  Order allow,deny
+</FilesMatch>

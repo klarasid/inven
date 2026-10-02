@@ -57,6 +57,7 @@ Plugins::getInstance()->registerHook('custom_api_route', function ($router) {
         http_response_code(503);
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store');
+        header('X-Content-Type-Options: nosniff');
         echo json_encode(['error' => [
             'code' => 'klaras_not_linked',
             'message' => 'Pasang dan tautkan SLiMS Connect di SLiMS ini agar aplikasi InvenSync bisa tersambung.',

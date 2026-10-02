@@ -32,6 +32,8 @@ function source() {
   const url = new URL(file, location.href);
   // Only documents from this site: the viewer must not be usable to display outside files.
   if (url.origin !== location.origin) throw new Error('Dokumen harus berasal dari situs ini.');
+  // And only what SLiMS's plugin pages print: a link to this viewer must not make it request any other address.
+  if (!url.pathname.endsWith('/plugin_container.php')) throw new Error('Dokumen harus berasal dari halaman plugin SLiMS.');
   return url;
 }
 

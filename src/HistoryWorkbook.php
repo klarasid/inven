@@ -7,6 +7,8 @@ final class HistoryWorkbook
     public const CHECKS = ['nomor_pemeriksaan','nomor_butir','tanggal_pemeriksaan','id_ruangan','id_pemeriksa','nama_checklist','kelompok','objek','id_barang','hasil','catatan','id_penanggung_jawab','prioritas','tenggat'];
     public const ACTIONS = ['nomor_pemeriksaan','nomor_butir','tanggal_pekerjaan','jenis_tindakan','id_pelaksana','uraian','biaya','referensi_bukti','id_verifikator','tanggal_verifikasi','catatan_verifikasi'];
     private static function xml(string $text): \SimpleXMLElement {
+        // The DOCTYPE check below reads the text as UTF-8. Another encoding (UTF-16, UTF-7, EBCDIC) would hide one from it, so only UTF-8 is read.
+        if (strpos($text,"\0")!==false || !mb_check_encoding($text,'UTF-8') || !preg_match('/\A(?:\xEF\xBB\xBF)?\s*</',$text) || preg_match('/\A(?:\xEF\xBB\xBF)?\s*<\?xml[^>]*\bencoding\s*=\s*["\'](?!utf-?8["\'])/i',$text)) throw new \RuntimeException('XML Excel harus berenkode UTF-8.');
         if (stripos($text,'<!DOCTYPE')!==false || stripos($text,'<!ENTITY')!==false) throw new \RuntimeException('XML Excel tidak diizinkan.');
         $previous=libxml_use_internal_errors(true);
         try { $xml=simplexml_load_string($text,\SimpleXMLElement::class,LIBXML_NONET); }

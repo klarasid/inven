@@ -64,6 +64,12 @@ final class UpdateCheck
         ];
     }
 
+    /** The release links become buttons for administrators; only links to GitHub itself are passed on. */
+    private static function github($url): ?string
+    {
+        return is_string($url) && preg_match('#\Ahttps://github\.com/[^\s"\'<>\\\\]+\z#', $url) ? $url : null;
+    }
+
     /**
      * Latest non-draft, non-prerelease release; null when the repository has none yet, false on failure.
      * @return array{version:string,url:string,download:?string,notes:string,published_at:?string}|null|false
@@ -77,6 +83,9 @@ final class UpdateCheck
             CURLOPT_CONNECTTIMEOUT => 3,
             CURLOPT_TIMEOUT => 5,
             CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS => 3,
+            CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
+            CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTPS,
             CURLOPT_HTTPHEADER => ['Accept: application/vnd.github+json', 'User-Agent: klaras-inven-update-check', 'X-GitHub-Api-Version: 2022-11-28'],
         ]);
         $body = curl_exec($curl);
@@ -88,11 +97,11 @@ final class UpdateCheck
         if (!is_array($data) || !isset($data['tag_name'])) return false;
         $download = null;
         foreach ((array) ($data['assets'] ?? []) as $asset) {
-            if (preg_match('/\A(?:klaras-inven|inventaris-barang)-.*\.zip\z/', (string) ($asset['name'] ?? ''))) { $download = (string) $asset['browser_download_url']; break; }
+            if (preg_match('/\A(?:klaras-inven|inventaris-barang)-.*\.zip\z/', (string) ($asset['name'] ?? ''))) { $download = self::github($asset['browser_download_url'] ?? null); break; }
         }
         return [
             'version' => ltrim((string) $data['tag_name'], 'vV'),
-            'url' => (string) ($data['html_url'] ?? 'https://github.com/' . $repo . '/releases'),
+            'url' => self::github($data['html_url'] ?? null) ?? 'https://github.com/' . $repo . '/releases',
             'download' => $download,
             'notes' => mb_substr((string) ($data['body'] ?? ''), 0, 6000),
             'published_at' => $data['published_at'] ?? null,

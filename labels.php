@@ -43,6 +43,14 @@ if (count($ids) > 500) {
     die('Maksimal 500 label per cetak.');
 }
 
+require_once __DIR__ . '/src/PublicLink.php';
+try {
+    $host = \SLiMS\Plugins\Inventory\PublicLink::host();
+} catch (RuntimeException $exception) {
+    http_response_code(400);
+    die($exception->getMessage());
+}
+
 $now = time();
 $requests = array_values(array_filter(
     (array) ($_SESSION['inventory_pdf_requests'] ?? []),
@@ -62,7 +70,6 @@ try {
         throw new RuntimeException('Dependensi mPDF/QR belum terpasang. Jalankan Composer dari direktori plugin.');
     }
     require_once __DIR__ . '/src/LabelSheet.php';
-    require_once __DIR__ . '/src/PublicLink.php';
     $preset = isset(\SLiMS\Plugins\Inventory\LabelSheet::PRESETS[$_GET['preset'] ?? '']) ? (string) $_GET['preset'] : 'a4-3x8';
     $start = max(1, (int) ($_GET['start'] ?? 1));
 
@@ -97,7 +104,7 @@ try {
     // where index.php resolves ?qr=<item id> to the item's room and details.
     $public = ($_GET['target'] ?? 'public') !== 'staff';
     $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
-    $origin = ($https ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+    $origin = ($https ? 'https' : 'http') . '://' . $host;
     $pluginId = md5((string) realpath(__DIR__ . '/index.php'));
     $labels = array_map(static fn(array $item): array => [
         'item' => $item,
