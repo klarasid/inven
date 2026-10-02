@@ -59,6 +59,29 @@ if (($_GET['action'] ?? '') === 'item_photo') {
     exit;
 }
 
+// A room's floor plan (the Denah tab): the uploaded file, to staff with Stock Take access only.
+if (($_GET['action'] ?? '') === 'room_plan') {
+    require_once __DIR__ . '/src/RoomPlans.php';
+    header('Cache-Control: private, no-store');
+    header('X-Content-Type-Options: nosniff');
+    $plan = null;
+    try {
+        $plan = \SLiMS\Plugins\Inventory\RoomPlans::file($db, (int) ($_GET['plan_id'] ?? 0));
+    } catch (Throwable $exception) {
+        error_log('Inventory plan error: ' . $exception->getMessage());
+    }
+    if ($plan === null) {
+        http_response_code(404);
+        exit('Denah tidak ditemukan.');
+    }
+    // A picture opened on its own gets no scripts or forms; a PDF needs the browser's viewer.
+    if ($plan['mime'] !== 'application/pdf') header("Content-Security-Policy: default-src 'none'; sandbox");
+    header('Content-Type: ' . $plan['mime']);
+    header('Content-Disposition: inline; filename="' . $plan['name'] . '"');
+    header('Content-Length: ' . filesize($plan['path']));
+    readfile($plan['path']);
+    exit;
+}
 
 function inventory_e($value): string
 {
@@ -284,7 +307,6 @@ try {
                 'location_code' => inventory_post('location_code') ?: null,
                 'room_name' => $roomName,
                 'area_m2' => \SLiMS\Plugins\Inventory\Sarpras::area($_POST['area_m2'] ?? null),
-                'room_functions' => \SLiMS\Plugins\Inventory\Sarpras::functions($_POST['room_functions'] ?? ''),
                 'province' => inventory_post('province'),
                 'regency_city' => inventory_post('regency_city'),
                 'unit_name' => inventory_post('unit_name', 'PERPUSTAKAAN'),
@@ -302,7 +324,7 @@ try {
             if ($id > 0) {
                 $values['id'] = $id;
                 $statement = $db->prepare(
-                    'UPDATE inventory_locations SET slims_location_id=:slims_location_id, location_code=:location_code, room_name=:room_name, area_m2=:area_m2, room_functions=:room_functions, province=:province,
+                    'UPDATE inventory_locations SET slims_location_id=:slims_location_id, location_code=:location_code, room_name=:room_name, area_m2=:area_m2, province=:province,
                      regency_city=:regency_city, unit_name=:unit_name, work_unit=:work_unit, signature_city=:signature_city,
                      knowing_title=:knowing_title, knowing_name=:knowing_name, knowing_identity=:knowing_identity,
                      manager_title=:manager_title, manager_name=:manager_name, manager_identity=:manager_identity,
@@ -316,10 +338,10 @@ try {
                 $values['created_at'] = $now;
                 $statement = $db->prepare(
                     'INSERT INTO inventory_locations
-                     (slims_location_id, location_code, room_name, area_m2, room_functions, province, regency_city, unit_name, work_unit, signature_city,
+                     (slims_location_id, location_code, room_name, area_m2, province, regency_city, unit_name, work_unit, signature_city,
                       knowing_title, knowing_name, knowing_identity, manager_title, manager_name, manager_identity,
                       created_by, created_at, updated_at)
-                     VALUES (:slims_location_id, :location_code, :room_name, :area_m2, :room_functions, :province, :regency_city, :unit_name, :work_unit, :signature_city,
+                     VALUES (:slims_location_id, :location_code, :room_name, :area_m2, :province, :regency_city, :unit_name, :work_unit, :signature_city,
                       :knowing_title, :knowing_name, :knowing_identity, :manager_title, :manager_name, :manager_identity,
                       :created_by, :created_at, :updated_at)'
                 );
@@ -366,6 +388,33 @@ try {
             $statement->execute(array_merge([$category], $type !== '' ? [$type] : [], [$now], $ids));
             inventory_log('', $statement->rowCount() . ' barang diberi kategori ' . ($category ?? 'kosong') . '.', 'Update');
             $message = $statement->rowCount() . ' barang diperbarui.';
+        } elseif (in_array($postAction, ['save_area', 'delete_area'], true)) {
+            require_once __DIR__ . '/src/RoomAreas.php';
+            $roomId = (int) ($_POST['location_id'] ?? 0);
+            $id = (int) ($_POST['record_id'] ?? 0);
+            if ($postAction === 'save_area') {
+                $isNewArea = $id < 1;
+                $id = \SLiMS\Plugins\Inventory\RoomAreas::save($db, $roomId, $id, $_POST, $now);
+                inventory_log((string) $roomId, 'Area #' . $id . ($isNewArea ? ' ditambahkan ke ruangan.' : ' diperbarui.'), $isNewArea ? 'Create' : 'Update');
+                $message = 'Area tersimpan.';
+            } else {
+                \SLiMS\Plugins\Inventory\RoomAreas::delete($db, $roomId, $id);
+                inventory_log((string) $roomId, 'Area #' . $id . ' dihapus dari ruangan.', 'Delete');
+                $message = 'Area dihapus.';
+            }
+        } elseif (in_array($postAction, ['upload_plan', 'delete_plan'], true)) {
+            require_once __DIR__ . '/src/RoomPlans.php';
+            $roomId = (int) ($_POST['location_id'] ?? 0);
+            if ($postAction === 'upload_plan') {
+                $id = \SLiMS\Plugins\Inventory\RoomPlans::upload($db, $roomId, is_array($_FILES['plan'] ?? null) ? $_FILES['plan'] : [], inventory_post('title'), $uid, $now);
+                inventory_log((string) $roomId, 'Denah #' . $id . ' diunggah.', 'Create');
+                $message = 'Denah tersimpan.';
+            } else {
+                $id = (int) ($_POST['record_id'] ?? 0);
+                \SLiMS\Plugins\Inventory\RoomPlans::delete($db, $roomId, $id);
+                inventory_log((string) $roomId, 'Denah #' . $id . ' dihapus.', 'Delete');
+                $message = 'Denah dihapus.';
+            }
         } elseif (in_array($postAction, ['delete_item', 'delete_location'], true)) {
             $ids = $_POST['itemID'] ?? [$_POST['record_id'] ?? 0];
             if (!is_array($ids) || !$ids) {
@@ -387,6 +436,13 @@ try {
                 $sql .= ' AND location_id = ?';
             }
             $watchSchedulesAvailable = !$isItem && (bool) $db->query("SHOW TABLES LIKE 'inventory_watch_schedules'")->fetchColumn();
+            // A room's areas and floor plans go with it (tables of migration 12).
+            $roomDetailsAvailable = !$isItem && (bool) $db->query("SHOW TABLES LIKE 'inventory_room_areas'")->fetchColumn();
+            $removedPlans = [];
+            if ($roomDetailsAvailable) {
+                require_once __DIR__ . '/src/RoomAreas.php';
+                require_once __DIR__ . '/src/RoomPlans.php';
+            }
             $db->beginTransaction();
             $statement = $db->prepare($sql);
             $lock = $db->prepare('SELECT id FROM ' . $table . ' WHERE id = ?' . ($isItem ? ' AND location_id = ?' : '') . ' FOR UPDATE');
@@ -406,12 +462,17 @@ try {
                 if (!$isItem && $watchSchedulesAvailable) {
                     $db->prepare('UPDATE inventory_watch_schedules SET active=0,version=version+1 WHERE location_id=?')->execute([$id]);
                 }
+                if ($roomDetailsAvailable) {
+                    \SLiMS\Plugins\Inventory\RoomAreas::deleteRoom($db, $id);
+                    $removedPlans = array_merge($removedPlans, \SLiMS\Plugins\Inventory\RoomPlans::deleteRoom($db, $id));
+                }
                 $statement->execute($args);
                 $deletedIds[] = $id;
             }
             $db->commit();
             $photoStorage->cleanup($removedPhotos);
             $removedPhotos = [];
+            if ($removedPlans) \SLiMS\Plugins\Inventory\RoomPlans::cleanup($removedPlans);
             foreach ($deletedIds as $id) {
                 inventory_log((string) $id, $isItem ? 'Barang inventaris dihapus.' : 'Lokasi inventaris beserta barang terkait dihapus.', 'Delete');
             }
@@ -445,13 +506,14 @@ try {
     $messageType = 'danger';
     $schemaError = in_array((int) ($exception->errorInfo[1] ?? 0), [1054, 1146, 1364], true) && str_contains($exception->getMessage(), 'filename');
     $codeSchemaError = str_contains($exception->getMessage(), 'inventory_item_code_');
-    $sarprasSchemaError = (int) ($exception->errorInfo[1] ?? 0) === 1054 && preg_match('/area_m2|room_functions|category|item_type/', $exception->getMessage());
+    $sarprasSchemaError = (int) ($exception->errorInfo[1] ?? 0) === 1054 && preg_match('/area_m2|category|item_type/', $exception->getMessage());
     $categoriesSchemaError = (int) ($exception->errorInfo[1] ?? 0) === 1406 && str_contains($exception->getMessage(), 'category');
-    $message = $categoriesSchemaError ? 'Kolom kategori belum dapat menyimpan beberapa kategori. Jalankan migrasi plugin hingga versi 11 melalui System → Plugins.' : ($sarprasSchemaError ? 'Kolom luas, fungsi ruang, dan kategori barang belum tersedia. Jalankan migrasi plugin hingga versi 9 melalui System → Plugins.' : ($codeSchemaError ? 'Struktur kode barang belum tersedia. Jalankan migrasi plugin hingga versi 6 melalui System → Plugins.' : ($schemaError ? 'Struktur foto belum diperbarui. Jalankan migrasi plugin hingga versi 4 melalui System → Plugins.' : (str_contains(strtolower($exception->getMessage()), 'doesn\'t exist')
+    $roomSchemaError = (int) ($exception->errorInfo[1] ?? 0) === 1146 && str_contains($exception->getMessage(), 'inventory_room_');
+    $message = $roomSchemaError ? 'Area dan denah ruangan belum tersedia. Jalankan migrasi plugin hingga versi 12 melalui System → Plugins.' : ($categoriesSchemaError ? 'Kolom kategori belum dapat menyimpan beberapa kategori. Jalankan migrasi plugin hingga versi 11 melalui System → Plugins.' : ($sarprasSchemaError ? 'Kolom luas, fungsi ruang, dan kategori barang belum tersedia. Jalankan migrasi plugin hingga versi 9 melalui System → Plugins.' : ($codeSchemaError ? 'Struktur kode barang belum tersedia. Jalankan migrasi plugin hingga versi 6 melalui System → Plugins.' : ($schemaError ? 'Struktur foto belum diperbarui. Jalankan migrasi plugin hingga versi 4 melalui System → Plugins.' : (str_contains(strtolower($exception->getMessage()), 'doesn\'t exist')
         ? 'Tabel inventaris belum tersedia. Aktifkan plugin Inventaris Barang dari menu System → Plugins.'
         : ((int) ($exception->errorInfo[1] ?? 0) === 1062 && str_contains($exception->getMessage(), 'inventory_locations_code_unique')
             ? 'Kode lokasi masih dibatasi unik oleh struktur database lama. Jalankan migrasi plugin hingga versi 5 melalui System → Plugins agar beberapa ruangan dapat memakai kode lokasi yang sama.'
-            : 'Operasi database gagal. Periksa data yang dimasukkan dan log PHP.')))));
+            : 'Operasi database gagal. Periksa data yang dimasukkan dan log PHP.'))))));
 } catch (RuntimeException $exception) {
     if ($db->inTransaction()) { $db->rollBack(); }
     $photoStorage->cleanup($createdPhotos);

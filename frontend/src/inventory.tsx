@@ -29,6 +29,8 @@ import { ToggleGroup, ToggleGroupItem } from "./components/ui/toggle-group";
 import { Separator } from "./components/ui/separator";
 import { Input } from "./components/ui/input";
 import { Checkbox } from "./components/ui/checkbox";
+import { Tabs, TabsList, TabsTrigger } from "./components/ui/tabs";
+import { RoomAreasTab, RoomPlansTab } from "./room-areas";
 import { LabelDialog } from "./labels";
 import {
   Dialog,
@@ -128,6 +130,9 @@ export function CategoryFields({
     </FieldGroup>
   );
 }
+
+/** What a room's page shows: its items, the areas inside it, and its floor plans. */
+const roomTabs = { items: "Barang", areas: "Area", plans: "Denah" } as const;
 
 const home: Route = { view: "inventory" };
 const homeCrumb = { label: "Ruangan & Barang", route: home };
@@ -368,7 +373,8 @@ function KirMenu({ room }: { room: string }) {
 function RoomItems() {
   const w = useWorkspace();
   const room = String(w.route.room);
-  const { item, ...params } = w.route;
+  const { item, tab: routeTab, ...params } = w.route;
+  const tab = String(routeTab || "") in roomTabs ? (routeTab as keyof typeof roomTabs) : "items";
   const { data, error, loading } = useData<Page<Values>>("items", params);
   const [selected, setSelected] = useState<Values>();
   const [deleteRoom, setDeleteRoom] = useState<Values>();
@@ -436,175 +442,190 @@ function RoomItems() {
           </>
         }
       />
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatCard label="Semua barang" value={total} icon={Boxes} active={!condition} onClick={() => filter("")} />
-        <StatCard
-          label="Baik"
-          value={Number(counts.B || 0)}
-          icon={CircleCheck}
-          tone="success"
-          active={condition === "B"}
-          onClick={() => filter(condition === "B" ? "" : "B")}
-        />
-        <StatCard
-          label="Kurang baik"
-          value={Number(counts.KB || 0)}
-          icon={CircleAlert}
-          tone="warning"
-          active={condition === "KB"}
-          onClick={() => filter(condition === "KB" ? "" : "KB")}
-        />
-        <StatCard
-          label="Rusak berat"
-          value={Number(counts.RB || 0)}
-          icon={CircleX}
-          tone="destructive"
-          active={condition === "RB"}
-          onClick={() => filter(condition === "RB" ? "" : "RB")}
-        />
-      </div>
-      <SearchBox placeholder="Cari nama, kode, atau merk barang…" />
-      {pickedCount > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2">
-          <span className="text-sm font-medium">{pickedCount} barang dipilih</span>
-          <Button
-            size="sm"
-            className="ml-auto"
-            onClick={() => setLabelItems(Object.entries(picked).map(([id, name]) => ({ id, name })))}
-          >
-            <QrCode data-icon="inline-start" />
-            Cetak label terpilih
-          </Button>
-          {w.config.write && (
-            <Button size="sm" variant="outline" onClick={() => setCategorize(true)}>
-              <Tags data-icon="inline-start" />
-              Beri kategori
-            </Button>
-          )}
-          <Button size="sm" variant="ghost" onClick={() => setPicked({})}>
-            <X data-icon="inline-start" />
-            Batalkan pilihan
-          </Button>
-        </div>
-      )}
-      <ErrorBox message={error} />
-      {loading && !data ? (
-        <Loading />
-      ) : data && !data.rows.length ? (
-        <Blank
-          icon={Package}
-          title={w.route.q || condition ? "Barang tidak ditemukan" : "Belum ada barang"}
-          description={
-            w.route.q || condition
-              ? "Ubah kata kunci atau pilih kondisi lain."
-              : "Tambahkan barang pertama di ruangan ini."
-          }
-        >
-          {w.config.write && !w.route.q && !condition && (
-            <Button onClick={() => w.go({ view: "item-edit", room })}>
-              <Plus data-icon="inline-start" />
-              Tambah barang
-            </Button>
-          )}
-        </Blank>
-      ) : (
-        data && (
-          <div className="overflow-hidden rounded-xl border">
-            <Table>
-              <TableHeader className="bg-muted/50">
-                <TableRow>
-                  <TableHead className="w-10">
-                    <Checkbox
-                      aria-label="Pilih semua barang di halaman ini"
-                      checked={allOnPage}
-                      onCheckedChange={(on) =>
-                        setPicked((p) => {
-                          const next = { ...p };
-                          for (const r of data.rows) {
-                            if (on) next[String(r.id)] = String(r.item_name);
-                            else delete next[String(r.id)];
-                          }
-                          return next;
-                        })
-                      }
-                    />
-                  </TableHead>
-                  <TableHead className="w-14">
-                    <span className="sr-only">Foto</span>
-                  </TableHead>
-                  <TableHead>Barang</TableHead>
-                  <TableHead className="hidden md:table-cell">Merk / model</TableHead>
-                  <TableHead>Kondisi</TableHead>
-                  <TableHead className="hidden sm:table-cell">Jumlah / register</TableHead>
-                  <TableHead className="w-12">
-                    <span className="sr-only">Tindakan</span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.rows.map((r) => (
-                  <TableRow
-                    key={String(r.id)}
-                    className="cursor-pointer"
-                    data-state={picked[String(r.id)] !== undefined ? "selected" : undefined}
-                    onClick={() => openItem(r.id)}
-                  >
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <Checkbox
-                        aria-label={`Pilih ${r.item_name}`}
-                        checked={picked[String(r.id)] !== undefined}
-                        onCheckedChange={() => toggle(String(r.id), String(r.item_name))}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex size-10 items-center justify-center overflow-hidden rounded-md border bg-muted">
-                        {r.photo_url ? (
-                          <img src={String(r.photo_url)} alt="" loading="lazy" className="size-full object-cover" />
-                        ) : (
-                          <ImageOff className="size-4 text-muted-foreground" />
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="max-w-64 whitespace-normal">
-                      <button
-                        type="button"
-                        className="text-left font-medium hover:underline"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openItem(r.id);
-                        }}
-                      >
-                        {r.item_name}
-                      </button>
-                      <p className="text-xs text-muted-foreground tabular-nums">{r.item_code || "Tanpa kode"}</p>
-                    </TableCell>
-                    <TableCell className="hidden text-muted-foreground md:table-cell">{r.brand_model || "—"}</TableCell>
-                    <TableCell>
-                      <Condition value={r.item_condition} />
-                    </TableCell>
-                    <TableCell className="hidden sm:table-cell">{r.quantity_register || "—"}</TableCell>
-                    <TableCell>
-                      {w.config.write && (
-                        <Actions
-                          items={[
-                            {
-                              label: "Ubah",
-                              icon: Pencil,
-                              run: () => w.go({ view: "item-edit", record: String(r.id), room }),
-                            },
-                            { label: "Hapus", icon: Trash2, destructive: true, run: () => setSelected(r) },
-                          ]}
-                        />
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+      <Tabs value={tab} onValueChange={(v) => w.go({ ...w.route, tab: v === "items" ? undefined : v, item: undefined }, true)}>
+        <TabsList variant="line" className="w-full justify-start border-b">
+          {Object.entries(roomTabs).map(([value, label]) => (
+            <TabsTrigger key={value} value={value} className="flex-none">
+              {label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+      {tab === "areas" && <RoomAreasTab room={room} />}
+      {tab === "plans" && <RoomPlansTab room={room} />}
+      {tab === "items" && (
+        <>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <StatCard label="Semua barang" value={total} icon={Boxes} active={!condition} onClick={() => filter("")} />
+            <StatCard
+              label="Baik"
+              value={Number(counts.B || 0)}
+              icon={CircleCheck}
+              tone="success"
+              active={condition === "B"}
+              onClick={() => filter(condition === "B" ? "" : "B")}
+            />
+            <StatCard
+              label="Kurang baik"
+              value={Number(counts.KB || 0)}
+              icon={CircleAlert}
+              tone="warning"
+              active={condition === "KB"}
+              onClick={() => filter(condition === "KB" ? "" : "KB")}
+            />
+            <StatCard
+              label="Rusak berat"
+              value={Number(counts.RB || 0)}
+              icon={CircleX}
+              tone="destructive"
+              active={condition === "RB"}
+              onClick={() => filter(condition === "RB" ? "" : "RB")}
+            />
           </div>
-        )
+          <SearchBox placeholder="Cari nama, kode, atau merk barang…" />
+          {pickedCount > 0 && (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2">
+              <span className="text-sm font-medium">{pickedCount} barang dipilih</span>
+              <Button
+                size="sm"
+                className="ml-auto"
+                onClick={() => setLabelItems(Object.entries(picked).map(([id, name]) => ({ id, name })))}
+              >
+                <QrCode data-icon="inline-start" />
+                Cetak label terpilih
+              </Button>
+              {w.config.write && (
+                <Button size="sm" variant="outline" onClick={() => setCategorize(true)}>
+                  <Tags data-icon="inline-start" />
+                  Beri kategori
+                </Button>
+              )}
+              <Button size="sm" variant="ghost" onClick={() => setPicked({})}>
+                <X data-icon="inline-start" />
+                Batalkan pilihan
+              </Button>
+            </div>
+          )}
+          <ErrorBox message={error} />
+          {loading && !data ? (
+            <Loading />
+          ) : data && !data.rows.length ? (
+            <Blank
+              icon={Package}
+              title={w.route.q || condition ? "Barang tidak ditemukan" : "Belum ada barang"}
+              description={
+                w.route.q || condition
+                  ? "Ubah kata kunci atau pilih kondisi lain."
+                  : "Tambahkan barang pertama di ruangan ini."
+              }
+            >
+              {w.config.write && !w.route.q && !condition && (
+                <Button onClick={() => w.go({ view: "item-edit", room })}>
+                  <Plus data-icon="inline-start" />
+                  Tambah barang
+                </Button>
+              )}
+            </Blank>
+          ) : (
+            data && (
+              <div className="overflow-hidden rounded-xl border">
+                <Table>
+                  <TableHeader className="bg-muted/50">
+                    <TableRow>
+                      <TableHead className="w-10">
+                        <Checkbox
+                          aria-label="Pilih semua barang di halaman ini"
+                          checked={allOnPage}
+                          onCheckedChange={(on) =>
+                            setPicked((p) => {
+                              const next = { ...p };
+                              for (const r of data.rows) {
+                                if (on) next[String(r.id)] = String(r.item_name);
+                                else delete next[String(r.id)];
+                              }
+                              return next;
+                            })
+                          }
+                        />
+                      </TableHead>
+                      <TableHead className="w-14">
+                        <span className="sr-only">Foto</span>
+                      </TableHead>
+                      <TableHead>Barang</TableHead>
+                      <TableHead className="hidden md:table-cell">Merk / model</TableHead>
+                      <TableHead>Kondisi</TableHead>
+                      <TableHead className="hidden sm:table-cell">Jumlah / register</TableHead>
+                      <TableHead className="w-12">
+                        <span className="sr-only">Tindakan</span>
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {data.rows.map((r) => (
+                      <TableRow
+                        key={String(r.id)}
+                        className="cursor-pointer"
+                        data-state={picked[String(r.id)] !== undefined ? "selected" : undefined}
+                        onClick={() => openItem(r.id)}
+                      >
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            aria-label={`Pilih ${r.item_name}`}
+                            checked={picked[String(r.id)] !== undefined}
+                            onCheckedChange={() => toggle(String(r.id), String(r.item_name))}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex size-10 items-center justify-center overflow-hidden rounded-md border bg-muted">
+                            {r.photo_url ? (
+                              <img src={String(r.photo_url)} alt="" loading="lazy" className="size-full object-cover" />
+                            ) : (
+                              <ImageOff className="size-4 text-muted-foreground" />
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="max-w-64 whitespace-normal">
+                          <button
+                            type="button"
+                            className="text-left font-medium hover:underline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openItem(r.id);
+                            }}
+                          >
+                            {r.item_name}
+                          </button>
+                          <p className="text-xs text-muted-foreground tabular-nums">{r.item_code || "Tanpa kode"}</p>
+                        </TableCell>
+                        <TableCell className="hidden text-muted-foreground md:table-cell">{r.brand_model || "—"}</TableCell>
+                        <TableCell>
+                          <Condition value={r.item_condition} />
+                        </TableCell>
+                        <TableCell className="hidden sm:table-cell">{r.quantity_register || "—"}</TableCell>
+                        <TableCell>
+                          {w.config.write && (
+                            <Actions
+                              items={[
+                                {
+                                  label: "Ubah",
+                                  icon: Pencil,
+                                  run: () => w.go({ view: "item-edit", record: String(r.id), room }),
+                                },
+                                { label: "Hapus", icon: Trash2, destructive: true, run: () => setSelected(r) },
+                              ]}
+                            />
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )
+          )}
+          {data && <Pager {...data} onChange={(page) => w.go({ ...w.route, page }, true)} />}
+        </>
       )}
-      {data && <Pager {...data} onChange={(page) => w.go({ ...w.route, page }, true)} />}
       <ItemSheet
         record={w.route.item ? String(w.route.item) : undefined}
         onClose={() => w.go({ ...w.route, item: undefined }, true)}
@@ -1170,41 +1191,11 @@ function InventoryEditor({ record, photos: initialPhotos = [] }: { record?: Valu
                 </FieldGroup>
               </Panel>
               <Panel
-                title="Luas dan fungsi ruang"
-                description="Dipakai di Rekap Sarpras. Satu ruangan bisa memiliki lebih dari satu fungsi."
+                title="Luas ruang"
+                description="Dipakai di Rekap Sarpras. Area di dalam ruangan dan denahnya dicatat di halaman ruangan, pada tab Area dan Denah."
                 className="lg:col-span-2"
               >
-                <FieldGroup>
-                  <div className="sm:max-w-xs">{text("area_m2", "Luas (m²)", { type: "number", placeholder: "Contoh: 120" })}</div>
-                  <div className="grid gap-6 sm:grid-cols-2">
-                    {(["dasar", "pendukung"] as const).map((group) => {
-                      const chosen = String(values.room_functions || "").split(",").filter(Boolean);
-                      return (
-                        <Field key={group}>
-                          <FieldLabel>{group === "dasar" ? "Fungsi layanan dasar" : "Fungsi pendukung"}</FieldLabel>
-                          <div className="flex flex-col gap-2">
-                            {Object.entries(w.options.sarpras.roomFunctions)
-                              .filter(([, f]) => f.group === group)
-                              .map(([code, f]) => (
-                                <label key={code} className="flex items-center gap-2 text-sm">
-                                  <Checkbox
-                                    checked={chosen.includes(code)}
-                                    onCheckedChange={(on) =>
-                                      update(
-                                        "room_functions",
-                                        (on ? [...chosen, code] : chosen.filter((c) => c !== code)).join(","),
-                                      )
-                                    }
-                                  />
-                                  {f.label}
-                                </label>
-                              ))}
-                          </div>
-                        </Field>
-                      );
-                    })}
-                  </div>
-                </FieldGroup>
+                <div className="sm:max-w-xs">{text("area_m2", "Luas (m²)", { type: "number", placeholder: "Contoh: 120" })}</div>
               </Panel>
               <Panel title="Penandatangan KIR" description="Tercetak di bagian tanda tangan kartu." className="lg:col-span-2">
                 <FieldGroup>

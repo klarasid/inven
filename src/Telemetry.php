@@ -222,7 +222,8 @@ final class Telemetry
             'stock_take_active' => $count('SELECT COUNT(*) FROM stock_take WHERE is_active = 1'),
             'stock_take_items' => $count('SELECT COUNT(*) FROM stock_take_item'),
             'rooms_with_area' => $count('SELECT COUNT(*) FROM inventory_locations WHERE area_m2 IS NOT NULL'),
-            'rooms_with_functions' => $count("SELECT COUNT(*) FROM inventory_locations WHERE room_functions <> ''"),
+            // Rooms whose use is recorded: by their areas, or by ticked functions before migration 12.
+            'rooms_with_functions' => $count('SELECT COUNT(DISTINCT location_id) FROM inventory_room_areas') ?? $count("SELECT COUNT(*) FROM inventory_locations WHERE room_functions <> ''"),
             'items_categorized' => $count('SELECT COUNT(*) FROM inventory_items WHERE category IS NOT NULL'),
             'software' => $count('SELECT COUNT(*) FROM inventory_software'),
             'facility_profiles' => self::facilityProfiles($db),

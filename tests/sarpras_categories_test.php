@@ -41,7 +41,8 @@ $db = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_
 foreach ([
     'CREATE TABLE setting (setting_name TEXT PRIMARY KEY, setting_value TEXT)',
     'CREATE TABLE mst_location (location_id TEXT PRIMARY KEY, location_name TEXT)',
-    'CREATE TABLE inventory_locations (id INTEGER PRIMARY KEY, room_name TEXT, location_code TEXT, area_m2 REAL, room_functions TEXT NOT NULL DEFAULT \'\', slims_location_id TEXT)',
+    'CREATE TABLE inventory_locations (id INTEGER PRIMARY KEY, room_name TEXT, location_code TEXT, area_m2 REAL, slims_location_id TEXT)',
+    'CREATE TABLE inventory_room_areas (id INTEGER PRIMARY KEY, location_id INTEGER, type TEXT, name TEXT NOT NULL DEFAULT \'\', created_at TEXT, updated_at TEXT)',
     'CREATE TABLE inventory_items (id INTEGER PRIMARY KEY, location_id INTEGER, item_name TEXT, category TEXT, item_type TEXT NOT NULL DEFAULT \'\', item_condition TEXT)',
     'CREATE TABLE inventory_software (id INTEGER PRIMARY KEY, name TEXT, version TEXT, licence TEXT, valid_until TEXT)',
     'CREATE TABLE inventory_watch_schedules (id INTEGER PRIMARY KEY, location_id INTEGER, snapshot TEXT, frequency TEXT, start_date TEXT, end_date TEXT, active INTEGER)',
@@ -49,7 +50,8 @@ foreach ([
     'CREATE TABLE inventory_watch_results (id INTEGER PRIMARY KEY, inspection_id INTEGER, outcome TEXT)',
     'CREATE TABLE inventory_watch_findings (id INTEGER PRIMARY KEY, inspection_id INTEGER, status TEXT, deadline TEXT)',
     'CREATE TABLE inventory_watch_actions (id INTEGER PRIMARY KEY, finding_id INTEGER, submitted_at TEXT)',
-    "INSERT INTO inventory_locations (id, room_name, room_functions) VALUES (1, 'Ruang Baca', 'baca'), (2, 'Ruang Koleksi', 'koleksi')",
+    "INSERT INTO inventory_locations (id, room_name) VALUES (1, 'Ruang Baca'), (2, 'Ruang Koleksi')",
+    "INSERT INTO inventory_room_areas (location_id, type) VALUES (1, 'baca'), (2, 'koleksi')",
     // A computer that is also multimedia equipment, a projector, a broken smart TV, and a desk.
     "INSERT INTO inventory_items (id, location_id, item_name, category, item_type, item_condition) VALUES
         (1, 1, 'PC layanan', 'komputer,multimedia', 'PC', 'B'),

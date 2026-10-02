@@ -42,6 +42,8 @@ Paket rilis sudah berisi dependensi PHP dan aset yang telah dibangun, sehingga A
 2. Ekstrak paket rilis terbaru dan timpa folder `plugins/inventaris-barang`.
 3. Buka **System → Plugins** dan jalankan migrasi yang tersedia.
 
+Fungsi ruang yang dulu dicentang di form ruangan kini dicatat sebagai **area** di halaman tiap ruangan (tab **Area**). Migrasi 12 memindahkan tiap fungsi yang sudah dicentang menjadi satu area, jadi Rekap Sarpras tidak berubah setelah migrasi dijalankan.
+
 Data **Gedung & Jaringan** yang diisi sebelum plugin membedakan lokasi menjadi milik lokasi dengan ruangan terbanyak. Periksa dan pindahkan bila perlu.
 
 Menu **Perangkat Lunak**, **Gedung & Jaringan**, dan **Pengaturan Cetak** dulu berada di dalam Rekap Sarpras dan Laporan. Migrasi memberikan menu-menu itu kepada grup pengguna yang sudah boleh membuka halaman asalnya; petugas melihatnya setelah masuk ulang. Untuk mengaturnya sendiri, buka **System → User Group**.
@@ -53,7 +55,7 @@ Plugin memeriksa rilis baru di GitHub setiap 12 jam. Jika tersedia, pengguna den
 
 ## Mengamankan folder foto dan folder plugin
 
-Foto barang, bukti pemeriksaan, template kop, dan bukti pengukuran bandwidth disimpan di `images/inventaris-barang` dan hanya dapat dibuka melalui panel admin. Plugin membuat `.htaccess` di folder itu dan di tiap subfoldernya untuk memblokir akses langsung di Apache (memerlukan `AllowOverride`).
+Foto barang, bukti pemeriksaan, template kop, denah ruangan, dan bukti pengukuran bandwidth disimpan di `images/inventaris-barang` dan hanya dapat dibuka melalui panel admin. Plugin membuat `.htaccess` di folder itu dan di tiap subfoldernya untuk memblokir akses langsung di Apache (memerlukan `AllowOverride`).
 
 Berkas PHP plugin dijalankan oleh SLiMS, bukan lewat alamatnya sendiri. `.htaccess` di folder plugin menolak permintaan langsung ke berkas PHP di dalamnya; hanya folder `assets` yang perlu dibuka browser.
 
@@ -81,7 +83,7 @@ Semua menu tersedia di modul **Stock Take**, dalam tiga bagian. Pengguna dengan 
 
 | Menu | Kegunaan |
 | --- | --- |
-| **Rekap Sarpras** | Melihat kondisi sarana dan prasarana (luas dan fungsi ruang, kondisi barang, perabot, komputer, jaringan, multimedia, lisensi perangkat lunak, keamanan, fasilitas umum, serta pengawasan) dan mencetak rekapnya. Halaman ini hanya ikhtisar; datanya diisi di bagian Data Sarpras. |
+| **Rekap Sarpras** | Melihat kondisi sarana dan prasarana (luas ruang dan area di dalamnya, kondisi barang, perabot, komputer, jaringan, multimedia, lisensi perangkat lunak, keamanan, fasilitas umum, serta pengawasan) dan mencetak rekapnya. Halaman ini hanya ikhtisar; datanya diisi di bagian Data Sarpras. |
 | **Tugas** | Mengisi pemeriksaan, melapor kerusakan, mencatat perbaikan, dan memverifikasi hasilnya. Anda juga dapat mengimpor riwayat lama dari Excel. |
 | **Jadwal** | Menjadwalkan pemeriksaan ruangan, harian hingga tahunan. Jadwal mengikuti hari libur di **System → Hari Libur**. |
 | **Checklist** | Menyusun template checklist pemeriksaan beserta riwayat versinya. |
@@ -91,7 +93,7 @@ Semua menu tersedia di modul **Stock Take**, dalam tiga bagian. Pengguna dengan 
 
 | Menu | Kegunaan |
 | --- | --- |
-| **Ruangan & Barang** | Mencatat ruangan dan barang, mengunggah hingga 5 foto per barang, membuat kode barang otomatis (misalnya `P01-INV-000001`), dan mencetak KIR. |
+| **Ruangan & Barang** | Mencatat ruangan dan barang, mengunggah hingga 5 foto per barang, membuat kode barang otomatis (misalnya `P01-INV-000001`), dan mencetak KIR. Halaman tiap ruangan memiliki tab **Area** (area apa saja di dalam ruangan) dan **Denah** (gambar atau PDF denah, beberapa per ruangan). |
 | **Perangkat Lunak** | Mencatat aplikasi yang dipakai perpustakaan beserta jenis dan masa berlaku lisensinya. |
 | **Gedung & Jaringan** | Mengisi jumlah sivitas akademika, luas gedung, dan bandwidth internet beserta bukti pengukurannya, untuk tiap lokasi perpustakaan. |
 
@@ -107,7 +109,7 @@ Semua menu tersedia di modul **Stock Take**, dalam tiga bagian. Pengguna dengan 
 
 Rekap dihitung dari data yang sudah ada, jadi lengkapi dulu klasifikasinya:
 
-1. Di **Ruangan & Barang**, ubah tiap ruangan dan isi **Luas (m²)** serta **fungsi ruang**. Ada empat fungsi layanan dasar (koleksi, baca, kerja staf, layanan); fungsi lainnya termasuk pendukung.
+1. Di **Ruangan & Barang**, ubah tiap ruangan dan isi **Luas (m²)**. Lalu buka ruangannya dan catat areanya di tab **Area**. Ada empat area layanan dasar (koleksi, baca, kerja staf, layanan), area pendukung, dan fasilitas umum. Toilet, musala, parkir, kantin, dan ruang laktasi dicatat sebagai ruangan dengan area berjenis itu, bukan sebagai barang.
 2. Beri **Kategori** dan **Jenis** pada barang (perabot, peralatan, komputer, multimedia, keamanan, fasilitas umum). Satu barang boleh memiliki lebih dari satu kategori dan dihitung di tiap kategorinya, misalnya komputer yang juga perangkat multimedia. Centang beberapa barang di tabel ruangan, lalu klik **Beri kategori** untuk mengisinya sekaligus; pilihan itu menggantikan kategori barang yang dicentang.
 3. Di **Gedung & Jaringan**, isi jumlah sivitas akademika, luas gedung bila diketahui, serta bandwidth beserta bukti pengukurannya. Bila ada beberapa lokasi, pilih lokasinya dulu. Di samping formulir tampil hasilnya di Rekap Sarpras menurut data yang tersimpan.
 4. Di **Perangkat Lunak**, catat aplikasi yang dipakai beserta jenis lisensinya.
@@ -158,7 +160,7 @@ Sekali sehari, plugin mengirim ringkasan pemakaian ke Klaras agar plugin gratis 
 - Nama perpustakaan dan alamat SLiMS.
 - Versi plugin, SLiMS, PHP, dan database.
 - Jumlah ruangan, barang, pemeriksaan, temuan, dan sesi stock opname.
-- Jumlah data Rekap Sarpras yang sudah diisi: ruangan yang memiliki luas dan fungsi, barang yang berkategori, aplikasi di Perangkat Lunak, dan lokasi yang mengisi Gedung & Jaringan.
+- Jumlah data Rekap Sarpras yang sudah diisi: ruangan yang memiliki luas dan area, barang yang berkategori, aplikasi di Perangkat Lunak, dan lokasi yang mengisi Gedung & Jaringan.
 - Frekuensi pemakaian fitur, serta galat teknis yang telah dibersihkan dari isinya.
 
 Plugin **tidak pernah** mengirim isi inventaris, nama atau kode barang, nama ruangan, nama aplikasi, angka gedung dan jaringan, data anggota, maupun data petugas.
@@ -189,6 +191,7 @@ php tests/history_workbook_test.php
 php tests/menu_structure_test.php
 php tests/sarpras_combine_test.php
 php tests/sarpras_categories_test.php
+php tests/room_areas_test.php
 node tests/watch_forms_test.cjs
 ```
 

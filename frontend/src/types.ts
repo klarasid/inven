@@ -20,4 +20,4 @@ export interface Summary {counts:{finalized:number;late:number;routine_final:num
 export interface Reply {ok:boolean;message?:string;errors?:Record<string,string>;code?:string;record?:Id;location_id?:Id;document?:{id:Id;version:number;status:string;photos:Photo[]};generated?:number;more?:boolean;url?:string;data?:unknown}
 export interface Counts {inspections:{mine:number;all:number};findings:{mine:number;all:number};review:{mine:number;all:number};history:number;templates:number;schedules:number;rooms:number;items:number}
 
-export interface SarprasLists {roomFunctions:Record<string,{label:string;group:'dasar'|'pendukung'}>; categories:Record<string,string>; types:Record<string,string[]>}
+export interface SarprasLists {areaTypes:Record<string,{label:string;group:string}>; areaGroups:Record<string,string>; categories:Record<string,string>; types:Record<string,string[]>}

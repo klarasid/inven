@@ -8,10 +8,11 @@ use PDO;
 use RuntimeException;
 
 require_once __DIR__ . '/PhotoStorage.php';
+require_once __DIR__ . '/RoomAreas.php';
 
 /**
  * Rekap Sarpras: eleven aspects of the library's facilities, each computed from the inventory
- * (room area and functions, item categories and conditions), the software register, the figures
+ * (room area, the areas inside rooms, item categories and conditions), the software register, the figures
  * kept in the `inventory_sarpras` setting (sivitas, bandwidth), and supervision history. Each
  * aspect reports the level its data reaches (a = Sangat baik … d = Kurang), with the checks
  * that decided it, so the library can see what is missing.
@@ -32,8 +33,11 @@ final class Sarpras
         9 => 'Keamanan dan keselamatan', 10 => 'Fasilitas umum', 11 => 'Pemeriksaan rutin dan tindak lanjut',
     ];
 
-    /** Room service functions: the four basic service areas first, then supporting ones. */
-    public const ROOM_FUNCTIONS = [
+    /**
+     * Kinds of area a room may hold (RoomAreas): the four basic service areas, supporting ones,
+     * and public facilities, which are rooms or areas rather than items.
+     */
+    public const AREA_TYPES = [
         'koleksi' => ['label' => 'Area koleksi', 'group' => 'dasar'],
         'baca' => ['label' => 'Area baca', 'group' => 'dasar'],
         'kerja' => ['label' => 'Area kerja staf', 'group' => 'dasar'],
@@ -46,7 +50,14 @@ final class Sarpras
         'pimpinan' => ['label' => 'Ruang pimpinan / administrasi', 'group' => 'pendukung'],
         'gudang' => ['label' => 'Ruang penyimpanan / gudang', 'group' => 'pendukung'],
         'lainnya' => ['label' => 'Area pendukung lainnya', 'group' => 'pendukung'],
+        'toilet' => ['label' => 'Toilet', 'group' => 'umum'],
+        'musala' => ['label' => 'Musala', 'group' => 'umum'],
+        'parkir' => ['label' => 'Area parkir', 'group' => 'umum'],
+        'kantin' => ['label' => 'Kantin / pantri', 'group' => 'umum'],
+        'laktasi' => ['label' => 'Ruang laktasi', 'group' => 'umum'],
     ];
+
+    public const AREA_GROUPS = ['dasar' => 'Area layanan dasar', 'pendukung' => 'Area pendukung', 'umum' => 'Fasilitas umum'];
 
     public const CATEGORIES = [
         'perabot' => 'Perabot (meja, kursi, rak)',
@@ -63,7 +74,8 @@ final class Sarpras
         'komputer' => ['PC', 'Laptop', 'Server', 'Kiosk OPAC', 'Thin client'],
         'multimedia' => ['Proyektor', 'Layar proyektor', 'Televisi / monitor besar', 'Panel interaktif', 'Pengeras suara', 'Mikrofon', 'Kamera', 'Pemindai (scanner)', 'Printer', 'Headphone', 'Perangkat VR'],
         'keamanan' => ['APAR', 'CCTV', 'Security gate', 'Alarm kebakaran', 'Detektor asap', 'Hidran', 'Rambu dan jalur evakuasi', 'Kotak P3K', 'Loker penitipan', 'Pintu darurat'],
-        'fasilitas_umum' => ['Toilet', 'Musala', 'Area parkir', 'Kantin / pantri', 'Ruang laktasi', 'Akses difabel (ramp)', 'Wi-Fi publik', 'Dispenser air minum', 'Stasiun pengisian daya', 'Tempat sampah terpilah'],
+        // Toilets, prayer rooms and the like are areas of a room (AREA_TYPES), not items.
+        'fasilitas_umum' => ['Akses difabel (ramp)', 'Wi-Fi publik', 'Dispenser air minum', 'Stasiun pengisian daya', 'Tempat sampah terpilah'],
         'perabot' => ['Meja baca', 'Kursi', 'Rak buku', 'Meja sirkulasi', 'Lemari katalog', 'Sofa', 'Meja komputer'],
         'peralatan' => ['Troli buku', 'Book drop', 'Mesin fotokopi', 'Barcode scanner', 'Label printer', 'Tangga rak'],
     ];
@@ -90,15 +102,7 @@ final class Sarpras
     /** Classification lists for the room and item forms. */
     public static function lists(): array
     {
-        return ['roomFunctions' => self::ROOM_FUNCTIONS, 'categories' => self::CATEGORIES, 'types' => self::TYPES];
-    }
-
-    /** Comma-separated room functions, keeping only known codes in a fixed order. */
-    public static function functions($value): string
-    {
-        $codes = is_array($value) ? $value : explode(',', (string) $value);
-        $codes = array_map(static fn($code) => trim((string) $code), $codes);
-        return implode(',', array_values(array_filter(array_keys(self::ROOM_FUNCTIONS), static fn($code) => in_array($code, $codes, true))));
+        return ['areaTypes' => self::AREA_TYPES, 'areaGroups' => self::AREA_GROUPS, 'categories' => self::CATEGORIES, 'types' => self::TYPES];
     }
 
     /** Room area in m², or null when left empty. */
@@ -416,7 +420,7 @@ final class Sarpras
         $settings = self::settings($db, $library);
         $today = date('Y-m-d');
         [$where, $args] = $library === '' ? ['', []] : [' WHERE l.slims_location_id=?', [$library]];
-        $query = $db->prepare('SELECT l.id, l.room_name, l.location_code, l.area_m2, l.room_functions, (SELECT location_name FROM mst_location WHERE location_id=l.slims_location_id) library_name FROM inventory_locations l' . $where . ' ORDER BY l.room_name, l.id');
+        $query = $db->prepare('SELECT l.id, l.room_name, l.location_code, l.area_m2, (SELECT location_name FROM mst_location WHERE location_id=l.slims_location_id) library_name FROM inventory_locations l' . $where . ' ORDER BY l.room_name, l.id');
         $query->execute($args);
         $rooms = $query->fetchAll(PDO::FETCH_ASSOC);
         $query = $db->prepare('SELECT i.id, i.location_id, i.item_name, i.category, i.item_type, i.item_condition FROM inventory_items i JOIN inventory_locations l ON l.id=i.location_id' . $where);
@@ -425,13 +429,14 @@ final class Sarpras
         // An item counts under each of its categories.
         foreach ($items as &$item) $item['categories'] = self::categoryCodes($item['category']);
         unset($item);
+        // What each room is used for: the kinds of area recorded in it.
+        $roomAreas = RoomAreas::byRoom($db, $library);
         $roomFunctions = [];
-        foreach ($rooms as $room) $roomFunctions[(int) $room['id']] = array_filter(explode(',', (string) $room['room_functions']));
-        $label = static fn(string $code) => self::ROOM_FUNCTIONS[$code]['label'] ?? $code;
-        $split = static function (array $codes): array {
-            $basic = array_values(array_filter($codes, static fn($c) => (self::ROOM_FUNCTIONS[$c]['group'] ?? '') === 'dasar'));
-            return [$basic, array_values(array_diff($codes, $basic))];
-        };
+        foreach ($rooms as $room) $roomFunctions[(int) $room['id']] = array_values(array_unique(array_column($roomAreas[(int) $room['id']] ?? [], 'type')));
+        $label = static fn(string $code) => self::AREA_TYPES[$code]['label'] ?? $code;
+        $group = static fn(array $codes, string $name) => array_values(array_filter($codes, static fn($c) => (self::AREA_TYPES[$c]['group'] ?? '') === $name));
+        // Service functions only: a toilet or a car park is a public facility, counted in aspect 10.
+        $split = static fn(array $codes): array => [$group($codes, 'dasar'), $group($codes, 'pendukung')];
         $aspects = [];
 
         // 1. Luas gedung atau ruang
@@ -457,21 +462,21 @@ final class Sarpras
         ];
 
         // 2. Ruang atau area layanan
-        $present = array_values(array_unique(array_merge(...array_values($roomFunctions ?: [[]]))));
-        [$basic, $support] = $split($present);
+        [$basic, $support] = $split(array_values(array_unique(array_merge(...array_values($roomFunctions ?: [[]])))));
+        $present = array_merge($basic, $support);
         $classified = count(array_filter($roomFunctions));
         $aspects[] = [
             'no' => 2, 'section' => 'Gedung dan ruang', 'title' => 'Ruang atau area layanan perpustakaan',
             'value' => count($basic) . ' dari 4 area dasar · ' . count($support) . ' area pendukung',
             'level' => $classified === 0 ? null : (count($basic) < 4 ? 'd' : (count($support) > 1 ? 'a' : (count($support) === 1 ? 'b' : 'c'))),
-            'basis' => "Dari fungsi ruang yang diisi pada $classified dari " . count($rooms) . ' ruangan.',
+            'basis' => "Dari area yang dicatat pada $classified dari " . count($rooms) . ' ruangan.',
             'checks' => array_merge(
-                array_map(static fn($code) => ['label' => self::ROOM_FUNCTIONS[$code]['label'], 'ok' => in_array($code, $basic, true)], array_keys(array_filter(self::ROOM_FUNCTIONS, static fn($f) => $f['group'] === 'dasar'))),
+                array_map(static fn($code) => ['label' => self::AREA_TYPES[$code]['label'], 'ok' => in_array($code, $basic, true)], array_keys(array_filter(self::AREA_TYPES, static fn($f) => $f['group'] === 'dasar'))),
                 [['label' => 'Lebih dari 1 area pendukung' . ($support ? ': ' . implode(', ', array_map($label, $support)) : ''), 'ok' => count($support) > 1]]
             ),
-            'rows' => array_map(static fn($r) => [$r['room_name'], implode(', ', array_map($label, array_filter(explode(',', (string) $r['room_functions'])))) ?: '—'], $rooms),
-            'columns' => ['Ruangan', 'Fungsi'],
-            'fix' => 'Buka tiap ruangan, lalu pilih fungsinya. Satu ruangan boleh memiliki lebih dari satu fungsi.',
+            'rows' => array_map(static fn($r) => [$r['room_name'], implode(', ', array_map(static fn($a) => $label($a['type']) . ($a['name'] !== '' ? ' (' . $a['name'] . ')' : ''), $roomAreas[(int) $r['id']] ?? [])) ?: '—'], $rooms),
+            'columns' => ['Ruangan', 'Area'],
+            'fix' => 'Buka tiap ruangan, lalu catat areanya di tab Area. Satu ruangan boleh memiliki beberapa area.',
             'sources' => ['inventory'],
         ];
 
@@ -490,7 +495,7 @@ final class Sarpras
             'sources' => ['inventory'],
         ];
 
-        // Functions served by working items of some categories, through the rooms they stand in.
+        // Areas served by working items of some categories, through the rooms they stand in.
         $served = static function (array $categories) use ($items, $roomFunctions): array {
             $codes = [];
             foreach ($items as $item) {
@@ -507,13 +512,13 @@ final class Sarpras
             'no' => 4, 'section' => 'Perabot dan peralatan', 'title' => 'Perabot dan peralatan per fungsi layanan',
             'value' => count($fBasic) . ' dari 4 fungsi dasar · ' . count($fSupport) . ' fungsi pendukung',
             'level' => $furnished === 0 || $classified === 0 ? null : (count($fBasic) < 4 ? 'd' : (count($fSupport) > 4 ? 'a' : (count($fSupport) >= 3 ? 'b' : 'c'))),
-            'basis' => "$furnished barang berkategori perabot atau peralatan, dihitung menurut fungsi ruangan tempatnya berada.",
+            'basis' => "$furnished barang berkategori perabot atau peralatan, dihitung menurut area di ruangan tempatnya berada.",
             'checks' => array_merge(
-                array_map(static fn($code) => ['label' => self::ROOM_FUNCTIONS[$code]['label'], 'ok' => in_array($code, $fBasic, true)], array_keys(array_filter(self::ROOM_FUNCTIONS, static fn($f) => $f['group'] === 'dasar'))),
+                array_map(static fn($code) => ['label' => self::AREA_TYPES[$code]['label'], 'ok' => in_array($code, $fBasic, true)], array_keys(array_filter(self::AREA_TYPES, static fn($f) => $f['group'] === 'dasar'))),
                 [['label' => 'Lebih dari 4 fungsi pendukung' . ($fSupport ? ': ' . implode(', ', array_map($label, $fSupport)) : ''), 'ok' => count($fSupport) > 4]]
             ),
             'rows' => [], 'columns' => [],
-            'fix' => 'Beri kategori Perabot atau Peralatan pada barang, dan isi fungsi ruangannya.',
+            'fix' => 'Beri kategori Perabot atau Peralatan pada barang, dan catat area ruangannya di tab Area.',
             'sources' => ['inventory'],
         ];
 
@@ -523,12 +528,12 @@ final class Sarpras
         $computers = count(array_filter($items, static fn($i) => in_array('komputer', $i['categories'], true)));
         $aspects[] = [
             'no' => 5, 'section' => 'Perangkat TI dan multimedia', 'title' => 'Komputer untuk mendukung fungsi layanan',
-            'value' => $computerPct === null ? 'Belum ada fungsi ruang' : self::fmt($computerPct, 1) . '% fungsi layanan',
+            'value' => $computerPct === null ? 'Belum ada area layanan' : self::fmt($computerPct, 1) . '% fungsi layanan',
             'level' => $computers === 0 ? ($present ? 'd' : null) : self::percentLevel($computerPct),
             'basis' => "$computers komputer; " . count(array_intersect($withComputer, $present)) . ' dari ' . count($present) . ' fungsi layanan memiliki komputer yang berfungsi.',
-            'checks' => array_map(static fn($code) => ['label' => self::ROOM_FUNCTIONS[$code]['label'], 'ok' => in_array($code, $withComputer, true)], $present),
+            'checks' => array_map(static fn($code) => ['label' => self::AREA_TYPES[$code]['label'], 'ok' => in_array($code, $withComputer, true)], $present),
             'rows' => [], 'columns' => [],
-            'fix' => 'Beri kategori Komputer pada PC dan laptop layanan, lalu pastikan fungsi ruangannya terisi.',
+            'fix' => 'Beri kategori Komputer pada PC dan laptop layanan, lalu pastikan area ruangannya tercatat di tab Area.',
             'sources' => ['inventory'],
         ];
 
@@ -579,11 +584,22 @@ final class Sarpras
             count($security) > 5 ? 'a' : (count($security) === 5 ? 'b' : (count($security) === 4 ? 'c' : 'd')),
             'Lebih dari 5 jenis sarana keamanan', 'Beri kategori Keamanan pada barang, lalu isi jenisnya, misalnya APAR, CCTV, security gate, alarm, atau jalur evakuasi.');
 
-        // 10. Fasilitas umum
-        $public = self::types($items, 'fasilitas_umum');
+        // 10. Fasilitas umum: areas of that kind in the rooms, and items of the category.
+        $public = [];
+        foreach ($roomAreas as $areas) {
+            foreach ($group(array_column($areas, 'type'), 'umum') as $code) {
+                $public[mb_strtolower($label($code))] ??= ['type' => $label($code), 'count' => 0];
+                $public[mb_strtolower($label($code))]['count']++;
+            }
+        }
+        // A facility recorded both ways is one facility: the area stands and the item adds nothing to it.
+        foreach (self::types($items, 'fasilitas_umum') as $type) $public[mb_strtolower($type['type'])] ??= $type;
+        ksort($public);
+        $public = array_values($public);
         $aspects[] = self::typeAspect(10, 'Keamanan dan fasilitas umum', 'Ketersediaan fasilitas umum', $public,
             count($public) > 6 ? 'a' : (count($public) === 6 ? 'b' : (count($public) === 5 ? 'c' : 'd')),
-            'Lebih dari 6 jenis fasilitas umum', 'Catat fasilitas umum sebagai barang berkategori Fasilitas umum, misalnya toilet, musala, parkir, atau ruang laktasi.');
+            'Lebih dari 6 jenis fasilitas umum', 'Catat toilet, musala, parkir, kantin, atau ruang laktasi sebagai area di ruangannya (tab Area). Barang seperti dispenser air minum dicatat sebagai barang berkategori Fasilitas umum.',
+            'Jenis berbeda dari area fasilitas umum di ruangan dan dari barang yang berfungsi (tidak Rusak berat).');
 
         // 11. Pengawasan dan pemeliharaan, over the last twelve months.
         $filter = $watch->filter(['from' => (new \DateTimeImmutable('-1 year +1 day'))->format('Y-m-d'), 'to' => $today, 'library' => $library]);
@@ -700,13 +716,13 @@ final class Sarpras
         ];
     }
 
-    private static function typeAspect(int $no, string $section, string $title, array $types, string $level, string $check, string $fix): array
+    private static function typeAspect(int $no, string $section, string $title, array $types, string $level, string $check, string $fix, string $basis = 'Jenis berbeda dari barang yang berfungsi (tidak Rusak berat).'): array
     {
         return [
             'no' => $no, 'section' => $section, 'title' => $title,
             'value' => count($types) . ' jenis',
             'level' => $types ? $level : null,
-            'basis' => 'Jenis berbeda dari barang yang berfungsi (tidak Rusak berat).',
+            'basis' => $basis,
             'checks' => [['label' => $check, 'ok' => $level === 'a']],
             'rows' => array_map(static fn($t) => [$t['type'], (string) $t['count']], $types),
             'columns' => ['Jenis', 'Jumlah'],

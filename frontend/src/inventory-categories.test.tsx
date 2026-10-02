@@ -5,7 +5,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { CategoryFields } from './inventory'
 import { WorkspaceContext, type ContextValue } from './context'
 
-const sarpras={roomFunctions:{},categories:{komputer:'Komputer',multimedia:'Perangkat multimedia',keamanan:'Sarana keamanan dan keselamatan'},types:{komputer:['PC','Laptop'],multimedia:['Proyektor','Laptop'],keamanan:['APAR']}}
+const sarpras={areaTypes:{},areaGroups:{},categories:{komputer:'Komputer',multimedia:'Perangkat multimedia',keamanan:'Sarana keamanan dan keselamatan'},types:{komputer:['PC','Laptop'],multimedia:['Proyektor','Laptop'],keamanan:['APAR']}}
 const context={options:{sarpras}} as unknown as ContextValue
 function mount(category:string,onCategory=vi.fn()){
  const view=render(<WorkspaceContext.Provider value={context}><CategoryFields category={category} type="" onCategory={onCategory} onType={vi.fn()}/></WorkspaceContext.Provider>)

@@ -331,7 +331,7 @@ function Recap({ data }: { data: Extract<Data, { recap: Recap }> }) {
   const gaps = counts
     ? ([
         counts.no_area > 0 && `${counts.no_area} ruangan belum memiliki luas`,
-        counts.unclassified_rooms > 0 && `${counts.unclassified_rooms} ruangan belum memiliki fungsi`,
+        counts.unclassified_rooms > 0 && `${counts.unclassified_rooms} ruangan belum memiliki area`,
         counts.uncategorized > 0 && `${counts.uncategorized} dari ${counts.items} barang belum berkategori`,
       ].filter(Boolean) as string[])
     : [];

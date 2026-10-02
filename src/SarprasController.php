@@ -90,7 +90,7 @@ $place = static function () use ($places, $library): ?array {
     return null;
 };
 
-$schemaMessage = 'Struktur data sarpras belum tersedia. Jalankan migrasi plugin hingga versi 9 melalui System → Plugins.';
+$schemaMessage = 'Struktur data sarpras belum tersedia. Jalankan migrasi plugin hingga versi 12 melalui System → Plugins.';
 $isSchema = static fn(Throwable $e): bool => $e instanceof PDOException && in_array((int) ($e->errorInfo[1] ?? 0), [1054, 1146], true);
 // An unexpected error goes into the daily usage report, stripped of its data. A schema not migrated
 // yet is not one: the report already carries the migration level.

@@ -150,6 +150,19 @@ final class Workspace
             if($resource==='item')foreach($w->query('SELECT id,filename FROM inventory_item_photos WHERE item_id=? ORDER BY id',[$id])->fetchAll(\PDO::FETCH_ASSOC) as $p)$photos[]=['id'=>$p['id'],'url'=>$p['filename']===null?null:self::endpoint('index.php',['action'=>'item_photo','photo_id'=>$p['id']])];
             return ['record'=>$row,'photos'=>$photos];
         }
+        if($resource==='areas') {
+            // The Area and Denah tabs of a room.
+            require_once __DIR__.'/RoomAreas.php';require_once __DIR__.'/RoomPlans.php';
+            try {
+                $plans=RoomPlans::of($w->pdo(),$room);
+                foreach($plans as &$plan)$plan['url']=self::endpoint('index.php',['action'=>'room_plan','plan_id'=>$plan['id']]);
+                unset($plan);
+                return ['areas'=>RoomAreas::of($w->pdo(),$room),'plans'=>$plans,'maxPlanBytes'=>RoomPlans::MAX_BYTES,'maxPlans'=>RoomPlans::MAX_PER_ROOM];
+            } catch(\PDOException $e) {
+                if(in_array((int)($e->errorInfo[1]??0),[1146,1054],true))throw new \RuntimeException('Area dan denah ruangan belum tersedia. Jalankan migrasi plugin hingga versi 12 melalui System → Plugins.');
+                throw $e;
+            }
+        }
         if($resource==='templates'||$resource==='schedules') {
             $table=$resource==='templates'?'templates':'schedules';$where=['1=1'];$args=[];
             if($search!==''){$where[]=$table==='templates'?'name LIKE ?':'snapshot LIKE ?';$args[]=$table==='templates'?'%'.$search.'%':'%"room_name":"%'.$search.'%';}
