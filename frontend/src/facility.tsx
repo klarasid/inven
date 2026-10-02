@@ -17,7 +17,7 @@ import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from ".
 import { Switch } from "./components/ui/switch";
 import { useWorkspace } from "./context";
 import { dateLabel, url } from "./api";
-import { ActionBar, Choice, ErrorBox, Loading, LocationSelect, PageHeader, TextField } from "./shared";
+import { ActionBar, Choice, ErrorBox, ImagePreview, Loading, LocationSelect, PageHeader, TextField } from "./shared";
 import { Confirm, usePage } from "./settings";
 import { LevelBadge, type Level } from "./sarpras";
 
@@ -124,6 +124,7 @@ function FacilityForm({ data, page, post, reload }: { data: Data; page: string; 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [removeEvidence, setRemoveEvidence] = useState(false);
+  const [viewEvidence, setViewEvidence] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
   const changed = JSON.stringify(values) !== JSON.stringify(fields(s));
   // After saving, the form shows the figures as the server keeps them (rounded, emptied of zeros).
@@ -233,12 +234,19 @@ function FacilityForm({ data, page, post, reload }: { data: Data; page: string; 
                       <span className="text-xs text-muted-foreground">Diunggah {dateLabel(s.evidence.uploaded_at)}</span>
                     </div>
                     <div className="flex items-center gap-1">
-                      <Button size="sm" variant="outline" asChild>
-                        <a href={url(page, { evidence: 1, library: library || undefined })} target="_blank" rel="noopener" className="notAJAX">
-                          <ExternalLink data-icon="inline-start" />
+                      {s.evidence.mime.startsWith("image/") ? (
+                        // A picture opens in a popup on the page; a PDF is left to the browser's viewer.
+                        <Button type="button" size="sm" variant="outline" onClick={() => setViewEvidence(true)}>
                           Lihat
-                        </a>
-                      </Button>
+                        </Button>
+                      ) : (
+                        <Button size="sm" variant="outline" asChild>
+                          <a href={url(page, { evidence: 1, library: library || undefined })} target="_blank" rel="noopener" className="notAJAX">
+                            <ExternalLink data-icon="inline-start" />
+                            Lihat
+                          </a>
+                        </Button>
+                      )}
                       {data.write && (
                         <>
                           <Button type="button" size="sm" variant="ghost" onClick={() => picker.current?.click()}>
@@ -306,6 +314,14 @@ function FacilityForm({ data, page, post, reload }: { data: Data; page: string; 
           </Button>
         </ActionBar>
       )}
+      <ImagePreview
+        image={
+          viewEvidence && s.evidence
+            ? { url: url(page, { evidence: 1, library: library || undefined }), title: s.evidence.name, description: `Bukti pengukuran, diunggah ${dateLabel(s.evidence.uploaded_at)}.` }
+            : undefined
+        }
+        onClose={() => setViewEvidence(false)}
+      />
       <Confirm
         open={removeEvidence}
         title="Hapus bukti pengukuran?"

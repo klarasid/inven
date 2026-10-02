@@ -13,6 +13,7 @@ import {
   ChevronDown,
   Stamp,
   type LucideIcon,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Field, FieldLabel, FieldDescription, FieldError } from "./components/ui/field";
@@ -36,6 +37,7 @@ import {
   EmptyContent,
 } from "./components/ui/empty";
 import { Badge } from "./components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./components/ui/dialog";
 import { Skeleton } from "./components/ui/skeleton";
 import {
   DropdownMenu,
@@ -663,7 +665,44 @@ export function History({ events }: { events: Event[] }) {
   );
 }
 
-/** Thumbnail grid. With onToggle, each saved photo gets a remove/undo control; removal applies on save. */
+/**
+ * A picture opened in a popup over the page, so looking at it never leaves the form or list behind.
+ * The full-size link is there for reading small print.
+ */
+export function ImagePreview({
+  image,
+  onClose,
+}: {
+  image?: { url: string; title: string; description?: string };
+  onClose: () => void;
+}) {
+  return (
+    <Dialog open={!!image} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-5xl">
+        <DialogHeader>
+          <DialogTitle>{image?.title}</DialogTitle>
+          <DialogDescription>{image?.description || "Pratinjau gambar."}</DialogDescription>
+        </DialogHeader>
+        {image && <img src={image.url} alt={image.title} className="max-h-[70vh] w-full rounded-md border bg-muted object-contain" />}
+        <DialogFooter>
+          {image && (
+            <Button variant="outline" asChild>
+              <a href={image.url} target="_blank" rel="noopener" className="notAJAX">
+                <ExternalLink data-icon="inline-start" />
+                Buka ukuran penuh
+              </a>
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Thumbnail grid; a thumbnail opens its photo in a popup. With onToggle, each saved photo gets a
+ * remove/undo control; removal applies on save.
+ */
 export function Photos({
   photos,
   removed = [],
@@ -675,23 +714,25 @@ export function Photos({
   onToggle?: (p: Photo) => void;
   size?: "sm" | "md";
 }) {
+  const [viewing, setViewing] = useState<string>();
   if (!photos.length) return null;
   const box = size === "sm" ? "size-20" : "size-28";
   return (
     <div className="flex flex-wrap gap-2">
-      {photos.map((p) => {
+      <ImagePreview image={viewing ? { url: viewing, title: "Foto" } : undefined} onClose={() => setViewing(undefined)} />
+      {photos.map((p, index) => {
         const gone = removed.includes(String(p.id));
         return (
           <div key={p.id} className={cn("group relative overflow-hidden rounded-lg border bg-muted", box)}>
             {p.url ? (
-              <a href={p.url} target="_blank" rel="noopener" className="block size-full">
+              <button type="button" className="block size-full" aria-label={`Lihat foto ${index + 1}`} onClick={() => setViewing(p.url!)}>
                 <img
                   src={p.url}
                   alt="Foto"
                   loading="lazy"
                   className={cn("size-full object-cover", gone && "opacity-30 grayscale")}
                 />
-              </a>
+              </button>
             ) : (
               <p className="p-2 text-xs text-muted-foreground">Foto lama tidak dapat dibaca.</p>
             )}

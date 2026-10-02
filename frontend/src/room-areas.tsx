@@ -1,6 +1,6 @@
 import { useId, useState } from "react";
 import { toast } from "sonner";
-import { ExternalLink, FileText, LayoutGrid, Map as MapIcon, Pencil, Plus, Trash2, Upload as UploadIcon } from "lucide-react";
+import { FileText, LayoutGrid, Map as MapIcon, Pencil, Plus, Trash2, Upload as UploadIcon } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./components/ui/dialog";
@@ -8,7 +8,7 @@ import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "./c
 import { Input } from "./components/ui/input";
 import { useData, useWorkspace } from "./context";
 import { dateLabel } from "./api";
-import { Actions, Blank, Choice, ErrorBox, Loading, previewPdf } from "./shared";
+import { Actions, Blank, Choice, ErrorBox, ImagePreview, Loading, previewPdf } from "./shared";
 import { Confirm } from "./settings";
 
 type Area = { id: number; type: string; name: string };
@@ -306,25 +306,10 @@ export function RoomPlansTab({ room }: { room: string }) {
           }}
         />
       )}
-      <Dialog open={!!viewing} onOpenChange={(o) => !o && setViewing(undefined)}>
-        <DialogContent className="sm:max-w-5xl">
-          <DialogHeader>
-            <DialogTitle>{viewing?.title}</DialogTitle>
-            <DialogDescription>Denah ruangan, diunggah {viewing ? dateLabel(viewing.created_at) : ""}.</DialogDescription>
-          </DialogHeader>
-          {viewing && <img src={viewing.url} alt={viewing.title} className="max-h-[70vh] w-full rounded-md border bg-muted object-contain" />}
-          <DialogFooter>
-            {viewing && (
-              <Button variant="outline" asChild>
-                <a href={viewing.url} target="_blank" rel="noopener" className="notAJAX">
-                  <ExternalLink data-icon="inline-start" />
-                  Buka ukuran penuh
-                </a>
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ImagePreview
+        image={viewing && { url: viewing.url, title: viewing.title, description: `Denah ruangan, diunggah ${dateLabel(viewing.created_at)}.` }}
+        onClose={() => setViewing(undefined)}
+      />
       <Confirm
         open={!!removing}
         title="Hapus denah?"

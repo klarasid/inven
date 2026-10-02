@@ -77,3 +77,18 @@ test('readers see the figures and their result but cannot change them',async()=>
  expect(screen.queryByRole('combobox',{name:'Lokasi perpustakaan'})).toBeNull()
  expect(screen.getByText('Hasil di Rekap Sarpras')).toBeTruthy()
 })
+
+test('picture evidence opens in a popup on the page; a PDF is left to the browser',async()=>{
+ const evidence=(name:string,mime:string)=>data({settings:{...settings,evidence:{name,mime,uploaded_at:'2026-10-01 08:00:00'}}})
+ vi.stubGlobal('fetch',vi.fn().mockResolvedValue(reply({ok:true,data:evidence('speedtest.png','image/png')})))
+ mount(context())
+ fireEvent.click(await screen.findByRole('button',{name:'Lihat'}))
+ const popup=await screen.findByRole('dialog',{name:'speedtest.png'})
+ expect(popup.querySelector('img')?.getAttribute('src')).toBe('http://localhost/facility.php?evidence=1&library=10')
+ cleanup()
+ vi.stubGlobal('fetch',vi.fn().mockResolvedValue(reply({ok:true,data:evidence('speedtest.pdf','application/pdf')})))
+ mount(context())
+ const link=await screen.findByRole('link',{name:'Lihat'})
+ expect(link.getAttribute('href')).toBe('http://localhost/facility.php?evidence=1&library=10')
+ expect(link.getAttribute('target')).toBe('_blank')
+})
