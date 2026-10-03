@@ -9,11 +9,13 @@ use RuntimeException;
 
 require_once __DIR__ . '/PhotoStorage.php';
 require_once __DIR__ . '/RoomAreas.php';
+require_once __DIR__ . '/Sivitas.php';
 
 /**
  * Rekap Sarpras: eleven aspects of the library's facilities, each computed from the inventory
  * (room area, the areas inside rooms, item categories and conditions), the software register, the figures
- * kept in the `inventory_sarpras` setting (sivitas, bandwidth), and supervision history. Each
+ * kept in the `inventory_sarpras` setting (building, bandwidth), sivitas counted from SLiMS's
+ * active members (Sivitas), and supervision history. Each
  * aspect reports the level its data reaches (a = Sangat baik … d = Kurang), with the checks
  * that decided it, so the library can see what is missing.
  *
@@ -228,7 +230,6 @@ final class Sarpras
     {
         $profiles = self::all($db);
         $settings = self::profile($profiles, $library);
-        $settings['sivitas'] = (int) self::number($input['sivitas'] ?? '', 'Jumlah sivitas akademika', 10000000);
         $settings['designed'] = ($input['designed'] ?? '') === '1';
         $settings['building_area'] = self::number($input['building_area'] ?? '', 'Luas gedung', 99999999);
         $settings['bandwidth_mbps'] = self::number($input['bandwidth_mbps'] ?? '', 'Bandwidth', 1000000);
@@ -418,6 +419,8 @@ final class Sarpras
     public static function recap(PDO $db, Supervision $watch, string $library = ''): array
     {
         $settings = self::settings($db, $library);
+        // Counted from active members, not typed in: what the setting may still hold is ignored.
+        $settings['sivitas'] = Sivitas::forLocation($db, $library);
         $today = date('Y-m-d');
         [$where, $args] = $library === '' ? ['', []] : [' WHERE l.slims_location_id=?', [$library]];
         $query = $db->prepare('SELECT l.id, l.room_name, l.location_code, l.area_m2, (SELECT location_name FROM mst_location WHERE location_id=l.slims_location_id) library_name FROM inventory_locations l' . $where . ' ORDER BY l.room_name, l.id');
@@ -454,12 +457,12 @@ final class Sarpras
             'basis' => (float) $settings['building_area'] > 0 ? 'Luas gedung dari menu Gedung & Jaringan.' : "Jumlah luas $measured dari " . count($rooms) . ' ruangan yang sudah diisi luasnya.',
             'checks' => [
                 ['label' => 'Luas lebih dari 750 m² atau lebih dari 0,5 m² per sivitas', 'ok' => $large],
-                ['label' => 'Jumlah sivitas akademika diisi', 'ok' => $settings['sivitas'] > 0],
+                ['label' => 'Ada sivitas (anggota aktif) yang dilayani', 'ok' => $settings['sivitas'] > 0],
                 ['label' => 'Gedung didesain khusus untuk perpustakaan', 'ok' => (bool) $settings['designed']],
             ],
             'rows' => array_map(static fn($r) => [$r['room_name'], $r['area_m2'] === null ? '—' : self::fmt((float) $r['area_m2'], 2) . ' m²'], $rooms),
             'columns' => ['Ruangan', 'Luas'],
-            'fix' => 'Isi luas tiap ruangan di Ruangan & Barang, atau isi luas gedung dan jumlah sivitas di Gedung & Jaringan.',
+            'fix' => 'Isi luas tiap ruangan di Ruangan & Barang, atau luas gedung di Gedung & Jaringan. Sivitas dihitung dari anggota aktif SLiMS; untuk beberapa lokasi, petakan anggota di Sivitas per Lokasi.',
             'sources' => ['inventory', 'facility'],
         ];
 

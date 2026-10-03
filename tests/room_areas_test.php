@@ -34,6 +34,8 @@ $db = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_
 foreach ([
     'CREATE TABLE setting (setting_name TEXT PRIMARY KEY, setting_value TEXT)',
     'CREATE TABLE mst_location (location_id TEXT PRIMARY KEY, location_name TEXT)',
+    // SLiMS's members: sivitas is counted from them (Sivitas).
+    'CREATE TABLE member (member_id TEXT PRIMARY KEY, member_type_id INTEGER, inst_name TEXT, is_pending INTEGER, expire_date TEXT)',
     'CREATE TABLE inventory_locations (id INTEGER PRIMARY KEY, room_name TEXT, location_code TEXT, area_m2 REAL, room_functions TEXT NOT NULL DEFAULT \'\', slims_location_id TEXT)',
     'CREATE TABLE inventory_room_areas (id INTEGER PRIMARY KEY, location_id INTEGER, type TEXT, name TEXT NOT NULL DEFAULT \'\', created_at TEXT, updated_at TEXT)',
     'CREATE TABLE inventory_room_plans (id INTEGER PRIMARY KEY, location_id INTEGER, title TEXT, filename TEXT, mime TEXT, created_by INTEGER, created_at TEXT)',

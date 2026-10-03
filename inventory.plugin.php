@@ -24,7 +24,8 @@ foreach ([
     'Data Sarpras' => [
         ['Ruangan & Barang','index.php','Kelola ruangan, barang, dan kartu inventaris.'],
         ['Perangkat Lunak','software.php','Catat aplikasi yang dipakai perpustakaan beserta lisensinya.'],
-        ['Gedung & Jaringan','facility.php','Isi jumlah sivitas, luas gedung, dan bandwidth internet beserta buktinya.'],
+        ['Gedung & Jaringan','facility.php','Isi luas gedung dan bandwidth internet beserta buktinya.'],
+        ['Sivitas per Lokasi','sivitas.php','Hitung sivitas dari anggota aktif dan petakan ke lokasi perpustakaan.'],
     ],
     'Pengaturan Inven' => [
         ['Pengaturan Cetak','print-settings.php','Kelola template kop institusi dan nomor dokumen PDF.'],

@@ -41,6 +41,8 @@ $db = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_
 foreach ([
     'CREATE TABLE setting (setting_name TEXT PRIMARY KEY, setting_value TEXT)',
     'CREATE TABLE mst_location (location_id TEXT PRIMARY KEY, location_name TEXT)',
+    // SLiMS's members: sivitas is counted from them (Sivitas).
+    'CREATE TABLE member (member_id TEXT PRIMARY KEY, member_type_id INTEGER, inst_name TEXT, is_pending INTEGER, expire_date TEXT)',
     'CREATE TABLE inventory_locations (id INTEGER PRIMARY KEY, room_name TEXT, location_code TEXT, area_m2 REAL, slims_location_id TEXT)',
     'CREATE TABLE inventory_room_areas (id INTEGER PRIMARY KEY, location_id INTEGER, type TEXT, name TEXT NOT NULL DEFAULT \'\', created_at TEXT, updated_at TEXT)',
     'CREATE TABLE inventory_items (id INTEGER PRIMARY KEY, location_id INTEGER, item_name TEXT, category TEXT, item_type TEXT NOT NULL DEFAULT \'\', item_condition TEXT)',
@@ -73,4 +75,9 @@ check(array_column($aspect(5)['checks'], 'ok', 'label') == ['Komputer di area ba
 check($aspect(7)['value'] === '2 jenis' && $aspect(7)['rows'] === [['PC', '1'], ['Proyektor', '1']], 'barang yang sama juga dihitung sebagai perangkat multimedia');
 check($aspect(4)['basis'] !== '' && str_starts_with($aspect(4)['basis'], '1 barang'), 'kategori lain tidak ikut terhitung');
 check($recap['counts']['uncategorized'] === 1 && $recap['counts']['items'] === 5, 'hanya barang tanpa kategori yang dihitung belum berkategori');
+// Sivitas comes from SLiMS's active members, not from a figure typed in.
+$sivitasCheck = static fn (array $recap): bool => array_column(array_values(array_filter($recap['aspects'], static fn ($a) => $a['no'] === 1))[0]['checks'], 'ok', 'label')['Ada sivitas (anggota aktif) yang dilayani'];
+check(!$sivitasCheck($recap), 'tanpa anggota aktif, belum ada sivitas');
+$db->exec("INSERT INTO member VALUES ('A1', 1, 'Gizi', 0, '2099-01-01'), ('A2', 1, 'Gizi', 1, '2099-01-01')");
+check($sivitasCheck(Sarpras::recap($db, new Supervision($db, new PhotoStorage(sys_get_temp_dir() . '/inventory-test-unused')))), 'anggota aktif dihitung sebagai sivitas di rekap');
 echo "ok   done\n";

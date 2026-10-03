@@ -36,7 +36,7 @@ require dirname(__DIR__, 3) . '/lib/Migration/Migration.php';
 foreach (glob(__DIR__ . '/../migration/*.php') as $migration) require $migration;
 require __DIR__ . '/../src/Api/bootstrap.php';
 
-$names = ['inventory_api_codes', 'inventory_room_plans', 'inventory_room_areas', 'inventory_software', 'inventory_api_idempotency', 'inventory_api_sessions', 'inventory_watch_photos', 'inventory_watch_events', 'inventory_watch_actions', 'inventory_watch_findings', 'inventory_watch_results', 'inventory_watch_inspections', 'inventory_watch_schedules', 'inventory_watch_templates', 'inventory_item_code_reservations', 'inventory_item_code_sequences', 'inventory_item_photos', 'inventory_items', 'inventory_locations', 'stock_take_item', 'stock_take', 'mst_item_status', 'item', 'mst_location', 'group_access', 'mst_module', 'setting', 'user', 'holiday', 'slims_connect_rate_limits', 'slims_connect_settings'];
+$names = ['inventory_member_fixes', 'inventory_member_locations', 'member', 'mst_member_type', 'inventory_api_codes', 'inventory_room_plans', 'inventory_room_areas', 'inventory_software', 'inventory_api_idempotency', 'inventory_api_sessions', 'inventory_watch_photos', 'inventory_watch_events', 'inventory_watch_actions', 'inventory_watch_findings', 'inventory_watch_results', 'inventory_watch_inspections', 'inventory_watch_schedules', 'inventory_watch_templates', 'inventory_item_code_reservations', 'inventory_item_code_sequences', 'inventory_item_photos', 'inventory_items', 'inventory_locations', 'stock_take_item', 'stock_take', 'mst_item_status', 'item', 'mst_location', 'group_access', 'mst_module', 'setting', 'user', 'holiday', 'slims_connect_rate_limits', 'slims_connect_settings'];
 final class PrefixedConnection extends PDO {
     public array $names = []; public string $prefix = '';
     private function sql(string $sql): string { foreach ($this->names as $name) $sql = preg_replace('/(?<![A-Za-z0-9_.])' . $name . '\b/', $this->prefix . $name, $sql); return $sql; }
@@ -78,6 +78,8 @@ try {
     $db->exec('CREATE TABLE mst_module (module_id INT PRIMARY KEY, module_path VARCHAR(200)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     $db->exec('CREATE TABLE group_access (group_id INT, module_id INT, menus LONGTEXT NULL, r INT(1), w INT(1)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     $db->exec('CREATE TABLE mst_location (location_id VARCHAR(3) PRIMARY KEY, location_name VARCHAR(100)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+    $db->exec('CREATE TABLE mst_member_type (member_type_id INT PRIMARY KEY, member_type_name VARCHAR(50)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+    $db->exec('CREATE TABLE member (member_id VARCHAR(20) PRIMARY KEY, member_type_id INT, inst_name VARCHAR(100), is_pending SMALLINT, expire_date DATE, last_update DATE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     $db->exec('CREATE TABLE setting (setting_id INT AUTO_INCREMENT PRIMARY KEY, setting_name VARCHAR(30) UNIQUE, setting_value MEDIUMTEXT) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     $db->exec('CREATE TABLE holiday (holiday_id INT AUTO_INCREMENT PRIMARY KEY, holiday_dayname VARCHAR(20), holiday_date DATE NULL, description VARCHAR(255)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     $db->exec('CREATE TABLE stock_take (stock_take_id INT AUTO_INCREMENT PRIMARY KEY, stock_take_name VARCHAR(200), start_date DATETIME, end_date DATETIME NULL, init_user VARCHAR(50), total_item_stock_taked INT, total_item_lost INT, total_item_exists INT, total_item_loan INT, stock_take_users MEDIUMTEXT NULL, is_active INT(1), report_file VARCHAR(255) NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
@@ -86,7 +88,7 @@ try {
     $db->exec('CREATE TABLE item (item_id INT PRIMARY KEY, item_code VARCHAR(20), item_status_id CHAR(3) NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     $db->exec('CREATE TABLE slims_connect_rate_limits (rate_key CHAR(64) PRIMARY KEY, attempts INT, window_started_at DATETIME, blocked_until DATETIME NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     $db->exec('CREATE TABLE slims_connect_settings (name VARCHAR(64) PRIMARY KEY, value TEXT, updated_at DATETIME) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
-    foreach (['CreateInventoryTables', 'AddSlimsLocationToInventoryLocations', 'CreateInventoryItemPhotos', 'MoveInventoryPhotosToFiles', 'AllowSharedInventoryLocationCodes', 'CreateInventoryItemCodes', 'CreateInventorySupervision', 'CreateInvensyncApi', 'AddFacilityProfileData', 'AllowSeveralItemCategories', 'CreateRoomAreasAndPlans', 'AllowAgentConnections'] as $migration) (new $migration())->up();
+    foreach (['CreateInventoryTables', 'AddSlimsLocationToInventoryLocations', 'CreateInventoryItemPhotos', 'MoveInventoryPhotosToFiles', 'AllowSharedInventoryLocationCodes', 'CreateInventoryItemCodes', 'CreateInventorySupervision', 'CreateInvensyncApi', 'AddFacilityProfileData', 'AllowSeveralItemCategories', 'CreateRoomAreasAndPlans', 'AllowAgentConnections', 'MapMembersToLocations'] as $migration) (new $migration())->up();
     (new CreateInvensyncApi())->up();
     check(true, 'migration 8 is repeatable');
 
@@ -280,6 +282,16 @@ try {
     check(in_array('Ruang referensi', array_column(array_column($schedules, 'room'), 'name'), true), 'the new schedule is listed');
     $sarpras = call('GET', 'SarprasController@show', headers: bearer($agentToken))['body']['data'];
     check($sarpras['scope'] === 'location' && $sarpras['library'] === 'P01' && count($sarpras['aspects']) === 11, 'Rekap Sarpras comes for the one library location');
+
+    // Sivitas on MySQL, whose text comparisons ignore case: spellings are still told apart.
+    $db->exec("INSERT INTO mst_member_type VALUES (1, 'Mahasiswa')");
+    $db->exec("INSERT INTO member VALUES ('A1', 1, 'Gizi', 0, '2099-01-01', NULL), ('A2', 1, 'gizi', 0, '2099-01-01', NULL), ('A3', 1, 'Gizi', 1, '2099-01-01', NULL)");
+    check(\SLiMS\Plugins\Inventory\Sivitas::forLocation($db, 'P01') === 2, 'active members are the sivitas of a library that is one unit');
+    $gizi = array_values(array_filter(\SLiMS\Plugins\Inventory\Sivitas::institutions($db), static fn ($row) => $row['key'] === 'gizi'))[0];
+    check(count($gizi['variants']) === 2, 'MySQL lists "Gizi" and "gizi" as two spellings');
+    $merged = \SLiMS\Plugins\Inventory\Sivitas::merge($db, ['gizi'], 'Gizi', 1, date('Y-m-d H:i:s'));
+    check($merged['count'] === 1 && \SLiMS\Plugins\Inventory\Sivitas::undo($db, $merged['id'], date('Y-m-d H:i:s')) === 1
+        && $db->query("SELECT inst_name FROM member WHERE member_id='A1'")->fetchColumn() === 'Gizi', 'a merge and its undo touch only the exact spelling');
     check(call('GET', 'SarprasController@show', headers: bearer($agentToken), query: ['library' => 'X99'])['code'] === 'not_found', 'an unknown location is refused');
     $custom = call('GET', 'ReportController@summary', headers: bearer($agentToken), query: ['from' => date('Y-m-01'), 'to' => date('Y-m-t')])['body']['data'];
     check($custom['period']['key'] === 'custom' && $custom['findings']['open'] === 2, 'a report covers any period given by dates');

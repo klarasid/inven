@@ -26,6 +26,7 @@ import { InvenSyncPage } from "./settings";
 import { SarprasPage } from "./sarpras";
 import { SoftwarePage } from "./software";
 import { FacilityPage } from "./facility";
+import { SivitasPage } from "./sivitas";
 import { PrintSettingsPage } from "./print-settings";
 import type { Config, Options, Route } from "./types";
 
@@ -232,6 +233,9 @@ export function App({ config, host }: { config: Config; host: HTMLElement }) {
       break;
     case "facility":
       page = <FacilityPage />;
+      break;
+    case "sivitas":
+      page = <SivitasPage />;
       break;
     case "print-settings":
       page = <PrintSettingsPage />;

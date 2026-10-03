@@ -95,7 +95,8 @@ Semua menu tersedia di modul **Stock Take**, dalam tiga bagian. Pengguna dengan 
 | --- | --- |
 | **Ruangan & Barang** | Mencatat ruangan dan barang, mengunggah hingga 5 foto per barang, membuat kode barang otomatis (misalnya `P01-INV-000001`), dan mencetak KIR. Halaman tiap ruangan memiliki tab **Area** (area apa saja di dalam ruangan) dan **Denah** (gambar atau PDF denah, beberapa per ruangan). |
 | **Perangkat Lunak** | Mencatat aplikasi yang dipakai perpustakaan beserta jenis dan masa berlaku lisensinya. |
-| **Gedung & Jaringan** | Mengisi jumlah sivitas akademika, luas gedung, dan bandwidth internet beserta bukti pengukurannya, untuk tiap lokasi perpustakaan. |
+| **Gedung & Jaringan** | Mengisi luas gedung dan bandwidth internet beserta bukti pengukurannya, untuk tiap lokasi perpustakaan. |
+| **Sivitas per Lokasi** | Menghitung sivitas dari anggota SLiMS yang aktif, memetakannya ke lokasi perpustakaan, dan merapikan isian Institusi anggota yang salah ketik. |
 
 **Pengaturan Inven**
 
@@ -110,15 +111,30 @@ Rekap dihitung dari data yang sudah ada, jadi lengkapi dulu klasifikasinya:
 
 1. Di **Ruangan & Barang**, ubah tiap ruangan dan isi **Luas (m²)**. Lalu buka ruangannya dan catat areanya di tab **Area**. Ada empat area layanan dasar (koleksi, baca, kerja staf, layanan), area pendukung, dan fasilitas umum. Toilet, musala, parkir, kantin, dan ruang laktasi dicatat sebagai ruangan dengan area berjenis itu, bukan sebagai barang.
 2. Beri **Kategori** dan **Jenis** pada barang (perabot, peralatan, komputer, multimedia, keamanan, fasilitas umum). Satu barang boleh memiliki lebih dari satu kategori dan dihitung di tiap kategorinya, misalnya komputer yang juga perangkat multimedia. Centang beberapa barang di tabel ruangan, lalu klik **Beri kategori** untuk mengisinya sekaligus; pilihan itu menggantikan kategori barang yang dicentang.
-3. Di **Gedung & Jaringan**, isi jumlah sivitas akademika, luas gedung bila diketahui, serta bandwidth beserta bukti pengukurannya. Bila ada beberapa lokasi, pilih lokasinya dulu. Di samping formulir tampil hasilnya di Rekap Sarpras menurut data yang tersimpan.
+3. Di **Gedung & Jaringan**, isi luas gedung bila diketahui, serta bandwidth beserta bukti pengukurannya. Bila ada beberapa lokasi, pilih lokasinya dulu. Di samping formulir tampil hasilnya di Rekap Sarpras menurut data yang tersimpan.
 4. Di **Perangkat Lunak**, catat aplikasi yang dipakai beserta jenis lisensinya.
+5. Periksa **Sivitas per Lokasi** (lihat di bawah).
+
+#### Sivitas per Lokasi
+
+Jumlah sivitas tidak diketik, tetapi dihitung dari anggota SLiMS yang **aktif**: tidak tertunda dan belum kedaluwarsa. Hilangkan centang tipe anggota yang bukan sivitas, misalnya anggota luar. Perpustakaan yang ruangannya berada di satu lokasi menghitung semua anggota aktif untuk lokasi itu tanpa pengaturan lain.
+
+SLiMS tidak mencatat lokasi anggota. Bila ruangan tersebar di beberapa lokasi, setiap anggota ditempatkan menurut urutan berikut:
+
+1. **Institusi** anggota yang dipetakan ke lokasi, misalnya program studi atau kelas. Huruf besar-kecil dan spasi tidak dibedakan. Bila nama institusi menyebut tempat yang hanya ada di satu nama lokasi, misalnya "Keperawatan Blora", plugin menyarankan lokasinya; klik **Terapkan saran** untuk memakai semua saran sekaligus.
+2. **Tipe anggota** yang dipetakan ke lokasi, untuk perpustakaan yang membuat tipe anggota per kampus.
+3. **Lokasi bawaan**, bila diisi.
+
+Anggota lainnya tampil sebagai **belum dipetakan** dan tidak dihitung untuk lokasi mana pun.
+
+Isian Institusi di SLiMS berupa teks bebas, sehingga satu program studi bisa tertulis dengan beberapa ejaan. Tab **Perbaiki institusi** mengelompokkan ejaan yang mirip (berbeda huruf besar-kecil, spasi, tanda baca, atau salah ketik satu-dua huruf). Ejaan dengan jenjang atau nomor berbeda, misalnya D-III dan D-IV atau Kelas 7A dan 7B, tidak dikelompokkan. Pilih ejaan yang benar, lalu klik **Gabungkan**; Institusi anggota di SLiMS ikut diperbaiki. Anda juga dapat memilih beberapa baris di tab Institusi lalu klik **Gabungkan ejaan**. Setiap perbaikan tercatat di **Riwayat perbaikan** dan dapat diurungkan; anggota yang institusinya diubah lagi sejak itu tidak ikut dikembalikan. Memperbaiki institusi memerlukan hak tulis **Keanggotaan** selain hak tulis Stock Take.
 
 Rekap dihitung per **lokasi perpustakaan** (lokasi SLiMS yang dipilih pada tiap ruangan). Perpustakaan dengan satu lokasi langsung melihat rekapnya. Bila ruangan tersebar di beberapa lokasi:
 
 - Halaman dibuka pada **Semua lokasi**: perbandingan jumlah aspek yang sudah baik, perlu perhatian, dan belum ada data di tiap lokasi, lalu kondisi gabungan institusi.
 - Kondisi gabungan tiap aspek adalah rata-rata lokasi yang memiliki data (Sangat baik 4, Baik 3, Cukup 2, Kurang 1; dibulatkan ke kondisi terdekat). Lokasi yang belum memiliki data tidak ikut dirata-rata, tetapi jumlahnya ditampilkan.
 - Pilih sebuah lokasi untuk melihat rekapnya sendiri. **Cetak rekap** mencetak yang sedang dibuka: satu lokasi, atau gabungan beserta tabel perbandingannya.
-- **Gedung & Jaringan** diisi untuk tiap lokasi. **Perangkat Lunak** tetap satu daftar dan dihitung sama di semua lokasi.
+- **Gedung & Jaringan** diisi untuk tiap lokasi, dan sivitas tiap lokasi berasal dari **Sivitas per Lokasi**. **Perangkat Lunak** tetap satu daftar dan dihitung sama di semua lokasi.
 - Ruangan yang belum diberi lokasi tidak masuk ke rekap lokasi mana pun; tetapkan lokasinya di **Ruangan & Barang**.
 
 Bagian atas halaman merangkum berapa aspek yang sudah baik dan berapa yang perlu perhatian; saring daftarnya dengan tombol **Perlu perhatian**, **Belum ada data**, atau **Sudah baik**. Setiap aspek menampilkan kondisinya (Sangat baik, Baik, Cukup, Kurang). Klik sebuah aspek untuk melihat syarat yang sudah dan belum terpenuhi, rincian datanya, dan saran perbaikan dengan tombol menuju menu tempat datanya diisi. Klik **Cetak rekap** untuk PDF dalam gaya LaTeX, ISO, atau kop institusi.
@@ -205,6 +221,7 @@ php tests/sarpras_combine_test.php
 php tests/sarpras_categories_test.php
 php tests/room_areas_test.php
 php tests/agent_codes_test.php
+php tests/sivitas_test.php
 node tests/watch_forms_test.cjs
 ```
 

@@ -22,7 +22,6 @@ import { Confirm, usePage } from "./settings";
 import { LevelBadge, type Level } from "./sarpras";
 
 type Settings = {
-  sivitas: number;
   designed: boolean;
   building_area: number;
   bandwidth_mbps: number;
@@ -35,6 +34,8 @@ type Location = { code: string; name: string; rooms: number };
 type Result = { no: number; name: string; value: string; level: Level | null; checks: { label: string; ok: boolean }[] };
 type Data = {
   settings: Settings;
+  /** Active SLiMS members counted for this location (Sivitas per Lokasi); not typed in here. */
+  sivitas: { count: number; single: boolean; unmapped: number };
   coverage: Record<string, string>;
   /** What the saved figures amount to in the recap: the aspects computed from them. */
   result: Result[];
@@ -49,7 +50,6 @@ type Post = (values: Record<string, unknown>) => Promise<{ message?: string }>;
 
 const num = (v: number) => (v ? String(v) : "");
 const fields = (s: Settings) => ({
-  sivitas: num(s.sivitas),
   building_area: num(s.building_area),
   designed: s.designed,
   bandwidth_mbps: num(s.bandwidth_mbps),
@@ -140,7 +140,7 @@ function FacilityForm({ data, page, post, reload }: { data: Data; page: string; 
     return () => w.dirty(false);
   }, [changed]);
   const set = (key: keyof typeof values, value: string | boolean) => setValues((v) => ({ ...v, [key]: value }));
-  const perPerson = ratio(values.building_area, values.sivitas);
+  const perPerson = ratio(values.building_area, String(data.sivitas.count));
   const perUser = ratio(values.bandwidth_mbps, values.bandwidth_users);
 
   async function run(body: Record<string, unknown>, done?: () => void) {
@@ -166,14 +166,20 @@ function FacilityForm({ data, page, post, reload }: { data: Data; page: string; 
           <Section icon={Building2} title="Gedung dan sivitas" description="Dipakai untuk menghitung luas perpustakaan per orang yang dilayani.">
             <FieldGroup>
               <FieldGroup className="grid sm:grid-cols-2">
-                <TextField
-                  label="Jumlah sivitas akademika"
-                  type="number"
-                  min="0"
-                  value={values.sivitas}
-                  onChange={(v) => set("sivitas", v)}
-                  description="Mahasiswa, dosen, dan tenaga kependidikan yang dilayani."
-                />
+                <Field>
+                  <FieldLabel>Jumlah sivitas</FieldLabel>
+                  <div className="flex h-9 items-center justify-between gap-2 rounded-md border bg-muted/40 px-3 text-sm">
+                    <span className="font-medium tabular-nums">{data.sivitas.count.toLocaleString("id-ID")} orang</span>
+                    <Button type="button" variant="link" size="sm" className="h-auto px-0" onClick={() => w.go({ view: "sivitas" })}>
+                      Atur
+                    </Button>
+                  </div>
+                  <FieldDescription>
+                    Dihitung dari anggota SLiMS yang aktif
+                    {data.sivitas.single ? "." : " dan dipetakan ke lokasi ini di Sivitas per Lokasi."}
+                    {!data.sivitas.single && data.sivitas.unmapped > 0 && ` ${data.sivitas.unmapped.toLocaleString("id-ID")} anggota belum dipetakan.`}
+                  </FieldDescription>
+                </Field>
                 <TextField
                   label="Luas gedung (m²)"
                   type="number"
