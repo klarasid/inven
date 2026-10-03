@@ -55,16 +55,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($action === 'agents_enable' || $action === 'agents_disable') {
             $enable = $action === 'agents_enable';
             \SLiMS\Plugins\Inventory\Api\AgentCodes::setEnabled($db, $enable, date('Y-m-d H:i:s'));
-            \SLiMS\Plugins\Inventory\Api\Heartbeat::now();
             writeLog('staff', (string) $_SESSION['uid'], 'Klaras InvenSync', $enable ? 'Agent AI diizinkan.' : 'Agent AI dimatikan; semua sesinya dicabut.', 'stock_take', 'Update');
             $json(['ok' => true, 'message' => $enable ? 'Agent AI diizinkan.' : 'Agent AI dimatikan. Semua aplikasi AI yang tersambung harus diizinkan lagi.']);
         } elseif ($action === 'enable' || $action === 'disable') {
             $enable = $action === 'enable';
             \SLiMS\Plugins\Inventory\Api\Guard::setEnabled($db, $enable);
-            if ($enable && !defined('INVENSYNC_API_VERSION')) {
-                define('INVENSYNC_API_VERSION', 2);
-            }
-            \SLiMS\Plugins\Inventory\Api\Heartbeat::now();
             writeLog('staff', (string) $_SESSION['uid'], 'Klaras InvenSync', $enable ? 'Aplikasi InvenSync diizinkan.' : 'Aplikasi InvenSync dimatikan.', 'stock_take', 'Update');
             $json(['ok' => true, 'message' => $enable ? 'Aplikasi InvenSync diizinkan.' : 'Aplikasi InvenSync dimatikan. Petugas tidak bisa memakainya lagi.']);
         } elseif ($action === 'revoke' && ($session = filter_input(INPUT_POST, 'session', FILTER_VALIDATE_INT))) {
