@@ -89,6 +89,12 @@ if (($_GET['format'] ?? '') === 'json') {
             $agents = \SLiMS\Plugins\Inventory\Api\AgentCodes::enabled($db);
             $linked = \SLiMS\Plugins\Inventory\Api\Licence::linked();
             $licensed = $linked && \SLiMS\Plugins\Inventory\Api\Licence::allows();
+            // Klaras Panel lists this library for InvenSync and AI apps by what SLiMS Connect last
+            // reported. When that is behind (plugin upgraded, app just switched on or off), report
+            // after this response instead of at the next hourly run (SLiMS Connect 0.1.5 and later).
+            if ($linked && method_exists('SlimsConnect\\Connect\\Metrics', 'capabilitiesChanged') && \SlimsConnect\Connect\Metrics::capabilitiesChanged()) {
+                \SlimsConnect\Connect\ReportSoon::schedule();
+            }
             $sessions = array_map(static function (array $row): array {
                 return [
                     'id' => (int) $row['id'],

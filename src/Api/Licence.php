@@ -29,8 +29,18 @@ final class Licence
         return (self::verdict()['state'] ?? 'unconfigured') !== 'unconfigured';
     }
 
+    /**
+     * Whether the plan includes InvenSync. A refusal at least a minute old is checked with Klaras
+     * Panel once more first (SLiMS Connect 0.1.5 and later), so a plan upgraded a moment ago works
+     * at once instead of after the next scheduled heartbeat. The panel still decides.
+     */
     public static function allows(): bool
     {
+        if (self::$verdict === null) {
+            $service = new LicenseService();
+
+            return method_exists($service, 'allowsNow') ? $service->allowsNow(self::FEATURE) : $service->allows(self::FEATURE);
+        }
         $verdict = self::verdict();
 
         return in_array($verdict['state'] ?? '', self::ENTITLED, true) && ($verdict['features'][self::FEATURE] ?? false) === true;
