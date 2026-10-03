@@ -3,7 +3,7 @@
  * Plugin Name: Klaras Inven
  * Plugin URI: https://github.com/klarasid/inven
  * Description: Inventaris barang, pengawasan, dan pemeliharaan sarana prasarana perpustakaan: ruangan dan barang, Kartu Inventaris Ruangan, jadwal pemeriksaan, laporan kerusakan, label QR, dan laporan PDF.
- * Version: 2.9.0
+ * Version: 2.9.1
  * Author: KlarasID
  * Author URI: https://github.com/klarasid
  */
