@@ -96,7 +96,7 @@ try{
  [$status,$body]=$endpoint(['access'=>'read'],['watch_action'=>'sync','csrf_token'=>'test-csrf']);check($status===403&&!json_decode($body,true)['ok'],'controller rejects write by read-only user');
  [$status,$body]=$endpoint([],['watch_action'=>'sync','csrf_token'=>'wrong']);check($status===403&&!json_decode($body,true)['ok'],'controller rejects invalid CSRF');
  $beforeCount=(int)$db->query('SELECT COUNT(*) FROM inventory_watch_inspections')->fetchColumn();
- [$status,$body]=$endpoint(['access'=>'read']);check($status===200&&str_contains($body,'data-write="0"')&&(int)$db->query('SELECT COUNT(*) FROM inventory_watch_inspections')->fetchColumn()===$beforeCount,'controller GET renders without database mutation');
+ [$status,$body]=$endpoint(['access'=>'read']);check($status===200&&str_contains($body,'&quot;write&quot;:false')&&(int)$db->query('SELECT COUNT(*) FROM inventory_watch_inspections')->fetchColumn()===$beforeCount,'controller GET renders without database mutation');
  [$status,$body]=$endpoint(['tab'=>'scope','access'=>'read','location_id'=>1,'template_id'=>$template]);$scope=json_decode($body,true);check($status===200&&count($scope['items'])===4&&count($scope['assets'])===1,'read-only wizard scope endpoint returns room assets and checklist');
  [$status,$body]=$endpoint([],['watch_action'=>'sync','csrf_token'=>'test-csrf']);check($status===200&&json_decode($body,true)['ok'],'authorized controller POST uses AJAX response');
  $im=imagecreatetruecolor(20,20);$upload=sys_get_temp_dir().'/'.$prefix.'upload.png';imagepng($im,$upload);imagedestroy($im);
@@ -148,7 +148,7 @@ try{
  $detail=\SLiMS\Plugins\Inventory\WatchPdf::detail($watch->document($id),fn($p)=>$watch->photo($id,(int)$p['id']));
  check(str_contains($detail,'Kursi &lt;Asli&gt;')&&str_contains($detail,'Verifikasi diterima')&&str_contains($detail,'data:image/jpeg;base64,'),'PDF detail includes escaped checklist, photos and verification');
  $summary=$watch->summary($filter,true);$html=\SLiMS\Plugins\Inventory\WatchPdf::summary($filter,$summary,$watch->inspections($filter));
- check(str_contains($html,'Jadwal versus realisasi')&&str_contains($html,'Selesai'),'period PDF includes realization and findings');
+ check(str_contains($html,'Jadwal versus Realisasi')&&str_contains($html,'Selesai'),'period PDF includes realization and findings');
  $reject(fn()=>\SLiMS\Plugins\Inventory\WatchPdf::summary($filter,$summary,array_fill(0,501,[])),'summary export refuses truncation above 500');
  ob_start();\SLiMS\Plugins\Inventory\WatchView::render($watch,'/plugin','inspection',$filter,false,'csrf',['record'=>$id]);$view=ob_get_clean();check(!str_contains($view,'name="watch_action"')&&str_contains($view,'data-write="0"'),'read-only detail has no mutation forms');
  ob_start();\SLiMS\Plugins\Inventory\WatchView::render($watch,'/plugin','finding',$filter,true,'csrf',['record'=>$finding]);$view=ob_get_clean();check(str_contains($view,'Verifikasi diterima'),'closed finding renders verification history');
