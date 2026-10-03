@@ -15,7 +15,7 @@ require __DIR__ . '/../src/UpdateCheck.php';
 require __DIR__ . '/../src/Telemetry.php';
 
 $prefix = 'it_test_' . bin2hex(random_bytes(6)) . '_';
-$names = ['inventory_member_locations', 'inventory_member_fixes', 'inventory_watch_inspections', 'inventory_watch_findings', 'inventory_items', 'inventory_locations', 'inventory_software', 'stock_take', 'setting', 'plugins'];
+$names = ['inventory_api_sessions', 'inventory_member_locations', 'inventory_member_fixes', 'inventory_watch_inspections', 'inventory_watch_findings', 'inventory_items', 'inventory_locations', 'inventory_software', 'stock_take', 'setting', 'plugins'];
 final class PrefixedConnection extends PDO {
     public array $names = []; public string $prefix = '';
     private function sql(string $sql): string { foreach ($this->names as $name) $sql = preg_replace('/(?<![A-Za-z0-9_.])' . $name . '\b/', $this->prefix . $name, $sql); return $sql; }
@@ -41,6 +41,7 @@ try {
     $db->exec('CREATE TABLE inventory_watch_inspections (id INT PRIMARY KEY, kind VARCHAR(20), status VARCHAR(20), due_date DATE, snapshot LONGTEXT) ENGINE=InnoDB');
     $db->exec('CREATE TABLE inventory_watch_findings (id INT PRIMARY KEY, status VARCHAR(20)) ENGINE=InnoDB');
     $db->exec('CREATE TABLE stock_take (stock_take_id INT PRIMARY KEY, is_active INT) ENGINE=InnoDB');
+    $db->exec("CREATE TABLE inventory_api_sessions (id INT AUTO_INCREMENT PRIMARY KEY, user_id INT, kind VARCHAR(10) NOT NULL DEFAULT 'app', revoked_at DATETIME NULL, access_expires_at DATETIME, refresh_expires_at DATETIME NULL) ENGINE=InnoDB");
     $db->exec('CREATE TABLE inventory_member_locations (id INT PRIMARY KEY, basis VARCHAR(12), value_key VARCHAR(100), label VARCHAR(100), location_code VARCHAR(3)) ENGINE=InnoDB');
     $db->exec('CREATE TABLE inventory_member_fixes (id INT PRIMARY KEY, from_values TEXT, to_value VARCHAR(100), members MEDIUMTEXT, member_count INT, undone_at DATETIME NULL) ENGINE=InnoDB');
     $db->prepare('INSERT INTO plugins VALUES (?, ?, ?)')->execute(['x', '{"version":"2.2.0","db_version":8}', '/srv/slims/plugins/inventaris-barang/inventory.plugin.php']);
@@ -55,11 +56,15 @@ try {
     $db->exec('INSERT INTO stock_take VALUES (1, 1)');
     $db->exec("INSERT INTO inventory_member_locations VALUES (1, 'institution', 'prodi rahasia', 'Prodi RAHASIA', 'P01'), (2, 'institution', 'gizi', 'Gizi', 'P01'), (3, 'type', '1', 'Mahasiswa', 'P01')");
     $db->exec("INSERT INTO inventory_member_fixes VALUES (1, '[\"Prodi RAHASIA-LAMA\"]', 'Prodi RAHASIA', '[[\"M-TRAP01\",\"x\"]]', 777001, NULL), (2, '[]', 'Gizi', '[]', 2, NOW())");
+    // Two librarians on phones (one twice), one with an AI app, and an AI session that was revoked.
+    $db->exec("INSERT INTO inventory_api_sessions (user_id, kind, revoked_at, access_expires_at) VALUES (1, 'app', NULL, NOW() + INTERVAL 1 HOUR), (1, 'app', NULL, NOW() + INTERVAL 1 HOUR), (2, 'app', NULL, NOW() + INTERVAL 1 HOUR), (3, 'agent', NULL, NOW() + INTERVAL 1 HOUR), (4, 'agent', NOW(), NOW() + INTERVAL 1 HOUR)");
+    $db->prepare('INSERT INTO setting (setting_name, setting_value) VALUES (?, ?)')->execute(['invensync_agents', serialize('1')]);
     $db->prepare('INSERT INTO setting (setting_name, setting_value) VALUES (?, ?)')->execute(['inventory_sivitas', serialize(['default' => 'P01', 'excluded' => [4]])]);
 
     Telemetry::count('kir_pdf');
     Telemetry::count('kir_pdf');
     Telemetry::count('institution_merge');
+    Telemetry::count('agent_changes', $db);
     Telemetry::count('not_a_feature');
     try {
         $db->exec("INSERT INTO inventory_items VALUES (1, 1, 'Duplikat', 'P01-INV-TRAP01', 'B')");
@@ -76,6 +81,10 @@ try {
     check($report['stats']['rooms_with_area'] === 1 && $report['stats']['rooms_with_functions'] === 1 && $report['stats']['items_categorized'] === 1 && $report['stats']['software'] === 2 && $report['stats']['facility_profiles'] === 1, 'the report counts how much of the Rekap Sarpras data is filled in');
     check($report['stats']['institutions_mapped'] === 2 && $report['stats']['member_types_mapped'] === 1 && $report['stats']['institution_fixes'] === 1
         && $report['features']['institution_merge'] === 1 && $report['features']['default_location_set'] === 1, 'the report counts how far members are placed at locations, and merges that stand');
+    check($report['features']['app_sessions'] === 2 && $report['features']['agent_sessions'] === 1 && $report['features']['agents_enabled'] === 1 && $report['features']['agent_changes'] === 1,
+        'the report counts phone and AI app users apart, whether AI apps are allowed, and the changes they made');
+    $db->exec('ALTER TABLE inventory_api_sessions DROP COLUMN kind');
+    check(Telemetry::report($db)['features']['app_sessions'] === 3 && Telemetry::report($db)['features']['agent_sessions'] === 0, 'before migration 13, every session is the phone app\'s');
     check(!str_contains($json, 'RAHASIA') && !str_contains($json, 'TRAP01') && !str_contains($json, 'Duplikat'), 'no room name, item name, item code, software name, Institusi or member id ever appears in the report');
     check(!str_contains($json, '777001') && !str_contains($json, '"P01"'), 'neither how many members a merge changed nor which location is the default is sent');
     $counts = json_encode([$report['stats'], $report['features']]);

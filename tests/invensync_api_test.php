@@ -272,6 +272,12 @@ try {
     check($templates[0]['name'] === 'Checklist sarana v2' && count($templates[0]['items']) === 2, 'checklists are listed with their items');
     $made = call('POST', 'ScheduleController@storeTemplate', ['name' => 'Checklist ruang referensi', 'items' => [['group' => 'Sarana', 'object' => 'Rak referensi', 'instruction' => 'Periksa sambungan rak']]], headers: bearer($agentToken));
     check($made['status'] === 201 && $made['body']['data']['items'][0]['object'] === 'Rak referensi', 'an agent makes a checklist');
+    $usage = static fn (): int => (int) ((@unserialize((string) $db->query("SELECT setting_value FROM setting WHERE setting_name = 'inventory_usage_counters'")->fetchColumn(), ['allowed_classes' => false]) ?: [])['agent_changes'] ?? 0);
+    check($usage() === 1, 'a change made by an agent is counted for the usage report');
+    call('POST', 'ScheduleController@preview', ['frequency' => 'monthly', 'start_date' => '2026-11-02'], headers: bearer($agentToken));
+    call('POST', 'ScheduleController@storeTemplate', ['name' => 'Kosong', 'items' => []], headers: bearer($agentToken));
+    call('POST', 'ItemController@store', ['room_id' => 1, 'name' => ''], headers: bearer($token));
+    check($usage() === 1, 'previews, refused changes and changes from the phone app are not');
     check(call('POST', 'ScheduleController@storeTemplate', ['name' => 'Kosong', 'items' => []], headers: bearer($agentToken))['code'] === 'rejected', 'a checklist without items is refused with the service message');
     $preview = call('POST', 'ScheduleController@preview', ['frequency' => 'monthly', 'start_date' => '2026-11-02'], headers: bearer($baca));
     check($preview['status'] === 200 && array_slice($preview['body']['data']['dates'], 0, 2) === ['2026-11-02', '2026-12-02'] && count($preview['body']['data']['dates']) === 5, 'the next dates of a schedule are previewed, by a read-only librarian too');

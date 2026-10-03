@@ -11,8 +11,9 @@ use PDO;
  * database, counts (rooms, items by condition, inspections, findings, stock take sessions, and how
  * much of the data behind Rekap Sarpras is filled in: rooms with an area or a function, items with
  * a category, software in the register, locations with building figures, how many Institusi
- * values and member types are placed at a location and how many Institusi merges stand), how often
- * each feature was used, and recent technical errors with any data stripped from them.
+ * values and member types are placed at a location and how many Institusi merges stand), whether
+ * AI apps are allowed and how many librarians they work for, how often each feature was used
+ * (including changes made by AI apps), and recent technical errors with any data stripped from them.
  * What is never sent: inventory records, item names or codes, software names, building and network
  * figures, members, staff or anything typed in.
  *
@@ -30,7 +31,7 @@ final class Telemetry
     public const COUNTERS = 'inventory_usage_counters';
     public const ERRORS = 'inventory_telemetry_errors';
     public const DEFAULT_PANEL = 'https://panel.klaras.id';
-    public const FEATURES = ['kir_pdf', 'labels_pdf', 'report_pdf', 'inspection_pdf', 'history_import', 'sarpras_pdf', 'institution_merge'];
+    public const FEATURES = ['kir_pdf', 'labels_pdf', 'report_pdf', 'inspection_pdf', 'history_import', 'sarpras_pdf', 'institution_merge', 'agent_changes'];
     public const ERROR_CATEGORIES = ['pdf', 'db', 'photo', 'workspace', 'other'];
     private const INTERVAL = 86400;
     private const RETRY = 3600;
@@ -103,12 +104,15 @@ final class Telemetry
 
     // Counting -----------------------------------------------------------------------------
 
-    /** One more use of a feature. Never fails the page that counts it. */
-    public static function count(string $feature): void
+    /**
+     * One more use of a feature. Never fails the page that counts it. The InvenSync API passes
+     * its own connection; pages use SLiMS's.
+     */
+    public static function count(string $feature, ?PDO $db = null): void
     {
         if (!in_array($feature, self::FEATURES, true)) return;
         try {
-            $db = \SLiMS\DB::getInstance();
+            $db = $db ?? \SLiMS\DB::getInstance();
             $counters = self::read($db, self::COUNTERS);
             $counters[$feature] = (int) ($counters[$feature] ?? 0) + 1;
             self::write($db, self::COUNTERS, $counters);
@@ -252,7 +256,13 @@ final class Telemetry
         $features['damage_reports'] = (int) $count("SELECT COUNT(*) FROM inventory_watch_inspections WHERE kind = 'incidental' AND snapshot LIKE ?", ['%"template_name":"Laporan kerusakan"%']);
         $features['app_enabled'] = (int) ($count("SELECT COUNT(*) FROM setting WHERE setting_name = 'invensync_enabled' AND setting_value = ?", [serialize('1')]) ?? 0);
         $features['default_location_set'] = self::defaultLocationSet($db);
-        $features['app_sessions'] = (int) $count('SELECT COUNT(DISTINCT user_id) FROM inventory_api_sessions WHERE revoked_at IS NULL AND (access_expires_at > ? OR refresh_expires_at > ?)', [date('Y-m-d H:i:s'), date('Y-m-d H:i:s')]);
+        // Librarians signed in on the phone app, and those an AI app works for (Agent AI, migration 13
+        // on); before that migration every session was the phone app's.
+        $live = 'revoked_at IS NULL AND (access_expires_at > ? OR refresh_expires_at > ?)';
+        $now = [date('Y-m-d H:i:s'), date('Y-m-d H:i:s')];
+        $features['app_sessions'] = (int) ($count("SELECT COUNT(DISTINCT user_id) FROM inventory_api_sessions WHERE kind <> 'agent' AND $live", $now) ?? $count("SELECT COUNT(DISTINCT user_id) FROM inventory_api_sessions WHERE $live", $now));
+        $features['agents_enabled'] = (int) ($count("SELECT COUNT(*) FROM setting WHERE setting_name = 'invensync_agents' AND setting_value = ?", [serialize('1')]) ?? 0);
+        $features['agent_sessions'] = (int) $count("SELECT COUNT(DISTINCT user_id) FROM inventory_api_sessions WHERE kind = 'agent' AND $live", $now);
 
         $plugin = UpdateCheck::plugin();
         $dbVersion = null;

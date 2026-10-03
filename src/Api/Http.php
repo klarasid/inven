@@ -50,7 +50,7 @@ final class Http
     {
         $db = self::db();
         Guard::check($request, $db);
-        $staff = empty($options['public']) ? self::staff($request, $db) : null;
+        [$staff, $agent] = empty($options['public']) ? self::staff($request, $db) : [null, false];
         $writes = $options['write'] ?? $request->method() !== 'GET';
         if ($staff !== null && !$staff->canRead) {
             throw Failure::forbidden('no_stock_take_access', 'Akun Anda tidak punya hak Stock Take. Minta administrator SLiMS menambahkannya.');
@@ -73,6 +73,10 @@ final class Http
         $response = null;
         try {
             $response = self::call($handler, $context, $params);
+            // How much AI apps change, for the usage report: a count, never what changed.
+            if ($agent && $writes && $response instanceof JsonResponse && $response->status < 300) {
+                \SLiMS\Plugins\Inventory\Telemetry::count('agent_changes', $db);
+            }
             return $response;
         } finally {
             $claim?->finish($response instanceof JsonResponse ? $response : null);
@@ -101,13 +105,15 @@ final class Http
         }
     }
 
-    private static function staff(Request $request, PDO $db): Staff
+    /** @return array{0: Staff, 1: bool} The librarian, and whether an AI app is acting for them. */
+    private static function staff(Request $request, PDO $db): array
     {
         $found = (new StaffTokens($db))->authenticate($request->bearerToken());
-        if (($found['session']['kind'] ?? 'app') === AgentCodes::KIND && !AgentCodes::enabled($db)) {
+        $agent = ($found['session']['kind'] ?? 'app') === AgentCodes::KIND;
+        if ($agent && !AgentCodes::enabled($db)) {
             throw AgentCodes::disabled();
         }
 
-        return Staff::fromUser($db, $found['user'], (int) $found['session']['id']);
+        return [Staff::fromUser($db, $found['user'], (int) $found['session']['id']), $agent];
     }
 }
