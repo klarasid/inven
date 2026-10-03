@@ -149,6 +149,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $from = is_array($_POST['from'] ?? null) ? array_map('strval', $_POST['from']) : [];
                 $fix = Sivitas::merge($db, $from, (string) ($_POST['to'] ?? ''), (int) ($_SESSION['uid'] ?? 0), date('Y-m-d H:i:s'));
                 $log('Institusi ' . $fix['count'] . ' anggota diseragamkan menjadi "' . trim((string) $_POST['to']) . '".', 'Update');
+                \SLiMS\Plugins\Inventory\Telemetry::count('institution_merge');
                 $json(['ok' => true, 'message' => 'Institusi ' . $fix['count'] . ' anggota diperbaiki.']);
             } else {
                 $restored = Sivitas::undo($db, (int) ($_POST['record_id'] ?? 0), date('Y-m-d H:i:s'));

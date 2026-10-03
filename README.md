@@ -189,6 +189,7 @@ Sekali sehari, plugin mengirim ringkasan pemakaian ke Klaras agar plugin gratis 
 - Versi plugin, SLiMS, PHP, dan database.
 - Jumlah ruangan, barang, pemeriksaan, temuan, dan sesi stock opname.
 - Jumlah data Rekap Sarpras yang sudah diisi: ruangan yang memiliki luas dan area, barang yang berkategori, aplikasi di Perangkat Lunak, dan lokasi yang mengisi Gedung & Jaringan.
+- Kemajuan Sivitas per Lokasi: jumlah institusi dan tipe anggota yang sudah dipetakan, jumlah perbaikan institusi, dan apakah lokasi bawaan diisi. Jumlah anggota, nama institusi, dan lokasinya tidak dikirim.
 - Frekuensi pemakaian fitur, serta galat teknis yang telah dibersihkan dari isinya.
 
 Plugin **tidak pernah** mengirim isi inventaris, nama atau kode barang, nama ruangan, nama aplikasi, angka gedung dan jaringan, data anggota, maupun data petugas.

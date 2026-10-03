@@ -15,7 +15,7 @@ require __DIR__ . '/../src/UpdateCheck.php';
 require __DIR__ . '/../src/Telemetry.php';
 
 $prefix = 'it_test_' . bin2hex(random_bytes(6)) . '_';
-$names = ['inventory_watch_inspections', 'inventory_watch_findings', 'inventory_items', 'inventory_locations', 'inventory_software', 'stock_take', 'setting', 'plugins'];
+$names = ['inventory_member_locations', 'inventory_member_fixes', 'inventory_watch_inspections', 'inventory_watch_findings', 'inventory_items', 'inventory_locations', 'inventory_software', 'stock_take', 'setting', 'plugins'];
 final class PrefixedConnection extends PDO {
     public array $names = []; public string $prefix = '';
     private function sql(string $sql): string { foreach ($this->names as $name) $sql = preg_replace('/(?<![A-Za-z0-9_.])' . $name . '\b/', $this->prefix . $name, $sql); return $sql; }
@@ -41,6 +41,8 @@ try {
     $db->exec('CREATE TABLE inventory_watch_inspections (id INT PRIMARY KEY, kind VARCHAR(20), status VARCHAR(20), due_date DATE, snapshot LONGTEXT) ENGINE=InnoDB');
     $db->exec('CREATE TABLE inventory_watch_findings (id INT PRIMARY KEY, status VARCHAR(20)) ENGINE=InnoDB');
     $db->exec('CREATE TABLE stock_take (stock_take_id INT PRIMARY KEY, is_active INT) ENGINE=InnoDB');
+    $db->exec('CREATE TABLE inventory_member_locations (id INT PRIMARY KEY, basis VARCHAR(12), value_key VARCHAR(100), label VARCHAR(100), location_code VARCHAR(3)) ENGINE=InnoDB');
+    $db->exec('CREATE TABLE inventory_member_fixes (id INT PRIMARY KEY, from_values TEXT, to_value VARCHAR(100), members MEDIUMTEXT, member_count INT, undone_at DATETIME NULL) ENGINE=InnoDB');
     $db->prepare('INSERT INTO plugins VALUES (?, ?, ?)')->execute(['x', '{"version":"2.2.0","db_version":8}', '/srv/slims/plugins/inventaris-barang/inventory.plugin.php']);
     // Traps: none of this may ever leave the library.
     $db->exec("INSERT INTO inventory_locations VALUES (1, 'RUANG RAHASIA', 'P01', 48.5, 'koleksi,baca'), (2, 'Ruang Baca', 'P01', NULL, '')");
@@ -51,9 +53,13 @@ try {
     $db->exec("INSERT INTO inventory_watch_inspections VALUES (1, 'incidental', 'final', '$today', '{\"template_name\":\"Laporan kerusakan\",\"room_name\":\"RUANG RAHASIA\"}')");
     $db->exec("INSERT INTO inventory_watch_findings VALUES (1, 'open')");
     $db->exec('INSERT INTO stock_take VALUES (1, 1)');
+    $db->exec("INSERT INTO inventory_member_locations VALUES (1, 'institution', 'prodi rahasia', 'Prodi RAHASIA', 'P01'), (2, 'institution', 'gizi', 'Gizi', 'P01'), (3, 'type', '1', 'Mahasiswa', 'P01')");
+    $db->exec("INSERT INTO inventory_member_fixes VALUES (1, '[\"Prodi RAHASIA-LAMA\"]', 'Prodi RAHASIA', '[[\"M-TRAP01\",\"x\"]]', 777001, NULL), (2, '[]', 'Gizi', '[]', 2, NOW())");
+    $db->prepare('INSERT INTO setting (setting_name, setting_value) VALUES (?, ?)')->execute(['inventory_sivitas', serialize(['default' => 'P01', 'excluded' => [4]])]);
 
     Telemetry::count('kir_pdf');
     Telemetry::count('kir_pdf');
+    Telemetry::count('institution_merge');
     Telemetry::count('not_a_feature');
     try {
         $db->exec("INSERT INTO inventory_items VALUES (1, 1, 'Duplikat', 'P01-INV-TRAP01', 'B')");
@@ -68,7 +74,10 @@ try {
     check($report['features']['kir_pdf'] === 2 && !isset($report['features']['not_a_feature']) && $report['features']['damage_reports'] === 1, 'features are counted, unknown ones ignored');
     check($report['environment']['migration'] === 8 && $report['environment']['slims_version'] === 'v9.8.0', 'the report carries versions and the migration level');
     check($report['stats']['rooms_with_area'] === 1 && $report['stats']['rooms_with_functions'] === 1 && $report['stats']['items_categorized'] === 1 && $report['stats']['software'] === 2 && $report['stats']['facility_profiles'] === 1, 'the report counts how much of the Rekap Sarpras data is filled in');
-    check(!str_contains($json, 'RAHASIA') && !str_contains($json, 'TRAP01') && !str_contains($json, 'Duplikat'), 'no room name, item name, item code or software name ever appears in the report');
+    check($report['stats']['institutions_mapped'] === 2 && $report['stats']['member_types_mapped'] === 1 && $report['stats']['institution_fixes'] === 1
+        && $report['features']['institution_merge'] === 1 && $report['features']['default_location_set'] === 1, 'the report counts how far members are placed at locations, and merges that stand');
+    check(!str_contains($json, 'RAHASIA') && !str_contains($json, 'TRAP01') && !str_contains($json, 'Duplikat'), 'no room name, item name, item code, software name, Institusi or member id ever appears in the report');
+    check(!str_contains($json, '777001') && !str_contains($json, '"P01"'), 'neither how many members a merge changed nor which location is the default is sent');
     $counts = json_encode([$report['stats'], $report['features']]);
     check(!str_contains($json, 'sivitas') && !str_contains($json, 'bandwidth') && !str_contains($counts, '987654') && !str_contains($counts, '4321'), 'no building or network figure ever appears in the report');
     check(count($report['errors']) === 1 && $report['errors'][0]['category'] === 'db' && $report['errors'][0]['count'] === 1, 'a database error is remembered');

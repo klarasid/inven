@@ -10,8 +10,9 @@ use PDO;
  * What is sent: the library's name and SLiMS address, versions of the plugin, SLiMS, PHP and the
  * database, counts (rooms, items by condition, inspections, findings, stock take sessions, and how
  * much of the data behind Rekap Sarpras is filled in: rooms with an area or a function, items with
- * a category, software in the register, locations with building figures), how often each feature
- * was used, and recent technical errors with any data stripped from them.
+ * a category, software in the register, locations with building figures, how many Institusi
+ * values and member types are placed at a location and how many Institusi merges stand), how often
+ * each feature was used, and recent technical errors with any data stripped from them.
  * What is never sent: inventory records, item names or codes, software names, building and network
  * figures, members, staff or anything typed in.
  *
@@ -29,7 +30,7 @@ final class Telemetry
     public const COUNTERS = 'inventory_usage_counters';
     public const ERRORS = 'inventory_telemetry_errors';
     public const DEFAULT_PANEL = 'https://panel.klaras.id';
-    public const FEATURES = ['kir_pdf', 'labels_pdf', 'report_pdf', 'inspection_pdf', 'history_import', 'sarpras_pdf'];
+    public const FEATURES = ['kir_pdf', 'labels_pdf', 'report_pdf', 'inspection_pdf', 'history_import', 'sarpras_pdf', 'institution_merge'];
     public const ERROR_CATEGORIES = ['pdf', 'db', 'photo', 'workspace', 'other'];
     private const INTERVAL = 86400;
     private const RETRY = 3600;
@@ -190,6 +191,17 @@ final class Telemetry
         }
     }
 
+    /** 1 when Sivitas per Lokasi has a default location, else 0: whether, never which. */
+    private static function defaultLocationSet(PDO $db): int
+    {
+        try {
+            $stored = self::read($db, 'inventory_sivitas');
+            return is_string($stored['default'] ?? null) && $stored['default'] !== '' ? 1 : 0;
+        } catch (\Throwable $error) {
+            return 0;
+        }
+    }
+
     /** Exactly what is sent. */
     public static function report(PDO $db): array
     {
@@ -226,6 +238,10 @@ final class Telemetry
             'items_categorized' => $count('SELECT COUNT(*) FROM inventory_items WHERE category IS NOT NULL'),
             'software' => $count('SELECT COUNT(*) FROM inventory_software'),
             'facility_profiles' => self::facilityProfiles($db),
+            // Sivitas per Lokasi: how far placing members has got, never how many members there are.
+            'institutions_mapped' => $count("SELECT COUNT(*) FROM inventory_member_locations WHERE basis = 'institution'"),
+            'member_types_mapped' => $count("SELECT COUNT(*) FROM inventory_member_locations WHERE basis = 'type'"),
+            'institution_fixes' => $count('SELECT COUNT(*) FROM inventory_member_fixes WHERE undone_at IS NULL'),
         ];
         $counters = self::read($db, self::COUNTERS);
         $features = [];
@@ -235,6 +251,7 @@ final class Telemetry
         // Damage reports are incidental inspections whose snapshot carries this template name.
         $features['damage_reports'] = (int) $count("SELECT COUNT(*) FROM inventory_watch_inspections WHERE kind = 'incidental' AND snapshot LIKE ?", ['%"template_name":"Laporan kerusakan"%']);
         $features['app_enabled'] = (int) ($count("SELECT COUNT(*) FROM setting WHERE setting_name = 'invensync_enabled' AND setting_value = ?", [serialize('1')]) ?? 0);
+        $features['default_location_set'] = self::defaultLocationSet($db);
         $features['app_sessions'] = (int) $count('SELECT COUNT(DISTINCT user_id) FROM inventory_api_sessions WHERE revoked_at IS NULL AND (access_expires_at > ? OR refresh_expires_at > ?)', [date('Y-m-d H:i:s'), date('Y-m-d H:i:s')]);
 
         $plugin = UpdateCheck::plugin();
