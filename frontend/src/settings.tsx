@@ -115,7 +115,8 @@ type InvenSync = {
   linked: boolean;
   licensed: boolean;
   enabled: boolean;
-  sessions: { id: number; name: string; device: string; ip: string; created_at: string; last_used_at: string }[];
+  agents: boolean;
+  sessions: { id: number; name: string; device: string; ip: string; created_at: string; last_used_at: string; agent: boolean }[];
   problem: string;
   manage: boolean;
   csrf: string;
@@ -124,7 +125,7 @@ type InvenSync = {
 export function InvenSyncPage() {
   const { data, error, reload, post } = usePage<InvenSync>();
   const [busy, setBusy] = useState(false);
-  const [confirm, setConfirm] = useState<{ kind: "disable" } | { kind: "revoke"; id: number; name: string } | null>(null);
+  const [confirm, setConfirm] = useState<{ kind: "disable" } | { kind: "agents" } | { kind: "revoke"; id: number; name: string } | null>(null);
 
   async function act(values: Record<string, unknown>) {
     if (!data) return;
@@ -217,7 +218,35 @@ export function InvenSyncPage() {
         <StatusRow label="Izin aplikasi" ok={data.enabled} yes="Diizinkan" no="Belum diizinkan" />
       </Panel>
       {data.connect && (
-        <Panel title="Perangkat yang masuk" description="Sesi aplikasi petugas yang masih aktif.">
+        <Panel
+          title="Agent AI"
+          description="Aplikasi AI seperti Claude dapat membantu petugas membuat jadwal, menulis laporan kerusakan, dan merangkum laporan. Petugas menghubungkannya lewat Klaras Panel dan menyetujuinya di SLiMS ini; aplikasi itu bekerja atas nama petugas tersebut, dengan hak Stock Take-nya."
+          action={
+            data.manage &&
+            (data.agents ? (
+              <Button variant="outline" disabled={busy} onClick={() => setConfirm({ kind: "agents" })}>
+                <Power data-icon="inline-start" />
+                Matikan agent AI
+              </Button>
+            ) : (
+              <Button disabled={busy || !data.enabled} onClick={() => act({ action: "agents_enable" })}>
+                <ShieldCheck data-icon="inline-start" />
+                Izinkan agent AI
+              </Button>
+            ))
+          }
+        >
+          <StatusRow
+            label="Izin agent AI"
+            ok={data.agents}
+            yes="Diizinkan"
+            no="Belum diizinkan"
+            hint={data.enabled ? "Administrator dengan hak tulis System dapat mengizinkannya di sini." : "Izinkan aplikasi InvenSync lebih dulu."}
+          />
+        </Panel>
+      )}
+      {data.connect && (
+        <Panel title="Perangkat yang masuk" description="Sesi aplikasi petugas dan agent AI yang masih aktif.">
           {data.sessions.length === 0 ? (
             <Blank icon={Smartphone} title="Belum ada perangkat" description="Belum ada petugas yang masuk ke aplikasi." />
           ) : (
@@ -236,7 +265,10 @@ export function InvenSyncPage() {
                   <TableRow key={s.id}>
                     <TableCell className="font-medium">{s.name}</TableCell>
                     <TableCell>
-                      <div>{s.device || "—"}</div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {s.device || "—"}
+                        {s.agent && <Badge variant="secondary">Agent AI</Badge>}
+                      </div>
                       <div className="text-xs text-muted-foreground">{s.ip}</div>
                     </TableCell>
                     <TableCell>{when(s.created_at)}</TableCell>
@@ -270,6 +302,15 @@ export function InvenSyncPage() {
         busy={busy}
         onCancel={() => setConfirm(null)}
         onConfirm={() => act({ action: "disable" })}
+      />
+      <Confirm
+        open={confirm?.kind === "agents"}
+        title="Matikan agent AI?"
+        description="Semua aplikasi AI yang tersambung langsung terputus dan sesinya dicabut. Petugas harus mengizinkannya lagi setelah agent AI dinyalakan kembali."
+        action="Matikan agent AI"
+        busy={busy}
+        onCancel={() => setConfirm(null)}
+        onConfirm={() => act({ action: "agents_disable" })}
       />
       <Confirm
         open={confirm?.kind === "revoke"}

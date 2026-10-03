@@ -44,7 +44,8 @@ Plugins::registerMenu('opac', 'Info Barang', __DIR__ . '/opac.php', 'Informasi b
 // is loaded until a request reaches the API router and SLiMS Connect is there.
 if (!empty($GLOBALS['sysconf']['invensync_enabled']) && $GLOBALS['sysconf']['invensync_enabled'] === '1' && !defined('INVENSYNC_API_VERSION')) {
     // Read by SLiMS Connect's heartbeat: Klaras Panel lists this library in the app only then.
-    define('INVENSYNC_API_VERSION', 1);
+    // 2: AI apps may connect through Klaras Panel (Api\AgentCodes), with schedules and Rekap Sarpras.
+    define('INVENSYNC_API_VERSION', 2);
 }
 Plugins::getInstance()->registerHook('custom_api_route', function ($router) {
     if (PHP_VERSION_ID >= 80100 && class_exists('SlimsConnect\\Http\\Kernel')) {

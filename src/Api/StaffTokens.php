@@ -60,20 +60,22 @@ final class StaffTokens
      * @param  array<string, mixed>  $user
      * @return array<string, mixed>
      */
-    public function issue(array $user, string $deviceName, string $ip, bool $remember): array
+    public function issue(array $user, string $deviceName, string $ip, bool $remember, string $kind = 'app'): array
     {
         $this->assertSeat((int) $user['user_id']);
         $now = time();
         $access = self::mint();
         $refresh = $remember ? self::mint() : null;
+        // The kind column arrives with migration 13; phones keep signing in before it runs.
+        $agent = $kind === AgentCodes::KIND;
         $this->query(
-            'INSERT INTO inventory_api_sessions (user_id, access_selector, access_hash, access_expires_at, refresh_selector, refresh_hash, refresh_expires_at, password_fingerprint, device_name, ip, created_at, last_used_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [
+            'INSERT INTO inventory_api_sessions (user_id, access_selector, access_hash, access_expires_at, refresh_selector, refresh_hash, refresh_expires_at, password_fingerprint, device_name, ip, created_at, last_used_at' . ($agent ? ', kind' : '') . ')
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?' . ($agent ? ', ?' : '') . ')',
+            array_merge([
                 $user['user_id'], $access['selector'], $access['hash'], self::at($now + self::ACCESS_TTL_SECONDS),
                 $refresh['selector'] ?? null, $refresh['hash'] ?? null, $refresh ? self::at($now + self::REFRESH_TTL_SECONDS) : null,
                 self::fingerprint($user), mb_substr(trim($deviceName), 0, 100), mb_substr($ip, 0, 45), self::at($now), self::at($now),
-            ]
+            ], $agent ? [$kind] : [])
         );
         $this->prune();
 
@@ -200,7 +202,7 @@ final class StaffTokens
             throw $error;
         }
 
-        return ['tokens' => self::pair($access['plaintext'], $refresh['plaintext']), 'user' => $user, 'session_id' => (int) $session['id']];
+        return ['tokens' => self::pair($access['plaintext'], $refresh['plaintext']), 'user' => $user, 'session_id' => (int) $session['id'], 'kind' => (string) ($session['kind'] ?? 'app')];
     }
 
     public function revoke(int $sessionId): void
@@ -216,7 +218,7 @@ final class StaffTokens
     public function active(): array
     {
         return $this->query(
-            'SELECT s.id, s.user_id, u.realname, u.username, s.device_name, s.ip, s.created_at, s.last_used_at
+            'SELECT s.*, u.realname, u.username
              FROM inventory_api_sessions s LEFT JOIN user u ON u.user_id = s.user_id
              WHERE s.revoked_at IS NULL AND (s.access_expires_at > ? OR s.refresh_expires_at > ?)
              ORDER BY s.last_used_at DESC LIMIT 200',

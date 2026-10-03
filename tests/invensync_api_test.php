@@ -8,6 +8,7 @@ namespace {
 use SLiMS\Plugins\Inventory\Api\Http;
 use SLiMS\Plugins\Inventory\Api\Licence;
 use SLiMS\Plugins\Inventory\Api\Routes;
+use SLiMS\Plugins\Inventory\Api\AgentCodes;
 use SLiMS\Plugins\Inventory\Api\Guard;
 use SLiMS\Plugins\Inventory\PhotoStorage;
 use SLiMS\Plugins\Inventory\Supervision;
@@ -35,7 +36,7 @@ require dirname(__DIR__, 3) . '/lib/Migration/Migration.php';
 foreach (glob(__DIR__ . '/../migration/*.php') as $migration) require $migration;
 require __DIR__ . '/../src/Api/bootstrap.php';
 
-$names = ['inventory_api_idempotency', 'inventory_api_sessions', 'inventory_watch_photos', 'inventory_watch_events', 'inventory_watch_actions', 'inventory_watch_findings', 'inventory_watch_results', 'inventory_watch_inspections', 'inventory_watch_schedules', 'inventory_watch_templates', 'inventory_item_code_reservations', 'inventory_item_code_sequences', 'inventory_item_photos', 'inventory_items', 'inventory_locations', 'stock_take_item', 'stock_take', 'mst_item_status', 'item', 'mst_location', 'group_access', 'mst_module', 'setting', 'user', 'holiday', 'slims_connect_rate_limits', 'slims_connect_settings'];
+$names = ['inventory_api_codes', 'inventory_room_plans', 'inventory_room_areas', 'inventory_software', 'inventory_api_idempotency', 'inventory_api_sessions', 'inventory_watch_photos', 'inventory_watch_events', 'inventory_watch_actions', 'inventory_watch_findings', 'inventory_watch_results', 'inventory_watch_inspections', 'inventory_watch_schedules', 'inventory_watch_templates', 'inventory_item_code_reservations', 'inventory_item_code_sequences', 'inventory_item_photos', 'inventory_items', 'inventory_locations', 'stock_take_item', 'stock_take', 'mst_item_status', 'item', 'mst_location', 'group_access', 'mst_module', 'setting', 'user', 'holiday', 'slims_connect_rate_limits', 'slims_connect_settings'];
 final class PrefixedConnection extends PDO {
     public array $names = []; public string $prefix = '';
     private function sql(string $sql): string { foreach ($this->names as $name) $sql = preg_replace('/(?<![A-Za-z0-9_.])' . $name . '\b/', $this->prefix . $name, $sql); return $sql; }
@@ -56,8 +57,10 @@ function call(string $method, string $action, array $body = [], array $params = 
     $server = ['REQUEST_METHOD' => $method, 'REMOTE_ADDR' => '10.0.0.7'] + ($https ? ['HTTPS' => 'on'] : []);
     foreach ($headers as $header => $value) $server['HTTP_' . strtoupper(str_replace('-', '_', $header))] = $value;
     $public = in_array($action, ['AuthController@discovery', 'AuthController@issue'], true);
+    // Routes that change nothing although they are not GET, as Routes::register marks them.
+    $options = in_array($action, ['AuthController@revoke', 'ScheduleController@preview'], true) ? ['write' => false] : [];
     try {
-        $response = Http::dispatch(new Request($body, $query, $server), [new ('SLiMS\\Plugins\\Inventory\\Api\\' . $class)(), $name], $params, ['public' => $public, 'route' => $method . ' ' . $action]);
+        $response = Http::dispatch(new Request($body, $query, $server), [new ('SLiMS\\Plugins\\Inventory\\Api\\' . $class)(), $name], $params, ['public' => $public, 'route' => $method . ' ' . $action] + $options);
         return $response instanceof JsonResponse ? ['status' => $response->status, 'body' => $response->body] : ['status' => 200, 'body' => $response];
     } catch (ApiException $e) {
         return ['status' => $e->status, 'code' => $e->errorCode, 'message' => $e->getMessage(), 'details' => $e->details];
@@ -83,7 +86,7 @@ try {
     $db->exec('CREATE TABLE item (item_id INT PRIMARY KEY, item_code VARCHAR(20), item_status_id CHAR(3) NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     $db->exec('CREATE TABLE slims_connect_rate_limits (rate_key CHAR(64) PRIMARY KEY, attempts INT, window_started_at DATETIME, blocked_until DATETIME NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     $db->exec('CREATE TABLE slims_connect_settings (name VARCHAR(64) PRIMARY KEY, value TEXT, updated_at DATETIME) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
-    foreach (['CreateInventoryTables', 'AddSlimsLocationToInventoryLocations', 'CreateInventoryItemPhotos', 'MoveInventoryPhotosToFiles', 'AllowSharedInventoryLocationCodes', 'CreateInventoryItemCodes', 'CreateInventorySupervision', 'CreateInvensyncApi'] as $migration) (new $migration())->up();
+    foreach (['CreateInventoryTables', 'AddSlimsLocationToInventoryLocations', 'CreateInventoryItemPhotos', 'MoveInventoryPhotosToFiles', 'AllowSharedInventoryLocationCodes', 'CreateInventoryItemCodes', 'CreateInventorySupervision', 'CreateInvensyncApi', 'AddFacilityProfileData', 'AllowSeveralItemCategories', 'CreateRoomAreasAndPlans', 'AllowAgentConnections'] as $migration) (new $migration())->up();
     (new CreateInvensyncApi())->up();
     check(true, 'migration 8 is repeatable');
 
@@ -243,6 +246,46 @@ try {
     check($pdf(call('GET', 'ReportController@document', headers: bearer($token), query: ['period' => 'month'])), 'the period report comes as PDF');
     $home = call('GET', 'HomeController@show', headers: bearer($token))['body']['data'];
     check($home['stock_take'] === null && $home['counts']['inspections'] === 0, 'home shows no running stock take and nothing left to inspect');
+
+    // Agent AI: the librarian allows it in SLiMS, Klaras Panel trades the code for a session.
+    Settings::set(Settings::PANEL_URL, 'https://panel.klaras.id');
+    $callback = 'https://panel.klaras.id' . AgentCodes::CALLBACK_PATH;
+    $verifier = bin2hex(random_bytes(32));
+    $challenge = rtrim(strtr(base64_encode(hash('sha256', $verifier, true)), '+/', '-_'), '=');
+    $agentCode = AgentCodes::create($db, 1, 'Claude', $challenge, $callback, time());
+    $exchange = ['grant_type' => 'authorization_code', 'code' => $agentCode, 'code_verifier' => $verifier, 'redirect_uri' => $callback];
+    check(call('POST', 'AuthController@issue', $exchange)['code'] === 'agents_disabled', 'no AI app connects until the administrator allows agents');
+    check(!in_array('authorization_code', call('GET', 'AuthController@discovery')['body']['data']['grant_types'], true), 'discovery offers no agent sign-in while agents are off');
+    AgentCodes::setEnabled($db, true, date('Y-m-d H:i:s'));
+    $discovery = call('GET', 'AuthController@discovery')['body']['data'];
+    check(in_array('authorization_code', $discovery['grant_types'], true) && str_contains((string) $discovery['agent_authorize_url'], 'agent=authorize'), 'discovery tells Klaras Panel where librarians allow AI apps');
+    $agent = call('POST', 'AuthController@issue', $exchange);
+    check($agent['status'] === 200 && $agent['body']['data']['staff']['name'] === 'Rina Wulandari', 'the code becomes a session of the librarian who allowed it');
+    check($db->query('SELECT kind, device_name FROM inventory_api_sessions ORDER BY id DESC LIMIT 1')->fetch(PDO::FETCH_NUM) === ['agent', 'Agent AI · Claude'], 'the session is an agent session named after the app');
+    check(call('POST', 'AuthController@issue', $exchange)['code'] === 'invalid_grant', 'a consent code works once');
+    $agentToken = $agent['body']['data']['access_token'];
+
+    // Checklists, schedules, Rekap Sarpras and custom periods, as an agent asks for them.
+    $templates = call('GET', 'ScheduleController@templates', headers: bearer($agentToken))['body']['data'];
+    check($templates[0]['name'] === 'Checklist sarana v2' && count($templates[0]['items']) === 2, 'checklists are listed with their items');
+    $made = call('POST', 'ScheduleController@storeTemplate', ['name' => 'Checklist ruang referensi', 'items' => [['group' => 'Sarana', 'object' => 'Rak referensi', 'instruction' => 'Periksa sambungan rak']]], headers: bearer($agentToken));
+    check($made['status'] === 201 && $made['body']['data']['items'][0]['object'] === 'Rak referensi', 'an agent makes a checklist');
+    check(call('POST', 'ScheduleController@storeTemplate', ['name' => 'Kosong', 'items' => []], headers: bearer($agentToken))['code'] === 'rejected', 'a checklist without items is refused with the service message');
+    $preview = call('POST', 'ScheduleController@preview', ['frequency' => 'monthly', 'start_date' => '2026-11-02'], headers: bearer($baca));
+    check($preview['status'] === 200 && array_slice($preview['body']['data']['dates'], 0, 2) === ['2026-11-02', '2026-12-02'] && count($preview['body']['data']['dates']) === 5, 'the next dates of a schedule are previewed, by a read-only librarian too');
+    check(call('POST', 'ScheduleController@store', ['room_id' => 2, 'checklist_id' => $made['body']['data']['id'], 'frequency' => 'monthly', 'start_date' => $today, 'assignee_id' => 1], headers: bearer($baca))['code'] === 'read_only', 'a read-only librarian makes no schedule');
+    $schedule = call('POST', 'ScheduleController@store', ['room_id' => 2, 'checklist_id' => $made['body']['data']['id'], 'frequency' => 'monthly', 'start_date' => $today, 'assignee_id' => 1], headers: bearer($agentToken));
+    check($schedule['status'] === 201 && $schedule['body']['data']['schedule']['room']['name'] === 'Ruang referensi' && $schedule['body']['data']['schedule']['frequency']['label'] === 'Bulanan' && $schedule['body']['data']['inspections_formed'] === 1, 'an agent makes a schedule and today\'s inspection is formed');
+    $schedules = call('GET', 'ScheduleController@index', headers: bearer($agentToken))['body']['data'];
+    check(in_array('Ruang referensi', array_column(array_column($schedules, 'room'), 'name'), true), 'the new schedule is listed');
+    $sarpras = call('GET', 'SarprasController@show', headers: bearer($agentToken))['body']['data'];
+    check($sarpras['scope'] === 'location' && $sarpras['library'] === 'P01' && count($sarpras['aspects']) === 11, 'Rekap Sarpras comes for the one library location');
+    check(call('GET', 'SarprasController@show', headers: bearer($agentToken), query: ['library' => 'X99'])['code'] === 'not_found', 'an unknown location is refused');
+    $custom = call('GET', 'ReportController@summary', headers: bearer($agentToken), query: ['from' => date('Y-m-01'), 'to' => date('Y-m-t')])['body']['data'];
+    check($custom['period']['key'] === 'custom' && $custom['findings']['open'] === 2, 'a report covers any period given by dates');
+
+    AgentCodes::setEnabled($db, false, date('Y-m-d H:i:s'));
+    check(call('GET', 'AuthController@me', headers: bearer($agentToken))['code'] === 'unauthenticated' && call('GET', 'AuthController@me', headers: bearer($token))['status'] === 200, 'switching agents off ends agent sessions and leaves phones signed in');
 
     (new \SLiMS\Plugins\Inventory\Api\StaffTokens($db))->revoke((int) $db->query("SELECT MAX(id) FROM inventory_api_sessions WHERE user_id=2")->fetchColumn());
     check(call('GET', 'AuthController@me', headers: bearer($dimas))['code'] === 'unauthenticated', 'a session revoked by the administrator stops at once');

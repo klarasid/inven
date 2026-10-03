@@ -9,9 +9,25 @@ use SlimsConnect\Http\Sendable;
 /** Laporan: the supervision summary for this month, the last three months, or this year. */
 final class ReportController
 {
-    /** @return array{from: string, to: string, library: string, room: int, inspection_status: string, finding_status: string} */
+    /**
+     * A named period (month, quarter, year), or any ?from=&to= dates.
+     *
+     * @return array{from: string, to: string, library: string, room: int, inspection_status: string, finding_status: string}
+     */
     private static function filter(Context $context): array
     {
+        $from = trim($context->request->query('from'));
+        $to = trim($context->request->query('to'));
+        if ($from !== '' || $to !== '') {
+            if ($from === '' || $to === '') {
+                throw ApiException::validation(['from' => ['Isi from dan to bersama, format YYYY-MM-DD.']]);
+            }
+            $filter = $context->watch()->filter(['from' => $from, 'to' => $to]);
+            $filter['inspection_status'] = '';
+            $filter['finding_status'] = '';
+
+            return $filter;
+        }
         $period = $context->request->query('period', 'month');
         $from = match ($period) {
             'month' => date('Y-m-01'),
@@ -37,7 +53,7 @@ final class ReportController
         $findings = $summary['findings'];
 
         return JsonResponse::ok([
-            'period' => ['key' => $context->request->query('period', 'month'), 'from' => $filter['from'], 'to' => $filter['to']],
+            'period' => ['key' => $context->request->query('from') !== '' ? 'custom' : $context->request->query('period', 'month'), 'from' => $filter['from'], 'to' => $filter['to']],
             'inspections' => [
                 'routine_final' => (int) $counts['routine_final'],
                 'late' => (int) $counts['late'] + (int) $summary['unformed_late'],

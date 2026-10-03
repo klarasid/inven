@@ -152,6 +152,19 @@ Untuk mengaktifkan aplikasi:
 
 Petugas masuk dengan akun SLiMS yang memiliki hak **Stock Take**. Anda dapat mencabut sesi satu perangkat atau mematikan aplikasi sepenuhnya dari halaman yang sama.
 
+## Agent AI
+
+Aplikasi AI seperti Claude dapat bekerja di Klaras Inven atas nama petugas: membuat jadwal pemeriksaan dan checklist, menulis laporan kerusakan, merangkum laporan pengawasan dan Rekap Sarpras, serta mencari ruangan dan barang. Aplikasi AI tersambung lewat Klaras Panel; kata sandi SLiMS tidak pernah dimasukkan di aplikasi AI atau di Klaras.
+
+Untuk menyalakannya:
+
+1. Pastikan aplikasi InvenSync sudah diizinkan (bagian sebelumnya).
+2. Di **Stock Take → Aplikasi InvenSync**, klik **Izinkan agent AI**. Langkah ini memerlukan hak tulis System.
+
+Untuk menyambungkan, petugas menambahkan konektor `https://panel.klaras.id/mcp/inven` di aplikasi AI-nya, memilih perpustakaannya, lalu menyetujui permintaan di SLiMS (masuk ke SLiMS bila belum). Aplikasi AI hanya bisa melakukan yang diizinkan hak Stock Take petugas itu, dan semua perubahannya tercatat di log SLiMS atas namanya.
+
+Sesi agent tampil dengan tanda **Agent AI** di daftar perangkat dan dapat dicabut satu per satu. **Matikan agent AI** memutus semua aplikasi AI sekaligus tanpa memengaruhi aplikasi HP.
+
 ## Data pemakaian
 
 Sekali sehari, plugin mengirim ringkasan pemakaian ke Klaras agar plugin gratis ini dapat terus dirawat. Laporan berisi:
@@ -191,6 +204,7 @@ php tests/menu_structure_test.php
 php tests/sarpras_combine_test.php
 php tests/sarpras_categories_test.php
 php tests/room_areas_test.php
+php tests/agent_codes_test.php
 node tests/watch_forms_test.cjs
 ```
 

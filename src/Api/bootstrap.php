@@ -14,8 +14,8 @@ foreach ([
 foreach ([
     'Failure', 'BytesResponse', 'Input', 'Licence', 'Staff', 'StaffAuthenticator', 'StaffTokens', 'Idempotency',
     'Guard', 'Context', 'Http', 'Present',
-    'AuthController', 'HomeController', 'RoomController', 'ItemController', 'TaskController',
-    'StockTakeController', 'ReportController', 'Routes',
+    'AgentCodes', 'AuthController', 'HomeController', 'RoomController', 'ItemController', 'TaskController',
+    'StockTakeController', 'ReportController', 'ScheduleController', 'SarprasController', 'Routes',
 ] as $class) {
     require_once __DIR__ . '/' . $class . '.php';
 }

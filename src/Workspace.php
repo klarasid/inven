@@ -172,15 +172,8 @@ final class Workspace
             $t=$w->row('templates',(int)($g['template_id']??0));return ['items'=>Supervision::decode($t['items']),'assets'=>$w->query('SELECT id,item_name,item_code FROM inventory_items WHERE location_id=? ORDER BY item_name',[$room])->fetchAll(\PDO::FETCH_ASSOC)];
         }
         if($resource==='preview'){
-            // Next occurrences as sync() will form them: moved off SLiMS holidays, skipped for daily schedules.
-            $start=(string)($g['start_date']??date('Y-m-d'));$end=(string)($g['end_date']??'');$frequency=(string)($g['frequency']??'monthly');
-            $dates=[];$moved=[];$holidays=$w->holidays();
-            for($n=0;count($dates)<5&&$n<40;$n++){
-                $raw=WatchRecurrence::at($start,$frequency,$n);if($end!==''&&$raw>$end)break;
-                $date=$holidays->shift($raw,$frequency,$end);if($date===null||in_array($date,$dates,true))continue;
-                $dates[]=$date;if($date!==$raw)$moved[$date]=['from'=>$raw,'reason'=>$holidays->reason($raw)];
-            }
-            return ['dates'=>$dates,'moved'=>(object)$moved];
+            $preview=$w->preview((string)($g['start_date']??date('Y-m-d')),(string)($g['frequency']??'monthly'),(string)($g['end_date']??''));
+            return ['dates'=>$preview['dates'],'moved'=>(object)$preview['moved']];
         }
         if($resource==='reports'){
             $filter=$w->filter($g);$filter['inspection_status']='';$filter['finding_status']='';

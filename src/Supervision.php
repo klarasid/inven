@@ -367,6 +367,21 @@ final class Supervision
         if (!$row) throw new RuntimeException('Foto tidak ditemukan pada pemeriksaan ini.');
         return $this->storage->read($row['filename']);
     }
+    /**
+     * The next five occurrences of a schedule as sync() will form them: moved off SLiMS holidays,
+     * skipped for daily schedules.
+     * @return array{dates:list<string>,moved:array<string,array{from:string,reason:string}>}
+     */
+    public function preview(string $start, string $frequency, string $end=''): array {
+        WatchRecurrence::date($start); if ($end!=='') WatchRecurrence::date($end);
+        $dates=[];$moved=[];$holidays=$this->holidays();
+        for($n=0;count($dates)<5&&$n<40;$n++){
+            $raw=WatchRecurrence::at($start,$frequency,$n);if($end!==''&&$raw>$end)break;
+            $date=$holidays->shift($raw,$frequency,$end===''?null:$end);if($date===null||in_array($date,$dates,true))continue;
+            $dates[]=$date;if($date!==$raw)$moved[$date]=['from'=>$raw,'reason'=>$holidays->reason($raw)];
+        }
+        return ['dates'=>$dates,'moved'=>$moved];
+    }
     public function filter(array $input): array {
         $from=(string)($input['from']??date('Y-m-01')); $to=(string)($input['to']??date('Y-m-t'));
         WatchRecurrence::date($from); WatchRecurrence::date($to);

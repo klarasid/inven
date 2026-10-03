@@ -104,6 +104,9 @@ final class Http
     private static function staff(Request $request, PDO $db): Staff
     {
         $found = (new StaffTokens($db))->authenticate($request->bearerToken());
+        if (($found['session']['kind'] ?? 'app') === AgentCodes::KIND && !AgentCodes::enabled($db)) {
+            throw AgentCodes::disabled();
+        }
 
         return Staff::fromUser($db, $found['user'], (int) $found['session']['id']);
     }

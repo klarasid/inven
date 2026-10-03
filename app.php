@@ -6,7 +6,8 @@
  * Loaded by admin/plugin_container.php, which checks nothing itself, so the session, IP and
  * privilege checks here are the page's only protection. The page itself is the React workspace
  * (view "invensync"); it reads ?format=json and posts its actions back here as JSON. Switching the app on and ending other
- * people's sessions needs System write access, not only Stock Take.
+ * people's sessions needs System write access, not only Stock Take. So does allowing AI apps
+ * (Api\AgentCodes), whose consent page is also served from here (?agent=authorize).
  */
 defined('INDEX_AUTH') || die('Direct access not allowed!');
 
@@ -14,6 +15,11 @@ require LIB . 'ip_based_access.inc.php';
 do_checkIP('smc');
 do_checkIP('smc-stocktake');
 require SB . 'admin/default/session.inc.php';
+// An AI app asking, through Klaras Panel, to work as the signed-in librarian: a page of its own.
+if (($_GET['agent'] ?? '') === 'authorize') {
+    require __DIR__ . '/src/AgentConsent.php';
+    exit;
+}
 require SB . 'admin/default/session_check.inc.php';
 
 if (!utility::havePrivilege('stock_take', 'r')) {
@@ -46,7 +52,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     try {
         $action = (string) ($_POST['action'] ?? '');
-        if ($action === 'enable' || $action === 'disable') {
+        if ($action === 'agents_enable' || $action === 'agents_disable') {
+            $enable = $action === 'agents_enable';
+            \SLiMS\Plugins\Inventory\Api\AgentCodes::setEnabled($db, $enable, date('Y-m-d H:i:s'));
+            writeLog('staff', (string) $_SESSION['uid'], 'Klaras InvenSync', $enable ? 'Agent AI diizinkan.' : 'Agent AI dimatikan; semua sesinya dicabut.', 'stock_take', 'Update');
+            $json(['ok' => true, 'message' => $enable ? 'Agent AI diizinkan.' : 'Agent AI dimatikan. Semua aplikasi AI yang tersambung harus diizinkan lagi.']);
+        } elseif ($action === 'enable' || $action === 'disable') {
             $enable = $action === 'enable';
             \SLiMS\Plugins\Inventory\Api\Guard::setEnabled($db, $enable);
             writeLog('staff', (string) $_SESSION['uid'], 'Klaras InvenSync', $enable ? 'Aplikasi InvenSync diizinkan.' : 'Aplikasi InvenSync dimatikan.', 'stock_take', 'Update');
@@ -67,6 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 if (($_GET['format'] ?? '') === 'json') {
     $enabled = false;
+    $agents = false;
     $linked = false;
     $licensed = false;
     $sessions = [];
@@ -74,6 +86,7 @@ if (($_GET['format'] ?? '') === 'json') {
     if ($connectReady) {
         try {
             $enabled = \SLiMS\Plugins\Inventory\Api\Guard::enabled($db);
+            $agents = \SLiMS\Plugins\Inventory\Api\AgentCodes::enabled($db);
             $linked = \SLiMS\Plugins\Inventory\Api\Licence::linked();
             $licensed = $linked && \SLiMS\Plugins\Inventory\Api\Licence::allows();
             $sessions = array_map(static function (array $row): array {
@@ -84,6 +97,7 @@ if (($_GET['format'] ?? '') === 'json') {
                     'ip' => (string) $row['ip'],
                     'created_at' => (string) $row['created_at'],
                     'last_used_at' => (string) $row['last_used_at'],
+                    'agent' => ($row['kind'] ?? 'app') === \SLiMS\Plugins\Inventory\Api\AgentCodes::KIND,
                 ];
             }, (new \SLiMS\Plugins\Inventory\Api\StaffTokens($db))->active());
         } catch (Throwable $error) {
@@ -92,7 +106,7 @@ if (($_GET['format'] ?? '') === 'json') {
         }
     }
     $json(['ok' => true, 'data' => [
-        'connect' => $connectReady, 'linked' => $linked, 'licensed' => $licensed, 'enabled' => $enabled,
+        'connect' => $connectReady, 'linked' => $linked, 'licensed' => $licensed, 'enabled' => $enabled, 'agents' => $agents,
         'sessions' => $sessions, 'problem' => $problem,
         'manage' => $canManage, 'csrf' => $canManage ? $_SESSION['invensync_csrf'] : '',
     ]]);

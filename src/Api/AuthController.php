@@ -15,7 +15,9 @@ final class AuthController
         return JsonResponse::ok([
             'api_version' => self::API_VERSION,
             'library_name' => Context::libraryName(),
-            'grant_types' => ['password', 'refresh_token'],
+            'grant_types' => AgentCodes::enabled($context->db) ? ['password', 'refresh_token', 'authorization_code'] : ['password', 'refresh_token'],
+            // Where a librarian allows an AI app; Klaras Panel sends them here (see AgentCodes).
+            'agent_authorize_url' => AgentCodes::enabled($context->db) ? AgentCodes::authorizeUrl() : null,
         ]);
     }
 
@@ -27,10 +29,16 @@ final class AuthController
 
         if ($grant === 'refresh_token') {
             $refreshed = $tokens->refresh($input->required('refresh_token', 200), $context->request->ip());
+            if ($refreshed['kind'] === AgentCodes::KIND && !AgentCodes::enabled($context->db)) {
+                throw AgentCodes::disabled();
+            }
             $staff = Staff::fromUser($context->db, $refreshed['user'], $refreshed['session_id']);
             $this->assertCanUseApp($staff);
 
             return JsonResponse::ok([...$refreshed['tokens'], 'staff' => $staff->toArray()]);
+        }
+        if ($grant === 'authorization_code') {
+            return $this->agent($context, $input, $tokens);
         }
         if ($grant !== 'password') {
             throw new ApiException('unsupported_grant_type', 'Jenis masuk tidak dikenal.', 400);
@@ -46,6 +54,31 @@ final class AuthController
         $this->assertCanUseApp($staff);
         $issued = $tokens->issue($user, $input->string('device_name', 100, 'Perangkat'), $context->request->ip(), $input->bool('remember', true));
         $context->log('Masuk ke Klaras InvenSync dari ' . $input->string('device_name', 100, 'perangkat') . '.', 'Login');
+
+        return JsonResponse::ok([...$issued, 'staff' => $staff->toArray()]);
+    }
+
+    /** An AI app the librarian allowed on this SLiMS, connecting through Klaras Panel. */
+    private function agent(Context $context, Input $input, StaffTokens $tokens): JsonResponse
+    {
+        if (!AgentCodes::enabled($context->db)) {
+            throw AgentCodes::disabled();
+        }
+        try {
+            $grant = AgentCodes::redeem($context->db, $input->required('code', 64), $input->required('code_verifier', 128), $input->required('redirect_uri', 500), time());
+        } catch (\RuntimeException $error) {
+            throw new ApiException('invalid_grant', $error->getMessage(), 400);
+        }
+        $statement = $context->db->prepare('SELECT * FROM user WHERE user_id = ?');
+        $statement->execute([$grant['user_id']]);
+        $user = $statement->fetch(\PDO::FETCH_ASSOC);
+        if (!$user || (string) ($user['is_active'] ?? '1') !== '1') {
+            throw new ApiException('invalid_grant', 'Akun SLiMS yang memberi izin tidak aktif lagi.', 400);
+        }
+        $staff = Staff::fromUser($context->db, $user);
+        $this->assertCanUseApp($staff);
+        $issued = $tokens->issue($user, 'Agent AI · ' . $grant['client'], $context->request->ip(), true, AgentCodes::KIND);
+        $context->log('Agent AI ' . $grant['client'] . ' dihubungkan atas nama ' . $staff->name . '.', 'Login');
 
         return JsonResponse::ok([...$issued, 'staff' => $staff->toArray()]);
     }
