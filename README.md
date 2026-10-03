@@ -186,7 +186,7 @@ Sesi agent tampil dengan tanda **Agent AI** di daftar perangkat dan dapat dicabu
 Sekali sehari, plugin mengirim ringkasan pemakaian ke Klaras agar plugin gratis ini dapat terus dirawat. Laporan berisi:
 
 - Nama perpustakaan dan alamat SLiMS.
-- Versi plugin, SLiMS, PHP, dan database.
+- Versi plugin, SLiMS Connect, SLiMS, PHP, dan database.
 - Jumlah ruangan, barang, pemeriksaan, temuan, dan sesi stock opname.
 - Jumlah data Rekap Sarpras yang sudah diisi: ruangan yang memiliki luas dan area, barang yang berkategori, aplikasi di Perangkat Lunak, dan lokasi yang mengisi Gedung & Jaringan.
 - Kemajuan Sivitas per Lokasi: jumlah institusi dan tipe anggota yang sudah dipetakan, jumlah perbaikan institusi, dan apakah lokasi bawaan diisi. Jumlah anggota, nama institusi, dan lokasinya tidak dikirim.

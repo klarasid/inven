@@ -72,8 +72,11 @@ try {
         Telemetry::error('db', $error);
     }
 
+    check(Telemetry::report($db)['environment']['slims_connect_version'] === null, 'without SLiMS Connect, its version is null');
+    eval('namespace SlimsConnect; final class Plugin { public const VERSION = "0.1.5"; }');
     $report = Telemetry::report($db);
     $json = json_encode($report);
+    check($report['environment']['slims_connect_version'] === '0.1.5', 'the report carries the SLiMS Connect version');
     check($report['library']['name'] === 'Perpustakaan Uji Telemetri' && $report['library']['site_url'] === 'https://perpus.example.id/slims/', 'the report names the library and its address');
     check($report['stats']['rooms'] === 2 && $report['stats']['items'] === 2 && $report['stats']['items_poor'] === 1 && $report['stats']['findings_open'] === 1 && $report['stats']['stock_take_active'] === 1, 'the report counts rooms, items, findings and the running stock take');
     check($report['features']['kir_pdf'] === 2 && !isset($report['features']['not_a_feature']) && $report['features']['damage_reports'] === 1, 'features are counted, unknown ones ignored');

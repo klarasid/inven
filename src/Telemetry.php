@@ -7,8 +7,8 @@ use PDO;
 /**
  * The daily usage report this plugin sends to Klaras, which keeps it working for every library.
  *
- * What is sent: the library's name and SLiMS address, versions of the plugin, SLiMS, PHP and the
- * database, counts (rooms, items by condition, inspections, findings, stock take sessions, and how
+ * What is sent: the library's name and SLiMS address, versions of the plugin, SLiMS Connect, SLiMS,
+ * PHP and the database, counts (rooms, items by condition, inspections, findings, stock take sessions, and how
  * much of the data behind Rekap Sarpras is filled in: rooms with an area or a function, items with
  * a category, software in the register, locations with building figures, how many Institusi
  * values and member types are placed at a location and how many Institusi merges stand), whether
@@ -195,6 +195,14 @@ final class Telemetry
         }
     }
 
+    /** SLiMS Connect's version, or null where it is not installed or cannot load (PHP before 8.1). */
+    private static function slimsConnectVersion(): ?string
+    {
+        if (!class_exists('SlimsConnect\\Plugin') || !defined('SlimsConnect\\Plugin::VERSION')) return null;
+        $version = (string) constant('SlimsConnect\\Plugin::VERSION');
+        return preg_match('/\A[0-9A-Za-z.+-]{1,32}\z/', $version) === 1 ? $version : null;
+    }
+
     /** 1 when Sivitas per Lokasi has a default location, else 0: whether, never which. */
     private static function defaultLocationSet(PDO $db): int
     {
@@ -287,6 +295,8 @@ final class Telemetry
             ],
             'environment' => [
                 'plugin_version' => $plugin['version'],
+                // InvenSync, Agent AI and how fast a plan change arrives depend on it (0.1.5 and later).
+                'slims_connect_version' => self::slimsConnectVersion(),
                 'slims_version' => defined('SENAYAN_VERSION_TAG') ? substr((string) SENAYAN_VERSION_TAG, 0, 32) : null,
                 'php_version' => PHP_VERSION,
                 'db_version' => $dbVersion,
