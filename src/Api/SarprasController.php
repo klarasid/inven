@@ -8,6 +8,8 @@ use SlimsConnect\Http\JsonResponse;
 /**
  * Rekap Sarpras: the facility aspects of one library location, or of the institution when the
  * rooms are spread over several. Read only, computed as the Rekap Sarpras page computes it.
+ * An aspect's rows are its detail as the page tables it: the rooms with their size or their
+ * areas for one location, the locations when the scope is the institution.
  */
 final class SarprasController
 {
@@ -40,6 +42,8 @@ final class SarprasController
                 'level' => $aspect['level'] === null ? null : ['key' => $aspect['level'], 'label' => $levels[$aspect['level']]],
                 'basis' => $aspect['basis'],
                 'checks' => $aspect['checks'],
+                'columns' => $aspect['columns'],
+                'rows' => $aspect['rows'],
                 'fix' => $aspect['fix'],
             ], $recap['aspects']),
         ]);
