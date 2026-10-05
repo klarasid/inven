@@ -293,6 +293,19 @@ try {
     check($sarpras['aspects'][0]['columns'] === ['Ruangan', 'Luas'] && $sarpras['aspects'][0]['rows'] === [['Ruang baca umum', '120,50 m²'], ['Ruang referensi', '—']], 'the size of each room comes with the building aspect');
     check($sarpras['aspects'][1]['rows'] === [['Ruang baca umum', 'Area baca, Area literasi / pojok baca (Pojok baca)'], ['Ruang referensi', '—']], 'the areas of each room come with the service area aspect');
 
+    // Floor plans, as an agent lists and fetches them.
+    check(call('GET', 'PlanController@index', headers: bearer($agentToken))['body']['data'] === [], 'no plans are listed before one is uploaded');
+    $planFile = 'denah-' . str_repeat('ab', 16) . '.png';
+    mkdir(\SLiMS\Plugins\Inventory\RoomPlans::directory(), 0700, true);
+    file_put_contents(\SLiMS\Plugins\Inventory\RoomPlans::directory() . '/' . $planFile, "\x89PNG plan");
+    $db->prepare('INSERT INTO inventory_room_plans (location_id, title, filename, mime, created_by, created_at) VALUES (2, ?, ?, ?, 1, NOW())')->execute(['Denah lantai 1', $planFile, 'image/png']);
+    $plans = call('GET', 'PlanController@index', headers: bearer($baca))['body']['data'];
+    check(count($plans) === 1 && $plans[0]['title'] === 'Denah lantai 1' && $plans[0]['type'] === 'png' && $plans[0]['room'] === ['id' => 2, 'name' => 'Ruang referensi'], 'plans are listed with their room, to a read-only librarian too');
+    $plan = call('GET', 'PlanController@show', params: [$plans[0]['id']], headers: bearer($agentToken))['body'];
+    check($plan instanceof \SLiMS\Plugins\Inventory\Api\BytesResponse && $plan->bytes === "\x89PNG plan" && $plan->mimeType === 'image/png' && $plan->filename === 'denah-lantai-1.png', 'a plan comes as the file that was uploaded');
+    check(call('GET', 'PlanController@show', params: [999], headers: bearer($agentToken))['code'] === 'not_found', 'an unknown plan is not found');
+    check(call('GET', 'PlanController@index')['code'] === 'unauthenticated', 'plans need a session');
+
     // Sivitas on MySQL, whose text comparisons ignore case: spellings are still told apart.
     $db->exec("INSERT INTO mst_member_type VALUES (1, 'Mahasiswa')");
     $db->exec("INSERT INTO member VALUES ('A1', 1, 'Gizi', 0, '2099-01-01', NULL), ('A2', 1, 'gizi', 0, '2099-01-01', NULL), ('A3', 1, 'Gizi', 1, '2099-01-01', NULL)");

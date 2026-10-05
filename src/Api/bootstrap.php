@@ -7,14 +7,14 @@
  */
 foreach ([
     'PhotoStorage', 'ItemPhotos', 'ItemCodes', 'PublicLink', 'Holidays', 'WatchRecurrence', 'Supervision',
-    'Workspace', 'UpdateCheck', 'Telemetry', 'Inventory', 'StockTake', 'Documents',
+    'Workspace', 'UpdateCheck', 'Telemetry', 'Inventory', 'StockTake', 'Documents', 'RoomPlans',
 ] as $class) {
     require_once dirname(__DIR__) . '/' . $class . '.php';
 }
 foreach ([
     'Failure', 'BytesResponse', 'Input', 'Licence', 'Staff', 'StaffAuthenticator', 'StaffTokens', 'Idempotency',
     'Guard', 'Context', 'Http', 'Present',
-    'AgentCodes', 'AuthController', 'HomeController', 'RoomController', 'ItemController', 'TaskController',
+    'AgentCodes', 'AuthController', 'HomeController', 'RoomController', 'PlanController', 'ItemController', 'TaskController',
     'StockTakeController', 'ReportController', 'ScheduleController', 'SarprasController', 'Routes',
 ] as $class) {
     require_once __DIR__ . '/' . $class . '.php';

@@ -34,6 +34,17 @@ final class RoomPlans
         return array_map(static fn(array $row): array => ['id' => (int) $row['id'], 'title' => (string) $row['title'], 'mime' => (string) $row['mime'], 'created_at' => (string) $row['created_at']], $query->fetchAll(PDO::FETCH_ASSOC));
     }
 
+    /**
+     * The plans of every room, by room name. A library has tens of rooms, not thousands.
+     *
+     * @return list<array{id:int,title:string,mime:string,created_at:string,room_id:int,room_name:string}>
+     */
+    public static function all(PDO $db): array
+    {
+        $rows = $db->query('SELECT p.id, p.title, p.mime, p.created_at, l.id AS room_id, l.room_name FROM inventory_room_plans p JOIN inventory_locations l ON l.id = p.location_id ORDER BY l.room_name, l.id, p.id LIMIT 2000')->fetchAll(PDO::FETCH_ASSOC);
+        return array_map(static fn(array $row): array => ['id' => (int) $row['id'], 'title' => (string) $row['title'], 'mime' => (string) $row['mime'], 'created_at' => (string) $row['created_at'], 'room_id' => (int) $row['room_id'], 'room_name' => (string) $row['room_name']], $rows);
+    }
+
     /** The kind of file at $path, read from its content: one of TYPES, or refused. */
     public static function mime(string $path): string
     {

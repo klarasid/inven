@@ -36,6 +36,9 @@ final class Routes
         $map('GET', '/rooms/[i:id]/documents/kir', [RoomController::class, 'kir']);
         $map('GET', '/rooms/[i:id]/documents/labels', [RoomController::class, 'labels']);
 
+        $map('GET', '/plans', [PlanController::class, 'index']);
+        $map('GET', '/plans/[i:id]', [PlanController::class, 'show']);
+
         $map('GET', '/items/lookup', [ItemController::class, 'lookup']);
         $map('POST', '/items/code', [ItemController::class, 'reserveCode']);
         $map('POST', '/items', [ItemController::class, 'store']);
