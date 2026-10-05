@@ -306,6 +306,16 @@ try {
         && call('GET', 'CatalogController@summary', headers: bearer($agentToken), query: ['photos' => 'semua'])['code'] === 'validation_failed'
         && call('GET', 'CatalogController@document', headers: bearer($agentToken), query: ['library' => 'X99'])['details']['fields']['library'][0] === 'Lokasi perpustakaan tidak ditemukan. Pilih salah satu: P01.', 'an unknown grouping, category or location is refused, saying what to choose');
 
+    // The software register, as an agent asks for it.
+    $db->exec("INSERT INTO inventory_software (name, version, purpose, licence, licence_ref, valid_until, installs, created_at, updated_at) VALUES ('Windows 11 Pro', '23H2', 'Sistem operasi', 'komersial', 'KUNCI-RAHASIA-123', NULL, 12, NOW(), NOW()), ('Photoshop', 'CS6', '', 'tidak', '', NULL, 2, NOW(), NOW())");
+    $register = call('GET', 'SoftwareController@index', headers: bearer($baca));
+    check($register['body']['data']['summary'] === ['applications' => 2, 'licensed' => 1, 'percent' => 50.0] && $register['body']['data']['software'][0]['name'] === 'Windows 11 Pro'
+        && $register['body']['data']['software'][0]['purpose'] === 'Sistem operasi' && $register['body']['data']['software'][0]['licence'] === ['key' => 'komersial', 'label' => 'Komersial (berbayar)']
+        && $register['body']['data']['software'][0]['licensed'] === true && $register['body']['data']['software'][1]['licensed'] === false, 'the software register comes with each application\'s use and licence, to a read-only librarian too');
+    check($register['body']['data']['software'][0]['has_licence_reference'] === true && !str_contains((string) json_encode($register['body']), 'KUNCI-RAHASIA-123'), 'the licence number itself stays out of what an AI app reads');
+    check($pdf(call('GET', 'SoftwareController@document', headers: bearer($agentToken))), 'the software register comes as PDF');
+    $db->exec('DELETE FROM inventory_software');
+
     // What shows the library's internet: the figures, their evidence, and the network documents.
     $network = call('GET', 'NetworkController@index', headers: bearer($agentToken))['body']['data'];
     check(count($network['locations']) === 1 && $network['locations'][0]['code'] === 'P01' && $network['locations'][0]['evidence'] === null && $network['locations'][0]['documents'] === [] && $network['kinds']['wifi'] === 'Peta jangkauan Wi-Fi',

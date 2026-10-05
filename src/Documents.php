@@ -142,6 +142,22 @@ final class Documents
     }
 
     /**
+     * Daftar perangkat lunak: the software register by use, with each application's licence.
+     *
+     * @return array{filename: string, bytes: string, count: int}
+     */
+    public function software(string $printedBy): array
+    {
+        self::ensureRuntime();
+        require_once __DIR__ . '/SoftwareList.php';
+        $list = SoftwareList::build($this->db, date('Y-m-d'));
+        $pdf = PdfLayout::mpdf($this->tempDir, 'Daftar Perangkat Lunak', PdfLayout::footer('Daftar perangkat lunak'));
+        $pdf->WriteHTML(SoftwareList::html($list, ['printed_by' => $printedBy]));
+
+        return ['filename' => 'daftar-perangkat-lunak.pdf', 'bytes' => $pdf->Output('', 'S'), 'count' => $list['applications']];
+    }
+
+    /**
      * The supervision report for a period, as the admin Reports page prints it.
      *
      * @param  array{from: string, to: string, library: string, room: int, inspection_status: string, finding_status: string}  $filter

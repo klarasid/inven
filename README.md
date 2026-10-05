@@ -223,6 +223,7 @@ php tests/sarpras_combine_test.php
 php tests/sarpras_categories_test.php
 php tests/inventory_catalog_test.php
 php tests/network_documents_test.php
+php tests/software_list_test.php
 php tests/room_areas_test.php
 php tests/agent_codes_test.php
 php tests/sivitas_test.php
