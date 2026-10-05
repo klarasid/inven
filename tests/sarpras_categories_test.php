@@ -80,4 +80,11 @@ $sivitasCheck = static fn (array $recap): bool => array_column(array_values(arra
 check(!$sivitasCheck($recap), 'tanpa anggota aktif, belum ada sivitas');
 $db->exec("INSERT INTO member VALUES ('A1', 1, 'Gizi', 0, '2099-01-01'), ('A2', 1, 'Gizi', 1, '2099-01-01')");
 check($sivitasCheck(Sarpras::recap($db, new Supervision($db, new PhotoStorage(sys_get_temp_dir() . '/inventory-test-unused')))), 'anggota aktif dihitung sebagai sivitas di rekap');
+// Supporting areas named by the accreditation instrument, and the open ones among them.
+$db->exec("INSERT INTO inventory_locations (id, room_name) VALUES (3, 'Halaman')");
+$db->exec("INSERT INTO inventory_room_areas (location_id, type) VALUES (3, 'gazebo'), (3, 'taman_baca'), (3, 'taman_literasi'), (2, 'disabilitas')");
+$open = array_column(Sarpras::recap($db, new Supervision($db, new PhotoStorage(sys_get_temp_dir() . '/inventory-test-unused')))['aspects'], null, 'no');
+$aspect = static fn (int $no): array => $open[$no];
+check(str_ends_with($aspect(2)['value'], '4 area pendukung') && in_array(['Halaman', 'Gazebo, Taman baca, Taman literasi'], $aspect(2)['rows'], true), 'ruang disabilitas, gazebo, taman baca, dan taman literasi dihitung sebagai area pendukung');
+check(array_column($aspect(5)['checks'], 'label') === ['Komputer di area baca', 'Komputer di area koleksi', 'Komputer di ruang layanan disabilitas'] && str_contains($aspect(5)['basis'], '1 dari 3 fungsi layanan'), 'area terbuka tidak dituntut memiliki komputer');
 echo "ok   done\n";

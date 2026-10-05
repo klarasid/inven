@@ -37,7 +37,8 @@ final class Sarpras
 
     /**
      * Kinds of area a room may hold (RoomAreas): the four basic service areas, supporting ones,
-     * and public facilities, which are rooms or areas rather than items.
+     * and public facilities, which are rooms or areas rather than items. An open area (a gazebo,
+     * a garden) is a supporting area out of doors: no computer is expected to stand in it.
      */
     public const AREA_TYPES = [
         'koleksi' => ['label' => 'Area koleksi', 'group' => 'dasar'],
@@ -49,6 +50,10 @@ final class Sarpras
         'belajar' => ['label' => 'Ruang belajar mandiri / carrel', 'group' => 'pendukung'],
         'seminar' => ['label' => 'Ruang seminar / pertemuan', 'group' => 'pendukung'],
         'literasi' => ['label' => 'Area literasi / pojok baca', 'group' => 'pendukung'],
+        'disabilitas' => ['label' => 'Ruang layanan disabilitas', 'group' => 'pendukung'],
+        'gazebo' => ['label' => 'Gazebo', 'group' => 'pendukung', 'open' => true],
+        'taman_baca' => ['label' => 'Taman baca', 'group' => 'pendukung', 'open' => true],
+        'taman_literasi' => ['label' => 'Taman literasi', 'group' => 'pendukung', 'open' => true],
         'pimpinan' => ['label' => 'Ruang pimpinan / administrasi', 'group' => 'pendukung'],
         'gudang' => ['label' => 'Ruang penyimpanan / gudang', 'group' => 'pendukung'],
         'lainnya' => ['label' => 'Area pendukung lainnya', 'group' => 'pendukung'],
@@ -530,14 +535,15 @@ final class Sarpras
 
         // 5. Komputer per fungsi layanan
         $withComputer = $served(['komputer']);
-        $computerPct = self::pct(count(array_intersect($withComputer, $present)), count($present));
+        $indoor = array_values(array_filter($present, static fn($code) => empty(self::AREA_TYPES[$code]['open'])));
+        $computerPct = self::pct(count(array_intersect($withComputer, $indoor)), count($indoor));
         $computers = count(array_filter($items, static fn($i) => in_array('komputer', $i['categories'], true)));
         $aspects[] = [
             'no' => 5, 'section' => 'Perangkat TI dan multimedia', 'title' => 'Komputer untuk mendukung fungsi layanan',
             'value' => $computerPct === null ? 'Belum ada area layanan' : self::fmt($computerPct, 1) . '% fungsi layanan',
-            'level' => $computers === 0 ? ($present ? 'd' : null) : self::percentLevel($computerPct),
-            'basis' => "$computers komputer; " . count(array_intersect($withComputer, $present)) . ' dari ' . count($present) . ' fungsi layanan memiliki komputer yang berfungsi.',
-            'checks' => array_map(static fn($code) => ['label' => 'Komputer di ' . $place($code), 'ok' => in_array($code, $withComputer, true)], $present),
+            'level' => $computers === 0 ? ($indoor ? 'd' : null) : self::percentLevel($computerPct),
+            'basis' => "$computers komputer; " . count(array_intersect($withComputer, $indoor)) . ' dari ' . count($indoor) . ' fungsi layanan memiliki komputer yang berfungsi.',
+            'checks' => array_map(static fn($code) => ['label' => 'Komputer di ' . $place($code), 'ok' => in_array($code, $withComputer, true)], $indoor),
             'rows' => [], 'columns' => [],
             'fix' => 'Beri kategori Komputer pada PC dan laptop layanan, lalu pastikan area ruangannya tercatat di tab Area.',
             'sources' => ['inventory'],
