@@ -75,6 +75,7 @@ check(str_starts_with($aspect(5)['basis'], '2 komputer;') && str_contains($aspec
 check(array_column($aspect(5)['checks'], 'ok', 'label') == ['Komputer di area baca' => true, 'Komputer di area koleksi' => false], 'komputer yang rusak berat tidak melayani fungsi ruangannya');
 check($aspect(7)['value'] === '2 jenis' && $aspect(7)['rows'] === [['PC', '1'], ['Proyektor', '1']], 'barang yang sama juga dihitung sebagai perangkat multimedia');
 check($aspect(4)['basis'] !== '' && str_starts_with($aspect(4)['basis'], '1 barang'), 'kategori lain tidak ikut terhitung');
+check($aspect(4)['columns'] === ['Area', 'Perabot dan peralatan'] && $aspect(4)['rows'] === [['Area baca', '—'], ['Area koleksi', 'Meja (1)']], 'perabot dan peralatan dirinci per area ruangannya');
 check($recap['counts']['uncategorized'] === 1 && $recap['counts']['items'] === 5, 'hanya barang tanpa kategori yang dihitung belum berkategori');
 // Sivitas comes from SLiMS's active members, not from a figure typed in.
 $sivitasCheck = static fn (array $recap): bool => array_column(array_values(array_filter($recap['aspects'], static fn ($a) => $a['no'] === 1))[0]['checks'], 'ok', 'label')['Ada sivitas (anggota aktif) yang dilayani'];

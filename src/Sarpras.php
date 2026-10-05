@@ -399,12 +399,12 @@ final class Sarpras
         return mb_strtolower($type !== '' ? $type : trim((string) $item['item_name']));
     }
 
-    /** Distinct types among working items (not Rusak berat) of a category: type => item count. */
-    private static function types(array $items, string $category): array
+    /** Distinct types among working items (not Rusak berat) of a category, or of any of several: type => item count. */
+    private static function types(array $items, string ...$categories): array
     {
         $types = [];
         foreach ($items as $item) {
-            if (!in_array($category, $item['categories'], true) || $item['item_condition'] === 'RB') continue;
+            if (!array_intersect($item['categories'], $categories) || $item['item_condition'] === 'RB') continue;
             $key = self::typeKey($item);
             $label = trim((string) $item['item_type']) !== '' ? trim((string) $item['item_type']) : trim((string) $item['item_name']);
             $types[$key] ??= ['type' => $label, 'count' => 0];
@@ -520,6 +520,11 @@ final class Sarpras
 
         // 4. Perabot dan peralatan
         [$fBasic, $fSupport] = $split($served(['perabot', 'peralatan']));
+        // Which furniture and equipment each area has: the working items in the rooms that hold the area.
+        $furnitureIn = static function (string $code) use ($items, $roomFunctions): string {
+            $inArea = array_filter($items, static fn($i) => in_array($code, $roomFunctions[(int) $i['location_id']] ?? [], true));
+            return implode(', ', array_map(static fn($t) => $t['type'] . ' (' . $t['count'] . ')', self::types($inArea, 'perabot', 'peralatan'))) ?: '—';
+        };
         $furnished = count(array_filter($items, static fn($i) => (bool) array_intersect($i['categories'], ['perabot', 'peralatan'])));
         $aspects[] = [
             'no' => 4, 'section' => 'Perabot dan peralatan', 'title' => 'Perabot dan peralatan per fungsi layanan',
@@ -531,7 +536,8 @@ final class Sarpras
                 array_map(static fn($code) => ['label' => 'Perabot atau peralatan di ' . $place($code), 'ok' => in_array($code, $fBasic, true)], array_keys(array_filter(self::AREA_TYPES, static fn($f) => $f['group'] === 'dasar'))),
                 [['label' => 'Lebih dari 4 fungsi pendukung' . ($fSupport ? ': ' . implode(', ', array_map($label, $fSupport)) : ''), 'ok' => count($fSupport) > 4]]
             ),
-            'rows' => [], 'columns' => [],
+            'rows' => array_map(static fn($code) => [$label($code), $furnitureIn($code)], $present),
+            'columns' => ['Area', 'Perabot dan peralatan'],
             'fix' => 'Beri kategori Perabot atau Peralatan pada barang, dan catat area ruangannya di tab Area.',
             'sources' => ['inventory'],
         ];
