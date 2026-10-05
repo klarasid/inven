@@ -23,39 +23,55 @@ require_once __DIR__ . '/Sarpras.php';
 final class InventoryCatalog
 {
     public const MAX_ITEMS = 500;
+    public const MAX_PHOTOS = 500;
     public const GROUPINGS = ['category' => 'Kategori', 'area' => 'Area'];
+    /** How many photos of an item are printed: its first, or all of them (a photo of it in use among them). */
+    public const PHOTOS = ['first' => 'Satu foto per barang', 'all' => 'Semua foto'];
     private const THUMBNAIL = 320;
 
     /**
      * @param  list<string>  $categories  Sarpras::CATEGORIES codes to keep; none keeps every item
-     * @return array{group:string,library:string,categories:list<string>,items:int,with_photos:int,groups:list<array{label:string,items:list<array<string,mixed>>}>}
+     * @return array{group:string,library:string,categories:list<string>,photos:string,items:int,with_photos:int,photo_count:int,groups:list<array{label:string,items:list<array<string,mixed>>}>}
      */
-    public static function build(PDO $db, string $group, array $categories, string $library = ''): array
+    public static function build(PDO $db, string $group, array $categories, string $library = '', string $photos = 'first'): array
     {
         if (!isset(self::GROUPINGS[$group])) throw new RuntimeException('Pilih pengelompokan menurut kategori atau area.');
+        if (!isset(self::PHOTOS[$photos])) throw new RuntimeException('Pilih satu foto per barang atau semua foto.');
         if (array_diff($categories, array_keys(Sarpras::CATEGORIES))) throw new RuntimeException('Kategori barang tidak valid.');
         $categories = array_values(array_filter(array_keys(Sarpras::CATEGORIES), static fn($code) => in_array($code, $categories, true)));
 
-        $query = $db->prepare('SELECT i.id, i.location_id, i.item_name, i.brand_model, i.item_code, i.quantity_register, i.item_condition, i.category, i.item_type, l.room_name,'
-            . ' (SELECT p.filename FROM inventory_item_photos p WHERE p.item_id = i.id AND p.filename IS NOT NULL ORDER BY p.id LIMIT 1) AS photo'
-            . ' FROM inventory_items i JOIN inventory_locations l ON l.id = i.location_id' . ($library === '' ? '' : ' WHERE l.slims_location_id = ?')
-            . ' ORDER BY i.item_name, i.item_code, i.id');
-        $query->execute($library === '' ? [] : [$library]);
+        $where = $library === '' ? '' : ' WHERE l.slims_location_id = ?';
+        $args = $library === '' ? [] : [$library];
+        $query = $db->prepare('SELECT p.item_id, p.filename FROM inventory_item_photos p JOIN inventory_items i ON i.id = p.item_id JOIN inventory_locations l ON l.id = i.location_id'
+            . ($where === '' ? ' WHERE' : $where . ' AND') . ' p.filename IS NOT NULL ORDER BY p.item_id, p.id');
+        $query->execute($args);
+        $filenames = [];
+        foreach ($query->fetchAll(PDO::FETCH_ASSOC) as $row) $filenames[(int) $row['item_id']][] = (string) $row['filename'];
+
+        $query = $db->prepare('SELECT i.id, i.location_id, i.item_name, i.brand_model, i.item_code, i.quantity_register, i.item_condition, i.category, i.item_type, l.room_name'
+            . ' FROM inventory_items i JOIN inventory_locations l ON l.id = i.location_id' . $where . ' ORDER BY i.item_name, i.item_code, i.id');
+        $query->execute($args);
         $items = [];
         foreach ($query->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $row['categories'] = Sarpras::categoryCodes($row['category']);
             if ($categories && !array_intersect($row['categories'], $categories)) continue;
+            $row['photos'] = array_slice($filenames[(int) $row['id']] ?? [], 0, $photos === 'all' ? null : 1);
             $items[] = $row;
         }
         if (count($items) > self::MAX_ITEMS) {
             throw new RuntimeException('Daftar memuat lebih dari ' . self::MAX_ITEMS . ' barang. Saring menurut kategori atau lokasi perpustakaan.');
         }
+        $photoCount = array_sum(array_map(static fn($item) => count($item['photos']), $items));
+        if ($photoCount > self::MAX_PHOTOS) {
+            throw new RuntimeException('Daftar memuat lebih dari ' . self::MAX_PHOTOS . ' foto. Saring menurut kategori atau lokasi perpustakaan, atau cetak satu foto per barang.');
+        }
 
         $groups = $group === 'area' ? self::byArea($db, $items, $library) : self::byCategory($items, $categories);
         return [
-            'group' => $group, 'library' => $library, 'categories' => $categories,
+            'group' => $group, 'library' => $library, 'categories' => $categories, 'photos' => $photos,
             'items' => count($items),
-            'with_photos' => count(array_filter($items, static fn($item) => $item['photo'] !== null)),
+            'with_photos' => count(array_filter($items, static fn($item) => (bool) $item['photos'])),
+            'photo_count' => $photoCount,
             'groups' => array_values(array_filter($groups, static fn($entry) => (bool) $entry['items'])),
         ];
     }
@@ -87,14 +103,14 @@ final class InventoryCatalog
     /**
      * What the list holds, without the items themselves.
      *
-     * @return array{group:string,library:string,categories:list<string>,items:int,with_photos:int,groups:list<array{label:string,items:int,with_photos:int}>}
+     * @return array{group:string,library:string,categories:list<string>,photos:string,items:int,with_photos:int,photo_count:int,groups:list<array{label:string,items:int,with_photos:int}>}
      */
     public static function summary(array $catalog): array
     {
         $catalog['groups'] = array_map(static fn(array $entry): array => [
             'label' => $entry['label'],
             'items' => count($entry['items']),
-            'with_photos' => count(array_filter($entry['items'], static fn($item) => $item['photo'] !== null)),
+            'with_photos' => count(array_filter($entry['items'], static fn($item) => (bool) $item['photos'])),
         ], $catalog['groups']);
         return $catalog;
     }
@@ -123,11 +139,15 @@ final class InventoryCatalog
             $catalog['categories'] ? implode(', ', array_map(static fn($code) => Sarpras::CATEGORIES[$code], $catalog['categories'])) : 'Semua kategori',
             'dikelompokkan menurut ' . mb_strtolower(self::GROUPINGS[$catalog['group']]),
         ]);
-        $h = PdfLayout::css('.thumb{width:26mm;border:0.2mm solid #d1d5db;}.grid td.photo{width:28mm;text-align:center;}')
+        // Every photo of an item: smaller, two abreast, so five of them still fit beside its row.
+        $all = $catalog['photos'] === 'all';
+        $h = PdfLayout::css($all
+            ? '.thumb{width:19mm;border:0.2mm solid #d1d5db;}.grid td.photo{width:46mm;text-align:center;}'
+            : '.thumb{width:26mm;border:0.2mm solid #d1d5db;}.grid td.photo{width:28mm;text-align:center;}')
             . PdfLayout::header('DAFTAR INVENTARIS BERFOTO', $e(implode(' · ', $scope)))
             . PdfLayout::meta([
                 'Jumlah barang' => (string) $catalog['items'],
-                'Barang berfoto' => $catalog['with_photos'] . ' dari ' . $catalog['items'],
+                'Barang berfoto' => $catalog['with_photos'] . ' dari ' . $catalog['items'] . ($all ? ' · ' . $catalog['photo_count'] . ' foto' : ''),
                 'Dicetak oleh' => $e($context['printed_by'] ?? ''),
                 'Tanggal' => PdfLayout::date(new \DateTimeImmutable('now')),
             ]);
@@ -136,17 +156,20 @@ final class InventoryCatalog
         }
         if (!$catalog['groups']) $h .= '<p class="muted">Tidak ada barang yang sesuai.</p>';
 
-        // One thumbnail per item, however many groups list it.
+        // A photo is read and scaled down once, however many groups list its item.
         $thumbs = [];
         foreach ($catalog['groups'] as $entry) {
             $rows = [];
             foreach ($entry['items'] as $n => $item) {
-                $id = (int) $item['id'];
-                if (!array_key_exists($id, $thumbs)) $thumbs[$id] = $item['photo'] === null ? null : self::thumbnail($readPhoto((string) $item['photo']));
+                $images = [];
+                foreach ($item['photos'] as $filename) {
+                    if (!array_key_exists($filename, $thumbs)) $thumbs[$filename] = self::thumbnail($readPhoto($filename));
+                    if ($thumbs[$filename] !== null) $images[] = '<img class="thumb" src="' . $thumbs[$filename] . '">';
+                }
                 $detail = array_filter([trim((string) $item['item_type']), trim((string) $item['brand_model'])], static fn($text) => $text !== '');
                 $rows[] = [
                     (string) ($n + 1),
-                    $thumbs[$id] === null ? '<span class="muted small">Belum ada foto</span>' : '<img class="thumb" src="' . $thumbs[$id] . '">',
+                    $images ? implode(' ', $images) : '<span class="muted small">Belum ada foto</span>',
                     '<span class="strong">' . $e($item['item_name']) . '</span>' . ($detail ? '<br><span class="muted small">' . $e(implode(' · ', $detail)) . '</span>' : ''),
                     $e($item['item_code']),
                     $e($item['room_name']),

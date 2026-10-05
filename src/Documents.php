@@ -124,17 +124,17 @@ final class Documents
     }
 
     /**
-     * Daftar inventaris berfoto: the items with one photo each, grouped by category or by area.
+     * Daftar inventaris berfoto: the items with their first photo or all of them, grouped by category or by area.
      *
      * @param  list<string>  $categories
      * @return array{filename: string, bytes: string, count: int}
      */
-    public function catalog(PhotoStorage $photos, string $group, array $categories, string $library, string $libraryName, string $printedBy): array
+    public function catalog(PhotoStorage $storage, string $group, array $categories, string $library, string $photos, string $libraryName, string $printedBy): array
     {
         self::ensureRuntime();
         require_once __DIR__ . '/InventoryCatalog.php';
-        $catalog = InventoryCatalog::build($this->db, $group, $categories, $library);
-        $html = InventoryCatalog::html($catalog, static fn (string $filename): ?string => $photos->read($filename), ['library_name' => $libraryName, 'printed_by' => $printedBy]);
+        $catalog = InventoryCatalog::build($this->db, $group, $categories, $library, $photos);
+        $html = InventoryCatalog::html($catalog, static fn (string $filename): ?string => $storage->read($filename), ['library_name' => $libraryName, 'printed_by' => $printedBy]);
         $pdf = PdfLayout::mpdf($this->tempDir, 'Daftar Inventaris Berfoto', PdfLayout::footer('Daftar inventaris berfoto'));
         $pdf->WriteHTML($html);
 

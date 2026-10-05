@@ -45,7 +45,9 @@ check($names($all) === [
     ['Perangkat multimedia' => ['Komputer OPAC']],
     ['Belum berkategori' => ['Pot bunga']],
 ], 'barang dikelompokkan per kategori; barang berkategori ganda tercantum di tiap kategorinya, kelompok kosong dilewati');
-check($all['groups'][0]['items'][1]['photo'] === 'meja-a.jpg', 'foto pertama barang yang dipakai');
+check($all['groups'][0]['items'][1]['photos'] === ['meja-a.jpg'] && $all['photo_count'] === 2, 'satu foto per barang: foto pertamanya');
+$every = InventoryCatalog::build($db, 'category', ['perabot'], '', 'all');
+check($every['groups'][0]['items'][1]['photos'] === ['meja-a.jpg', 'meja-b.jpg'] && $every['photo_count'] === 3 && $every['with_photos'] === 2, 'semua foto: tiap foto barang ikut, barang berfoto tetap dihitung sekali');
 $furniture = InventoryCatalog::build($db, 'category', ['peralatan', 'perabot'], 'P01');
 check($furniture['items'] === 2 && $furniture['categories'] === ['perabot', 'peralatan'] && $names($furniture) === [['Perabot (meja, kursi, rak)' => ['Bangku gazebo', 'Meja baca']]],
     'saringan kategori dan lokasi perpustakaan mempersempit daftar');
@@ -64,6 +66,7 @@ check($summary['items'] === 3 && $summary['groups'][2] === ['label' => 'Gazebo',
 // What is refused.
 rejects(static fn () => InventoryCatalog::build($db, 'ruangan', []), 'pengelompokan lain ditolak', 'kategori atau area');
 rejects(static fn () => InventoryCatalog::build($db, 'category', ['mebel']), 'kategori yang tidak dikenal ditolak', 'Kategori barang tidak valid');
+rejects(static fn () => InventoryCatalog::build($db, 'category', [], '', 'dua'), 'pilihan foto lain ditolak', 'satu foto per barang atau semua foto');
 $db->exec('INSERT INTO inventory_items (id, location_id, item_name, item_code, item_condition) WITH RECURSIVE n(i) AS (SELECT 100 UNION ALL SELECT i + 1 FROM n WHERE i < 600) SELECT i, 3, \'Kursi\', \'K-\' || i, \'B\' FROM n');
 rejects(static fn () => InventoryCatalog::build($db, 'category', []), 'daftar di atas 500 barang ditolak dengan saran menyaring', 'Saring menurut kategori');
 check(InventoryCatalog::build($db, 'category', ['perabot'])['items'] === 2, 'daftar yang disaring tetap dapat dibuat');
@@ -79,4 +82,9 @@ preg_match('/src="data:image\/jpeg;base64,([^"]+)"/', $html, $found);
 $size = getimagesizefromstring((string) base64_decode($found[1]));
 check($size[0] === 320 && $size[1] === 240, 'foto diperkecil sebelum dicetak');
 check(substr_count($html, 'Belum ada foto') === 2, 'barang tanpa foto, atau yang fotonya tidak terbaca, ditandai');
+$html = InventoryCatalog::html($every, static fn (string $filename): ?string => $jpeg);
+check(substr_count($html, 'data:image/jpeg;base64,') === 3 && str_contains($html, '3 foto'), 'semua foto barang dicetak berdampingan');
+$db->exec('INSERT INTO inventory_item_photos (item_id, filename) WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 500) SELECT 1, \'banyak-\' || i || \'.jpg\' FROM n');
+rejects(static fn () => InventoryCatalog::build($db, 'category', ['perabot'], '', 'all'), 'daftar di atas 500 foto ditolak dengan saran', 'cetak satu foto per barang');
+check(InventoryCatalog::build($db, 'category', ['perabot'])['photo_count'] === 2, 'satu foto per barang tetap dapat dibuat');
 echo "ok   done\n";

@@ -11,11 +11,12 @@ use SlimsConnect\Http\Sendable;
 /**
  * Daftar inventaris berfoto: the items with one photo each, grouped by category (?group=category,
  * the default) or by the areas of their rooms (?group=area), for some categories
- * (?categories=perabot,peralatan) and one library location (?library=P01) when given.
+ * (?categories=perabot,peralatan) and one library location (?library=P01) when given. An item is
+ * shown with its first photo, or with all of them (?photos=all).
  */
 final class CatalogController
 {
-    /** @return array{0: string, 1: list<string>, 2: string} group, categories, library */
+    /** @return array{0: string, 1: list<string>, 2: string, 3: string} group, categories, library, photos */
     private static function filter(Context $context): array
     {
         $group = $context->request->query('group', 'category');
@@ -32,22 +33,27 @@ final class CatalogController
             throw ApiException::validation(['library' => ['Lokasi perpustakaan tidak ditemukan. Pilih salah satu: ' . implode(', ', $codes) . '.']]);
         }
 
-        return [$group, $categories, $library];
+        $photos = $context->request->query('photos', 'first');
+        if (!isset(InventoryCatalog::PHOTOS[$photos])) {
+            throw ApiException::validation(['photos' => ['Pilih first atau all.']]);
+        }
+
+        return [$group, $categories, $library, $photos];
     }
 
     /** What the list would hold: how many items, how many with a photo, and the groups. */
     public function summary(Context $context): JsonResponse
     {
-        [$group, $categories, $library] = self::filter($context);
+        [$group, $categories, $library, $photos] = self::filter($context);
 
-        return JsonResponse::ok(InventoryCatalog::summary(InventoryCatalog::build($context->db, $group, $categories, $library)));
+        return JsonResponse::ok(InventoryCatalog::summary(InventoryCatalog::build($context->db, $group, $categories, $library, $photos)));
     }
 
     public function document(Context $context): Sendable
     {
         RoomController::throttlePdf($context);
-        [$group, $categories, $library] = self::filter($context);
-        $document = $context->documents()->catalog($context->storage, $group, $categories, $library, Context::libraryName(), $context->staff()->name);
+        [$group, $categories, $library, $photos] = self::filter($context);
+        $document = $context->documents()->catalog($context->storage, $group, $categories, $library, $photos, Context::libraryName(), $context->staff()->name);
         $context->log('Daftar inventaris berfoto diunduh (' . $document['count'] . ' barang).', 'Print');
 
         return new BytesResponse($document['bytes'], 'application/pdf', $document['filename']);

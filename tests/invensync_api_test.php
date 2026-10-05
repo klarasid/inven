@@ -303,6 +303,7 @@ try {
     check($pdf(call('GET', 'CatalogController@document', headers: bearer($baca), query: ['categories' => 'komputer'])), 'the photo inventory comes as PDF, to a read-only librarian too');
     check(call('GET', 'CatalogController@summary', headers: bearer($agentToken), query: ['group' => 'ruangan'])['code'] === 'validation_failed'
         && call('GET', 'CatalogController@summary', headers: bearer($agentToken), query: ['categories' => 'mebel'])['code'] === 'validation_failed'
+        && call('GET', 'CatalogController@summary', headers: bearer($agentToken), query: ['photos' => 'semua'])['code'] === 'validation_failed'
         && call('GET', 'CatalogController@document', headers: bearer($agentToken), query: ['library' => 'X99'])['details']['fields']['library'][0] === 'Lokasi perpustakaan tidak ditemukan. Pilih salah satu: P01.', 'an unknown grouping, category or location is refused, saying what to choose');
 
     // Floor plans, as an agent lists and fetches them.
