@@ -71,6 +71,7 @@ final class Sarpras
         'peralatan' => 'Peralatan perpustakaan',
         'komputer' => 'Komputer',
         'multimedia' => 'Perangkat multimedia',
+        'kenyamanan' => 'Sarana kenyamanan',
         'keamanan' => 'Sarana keamanan dan keselamatan',
         'fasilitas_umum' => 'Fasilitas umum',
         'lainnya' => 'Lainnya',
@@ -80,6 +81,8 @@ final class Sarpras
     public const TYPES = [
         'komputer' => ['PC', 'Laptop', 'Server', 'Kiosk OPAC', 'Thin client'],
         'multimedia' => ['Proyektor', 'Layar proyektor', 'Televisi / monitor besar', 'Panel interaktif', 'Pengeras suara', 'Mikrofon', 'Kamera', 'Pemindai (scanner)', 'Printer', 'Headphone', 'Perangkat VR'],
+        // No aspect scores these yet: the category is there so the inventory can list them.
+        'kenyamanan' => ['AC / penyejuk udara', 'Kipas angin', 'Lampu penerangan', 'Tempat sampah', 'Stopkontak / colokan listrik', 'Tirai / gorden', 'Pengharum ruangan'],
         'keamanan' => ['APAR', 'CCTV', 'Security gate', 'Alarm kebakaran', 'Detektor asap', 'Hidran', 'Rambu dan jalur evakuasi', 'Kotak P3K', 'Loker penitipan', 'Pintu darurat'],
         // Toilets, prayer rooms and the like are areas of a room (AREA_TYPES), not items.
         'fasilitas_umum' => ['Akses difabel (ramp)', 'Wi-Fi publik', 'Dispenser air minum', 'Stasiun pengisian daya', 'Tempat sampah terpilah'],

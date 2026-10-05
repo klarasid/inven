@@ -30,6 +30,7 @@ function rejects(callable $operation, string $label): void
 check(Sarpras::categories('komputer') === 'komputer', 'satu kategori disimpan seperti sebelumnya');
 check(Sarpras::categories('multimedia,komputer') === 'komputer,multimedia', 'beberapa kategori disimpan dalam urutan tetap');
 check(Sarpras::categories(['multimedia', 'komputer', 'komputer']) === 'komputer,multimedia', 'daftar kategori diterima dan tidak berulang');
+check(Sarpras::categories(['kenyamanan', 'perabot']) === 'perabot,kenyamanan' && strlen((string) Sarpras::categories(array_keys(Sarpras::CATEGORIES))) <= 100, 'sarana kenyamanan adalah kategori, dan semua kategori sekaligus muat di kolomnya');
 check(Sarpras::categories('') === null && Sarpras::categories(null) === null && Sarpras::categories([]) === null, 'tanpa kategori disimpan kosong');
 rejects(static fn () => Sarpras::categories('komputer,pesawat'), 'kategori yang tidak dikenal ditolak');
 rejects(static fn () => Sarpras::categories(['komputer', ['multimedia']]), 'bentuk kategori yang tidak wajar ditolak');
