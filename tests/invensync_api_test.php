@@ -170,8 +170,12 @@ try {
     // Items.
     $rooms = call('GET', 'RoomController@index', headers: bearer($token))['body']['data'];
     check(count($rooms['rooms']) === 2 && $rooms['rooms'][0]['conditions']['KB'] === 1 && $rooms['libraries'][0]['code'] === 'P01', 'rooms come with condition counts and libraries');
+    $db->exec("UPDATE inventory_items SET category = 'komputer,kenyamanan', item_type = 'Kiosk OPAC' WHERE id = 17");
     $room = call('GET', 'RoomController@items', params: ['id' => 1], headers: bearer($token))['body']['data'];
     check(count($room['items']) === 2 && $room['room']['item_count'] === 2, 'a room lists its items');
+    check($room['items'][0]['categories'] === [['code' => 'komputer', 'label' => 'Komputer'], ['code' => 'kenyamanan', 'label' => 'Sarana kenyamanan']] && $room['items'][0]['type'] === 'Kiosk OPAC'
+        && $room['items'][1]['categories'] === [] && $room['items'][1]['type'] === '', 'an item comes with its categories and type, or none');
+    $db->exec("UPDATE inventory_items SET category = 'komputer' WHERE id = 17");
 
     $formToken = bin2hex(random_bytes(32));
     $code = call('POST', 'ItemController@reserveCode', ['room_id' => 1, 'code_token' => $formToken], headers: bearer($token))['body']['data']['code'];

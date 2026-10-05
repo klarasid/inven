@@ -2,6 +2,7 @@
 
 namespace SLiMS\Plugins\Inventory\Api;
 
+use SLiMS\Plugins\Inventory\Sarpras;
 use SLiMS\Plugins\Inventory\Supervision;
 
 /**
@@ -51,6 +52,8 @@ final class Present
             'quantity' => (string) $row['quantity_register'],
             'price' => floor($price) === $price ? (int) $price : $price,
             'condition' => (string) $row['item_condition'],
+            'categories' => array_map(static fn (string $code): array => ['code' => $code, 'label' => Sarpras::CATEGORIES[$code]], Sarpras::categoryCodes($row['category'] ?? null)),
+            'type' => (string) ($row['item_type'] ?? ''),
             'notes' => (string) ($row['notes'] ?? ''),
             'photo_ids' => array_map('intval', $photoIds),
             'updated_at' => (string) $row['updated_at'],
