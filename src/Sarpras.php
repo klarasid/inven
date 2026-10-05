@@ -80,7 +80,7 @@ final class Sarpras
     /** Common types per category, offered as suggestions; any text is accepted. */
     public const TYPES = [
         'komputer' => ['PC', 'Laptop', 'Server', 'Kiosk OPAC', 'Thin client'],
-        'multimedia' => ['Proyektor', 'Layar proyektor', 'Televisi / monitor besar', 'Panel interaktif', 'Pengeras suara', 'Mikrofon', 'Kamera', 'Pemindai (scanner)', 'Printer', 'Headphone', 'Perangkat VR'],
+        'multimedia' => ['Komputer multimedia', 'Proyektor', 'Layar proyektor', 'Televisi / monitor besar', 'Panel interaktif', 'Pengeras suara', 'Headphone', 'Pemutar audio', 'Mikrofon', 'Perekam suara', 'Kamera', 'Pemindai (scanner)', 'Printer', 'Printer 3D', 'Perangkat VR'],
         // No aspect scores these yet: the category is there so the inventory can list them.
         'kenyamanan' => ['AC / penyejuk udara', 'Kipas angin', 'Lampu penerangan', 'Tempat sampah', 'Stopkontak / colokan listrik', 'Tirai / gorden', 'Pengharum ruangan'],
         'keamanan' => ['APAR', 'CCTV', 'Security gate', 'Alarm kebakaran', 'Detektor asap', 'Hidran', 'Rambu dan jalur evakuasi', 'Kotak P3K', 'Loker penitipan', 'Pintu darurat'],

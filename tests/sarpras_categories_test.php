@@ -37,6 +37,10 @@ rejects(static fn () => Sarpras::categories(['komputer', ['multimedia']]), 'bent
 check(Sarpras::categoryCodes('komputer,multimedia') === ['komputer', 'multimedia'] && Sarpras::categoryCodes(null) === [] && Sarpras::categoryCodes('komputer,multim') === ['komputer'], 'nilai tersimpan dibaca sebagai daftar kode yang dikenal');
 check(strlen((string) Sarpras::categories(array_keys(Sarpras::CATEGORIES))) <= 100, 'semua kategori sekaligus muat di kolomnya');
 
+// The ten multimedia devices the accreditation instrument names each have a type to pick.
+check(!array_diff(['Komputer multimedia', 'Proyektor', 'Pengeras suara', 'Headphone', 'Panel interaktif', 'Printer 3D', 'Perangkat VR', 'Perekam suara', 'Kamera', 'Pemutar audio'], Sarpras::lists()['types']['multimedia']),
+    'saran jenis multimedia memuat sepuluh perangkat di instrumen akreditasi');
+
 // What the recap counts -------------------------------------------------------------------------
 $db = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 foreach ([
