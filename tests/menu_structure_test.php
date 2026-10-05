@@ -36,11 +36,12 @@ $checks = [
     'Rekap Sarpras tidak menerima perubahan data' => ($actions['recap'] ?? null) === []
         && str_contains($controller, 'if (!in_array($action, $actions[$page], true))'),
     'input sarpras hanya di halamannya sendiri' => ($actions['software'] ?? null) === ['software', 'software_delete']
-        && ($actions['facility'] ?? null) === ['settings', 'evidence', 'evidence_delete']
+        && ($actions['facility'] ?? null) === ['settings', 'evidence', 'evidence_delete', 'network_upload', 'network_delete']
         && ($actions['sivitas'] ?? null) === ['map', 'counting', 'merge', 'undo'],
     'memperbaiki institusi anggota butuh hak tulis Keanggotaan' => str_contains($controller, "havePrivilege('membership', 'w')")
         && str_contains($controller, 'if (!$canFixMembers)'),
     'bukti dan PDF hanya dilayani halamannya' => str_contains($controller, "\$page === 'facility' && (\$_GET['evidence'] ?? '') === '1'")
+        && str_contains($controller, "\$page === 'facility' && isset(\$_GET['network'])")
         && str_contains($controller, "\$page === 'recap' && isset(\$_GET['pdf'])"),
     'controller memeriksa IP, hak akses, dan CSRF' => str_contains($controller, "do_checkIP('smc-stocktake')")
         && str_contains($controller, "havePrivilege('stock_take', 'r')")

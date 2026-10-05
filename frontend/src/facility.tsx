@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
   ArrowRight,
@@ -6,6 +6,8 @@ import {
   CheckCircle2,
   ExternalLink,
   FileText,
+  Network,
+  Plus,
   Trash2,
   Upload as UploadIcon,
   Wifi,
@@ -13,11 +15,13 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "./components/ui/button";
-import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel } from "./components/ui/field";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./components/ui/dialog";
+import { Field, FieldContent, FieldDescription, FieldError, FieldGroup, FieldLabel } from "./components/ui/field";
+import { Input } from "./components/ui/input";
 import { Switch } from "./components/ui/switch";
 import { useWorkspace } from "./context";
 import { dateLabel, url } from "./api";
-import { ActionBar, Choice, ErrorBox, ImagePreview, Loading, LocationSelect, PageHeader, TextField } from "./shared";
+import { ActionBar, Choice, ErrorBox, ImagePreview, Loading, LocationSelect, PageHeader, TextField, previewPdf } from "./shared";
 import { Confirm, usePage } from "./settings";
 import { LevelBadge, type Level } from "./sarpras";
 
@@ -30,10 +34,21 @@ type Settings = {
   bandwidth_date: string;
   evidence: { name: string; mime: string; uploaded_at: string } | null;
 };
+type NetworkDocument = { id: number; kind: string; title: string; mime: string; created_at: string; room: { id: number; name: string } | null };
+/** What shows the location's internet besides the figures: speed tests, the ISP's service, the Wi-Fi coverage map. */
+type NetworkData = {
+  /** Null until the plugin's migration 15 has run. */
+  documents: NetworkDocument[] | null;
+  kinds: Record<string, string>;
+  rooms: { id: number; name: string }[];
+  max_bytes: number;
+  max: number;
+};
 type Location = { code: string; name: string; rooms: number };
 type Result = { no: number; name: string; value: string; level: Level | null; checks: { label: string; ok: boolean }[] };
 type Data = {
   settings: Settings;
+  network: NetworkData;
   /** Active SLiMS members counted for this location (Sivitas per Lokasi); not typed in here. */
   sivitas: { count: number; single: boolean; unmapped: number };
   coverage: Record<string, string>;
@@ -116,6 +131,208 @@ function Outcome({ data, changed, open }: { data: Data; changed: boolean; open: 
   );
 }
 
+const documentTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
+
+/** The location's network documents: several per kind, a speed test for each room when there are many. */
+function NetworkDocuments({ data, page, library, post, reload }: { data: Data; page: string; library: string; post: Post; reload: () => void }) {
+  const w = useWorkspace();
+  const network = data.network;
+  const [adding, setAdding] = useState(false);
+  const [removing, setRemoving] = useState<NetworkDocument>();
+  const [viewing, setViewing] = useState<NetworkDocument>();
+  const [busy, setBusy] = useState(false);
+  const href = (document: NetworkDocument) => url(page, { network: document.id, library: library || undefined });
+  // Both kinds open in a popup over the page: a PDF in the print viewer, a picture in a dialog.
+  const open = (document: NetworkDocument) => (document.mime === "application/pdf" ? previewPdf(w.config, href(document), document.title) : setViewing(document));
+
+  async function remove() {
+    if (!removing) return;
+    setBusy(true);
+    try {
+      const reply = await post({ action: "network_delete", record_id: removing.id, library, csrf: data.csrf });
+      toast.success(reply.message || "Dokumen jaringan dihapus.");
+      setRemoving(undefined);
+      reload();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Section icon={Network} title="Dokumen jaringan" description="Bukti untuk akreditasi: hasil uji kecepatan tiap ruang, layanan ISP, dan peta jangkauan Wi-Fi.">
+      {network.documents === null ? (
+        <p className="text-sm text-muted-foreground">Jalankan migrasi plugin hingga versi 15 di System → Plugins untuk menyimpan dokumen jaringan.</p>
+      ) : (
+        <>
+          {network.documents.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Belum ada dokumen jaringan.</p>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {network.documents.map((document) => (
+                <li key={document.id} className="flex flex-wrap items-center gap-3 rounded-xl border p-3">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                    <FileText className="size-4" />
+                  </span>
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate text-sm font-medium">{document.title}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {network.kinds[document.kind] ?? document.kind}
+                      {document.room ? ` · ${document.room.name}` : ""} · Diunggah {dateLabel(document.created_at)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button type="button" size="sm" variant="outline" aria-label={`Lihat ${document.title}`} onClick={() => open(document)}>
+                      Lihat
+                    </Button>
+                    {data.write && (
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        className="text-destructive"
+                        aria-label={`Hapus ${document.title}`}
+                        onClick={() => setRemoving(document)}
+                      >
+                        <Trash2 />
+                      </Button>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          {data.write && network.documents.length < network.max && (
+            <div>
+              <Button type="button" variant="outline" onClick={() => setAdding(true)}>
+                <Plus data-icon="inline-start" />
+                Tambah dokumen
+              </Button>
+            </div>
+          )}
+        </>
+      )}
+      {adding && (
+        <NetworkDocumentDialog
+          data={data}
+          library={library}
+          post={post}
+          onClose={() => setAdding(false)}
+          onSaved={() => {
+            setAdding(false);
+            reload();
+          }}
+        />
+      )}
+      <ImagePreview
+        image={
+          viewing && {
+            url: href(viewing),
+            title: viewing.title,
+            description: `${network.kinds[viewing.kind] ?? "Dokumen jaringan"}, diunggah ${dateLabel(viewing.created_at)}.`,
+          }
+        }
+        onClose={() => setViewing(undefined)}
+      />
+      <Confirm
+        open={!!removing}
+        title="Hapus dokumen jaringan?"
+        description={`${removing?.title || "Dokumen"} dan berkasnya dihapus permanen.`}
+        action="Hapus dokumen"
+        busy={busy}
+        onCancel={() => setRemoving(undefined)}
+        onConfirm={remove}
+      />
+    </Section>
+  );
+}
+
+function NetworkDocumentDialog({ data, library, post, onClose, onSaved }: { data: Data; library: string; post: Post; onClose: () => void; onSaved: () => void }) {
+  const network = data.network;
+  const fileId = useId();
+  const titleId = useId();
+  const [kind, setKind] = useState("speedtest");
+  const [room, setRoom] = useState("");
+  const [title, setTitle] = useState("");
+  const [file, setFile] = useState<File>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const megabytes = Math.round(network.max_bytes / 1024 / 1024);
+  const fileError = file && (!documentTypes.includes(file.type) || file.size > network.max_bytes) ? `Gunakan PDF, JPEG, PNG, atau WebP maksimal ${megabytes} MB.` : "";
+  // The ISP's service is the location's; a speed test or a coverage map may be of one room.
+  const ofRoom = kind !== "isp" && network.rooms.length > 0;
+
+  async function save() {
+    if (!file || fileError) {
+      setError(fileError || "Pilih berkas dokumen.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const reply = await post({ action: "network_upload", kind, room_id: ofRoom ? room : "", title, document: file, library, csrf: data.csrf });
+      toast.success(reply.message || "Dokumen jaringan tersimpan.");
+      onSaved();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && !busy && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Tambah dokumen jaringan</DialogTitle>
+          <DialogDescription>Gambar atau PDF, maksimal {megabytes} MB.</DialogDescription>
+        </DialogHeader>
+        <ErrorBox message={error} />
+        <FieldGroup>
+          <Choice label="Jenis dokumen" value={kind} onChange={(v) => v && setKind(v)} items={Object.entries(network.kinds).map(([value, label]) => ({ value, label }))} />
+          {ofRoom && (
+            <Choice
+              label="Ruangan"
+              value={room}
+              onChange={setRoom}
+              placeholder="Seluruh lokasi"
+              items={[{ value: "", label: "Seluruh lokasi" }, ...network.rooms.map((r) => ({ value: String(r.id), label: r.name }))]}
+              description="Opsional. Pilih ruangan bila dokumen ini hasil uji atau peta untuk satu ruangan."
+            />
+          )}
+          <Field data-invalid={!!fileError}>
+            <FieldLabel htmlFor={fileId}>Berkas dokumen</FieldLabel>
+            <Input
+              id={fileId}
+              type="file"
+              accept={documentTypes.join(",")}
+              onChange={(e) => {
+                setFile(e.target.files?.[0]);
+                setError("");
+              }}
+            />
+            {fileError && <FieldError>{fileError}</FieldError>}
+          </Field>
+          <Field>
+            <FieldLabel htmlFor={titleId}>Judul</FieldLabel>
+            <Input id={titleId} maxLength={150} value={title} placeholder="Contoh: Uji kecepatan ruang baca" onChange={(e) => setTitle(e.target.value)} />
+            <FieldDescription>Opsional. Tanpa judul, nama berkas yang dipakai.</FieldDescription>
+          </Field>
+        </FieldGroup>
+        <DialogFooter>
+          <Button variant="outline" disabled={busy} onClick={onClose}>
+            Batal
+          </Button>
+          <Button disabled={busy || !file || !!fileError} onClick={save}>
+            {busy ? "Mengunggah…" : "Unggah"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function FacilityForm({ data, page, post, reload }: { data: Data; page: string; post: Post; reload: () => void }) {
   const w = useWorkspace();
   const s = data.settings;
@@ -162,6 +379,7 @@ function FacilityForm({ data, page, post, reload }: { data: Data; page: string; 
     <>
       <ErrorBox message={error} />
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="flex min-w-0 flex-col gap-6">
         <fieldset disabled={busy || !data.write} className="flex min-w-0 flex-col gap-6">
           <Section icon={Building2} title="Gedung dan sivitas" description="Dipakai untuk menghitung luas perpustakaan per orang yang dilayani.">
             <FieldGroup>
@@ -301,6 +519,9 @@ function FacilityForm({ data, page, post, reload }: { data: Data; page: string; 
             </FieldGroup>
           </Section>
         </fieldset>
+        {/* Outside the fieldset: a reader may still open the documents. */}
+        <NetworkDocuments data={data} page={page} library={library} post={post} reload={reload} />
+        </div>
         <Outcome data={data} changed={changed} open={() => w.go(library ? { view: "sarpras", library } : { view: "sarpras" })} />
       </div>
       {data.write && (

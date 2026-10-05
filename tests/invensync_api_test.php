@@ -36,7 +36,7 @@ require dirname(__DIR__, 3) . '/lib/Migration/Migration.php';
 foreach (glob(__DIR__ . '/../migration/*.php') as $migration) require $migration;
 require __DIR__ . '/../src/Api/bootstrap.php';
 
-$names = ['inventory_member_fixes', 'inventory_member_locations', 'member', 'mst_member_type', 'inventory_api_codes', 'inventory_room_plans', 'inventory_room_areas', 'inventory_software', 'inventory_api_idempotency', 'inventory_api_sessions', 'inventory_watch_photos', 'inventory_watch_events', 'inventory_watch_actions', 'inventory_watch_findings', 'inventory_watch_results', 'inventory_watch_inspections', 'inventory_watch_schedules', 'inventory_watch_templates', 'inventory_item_code_reservations', 'inventory_item_code_sequences', 'inventory_item_photos', 'inventory_items', 'inventory_locations', 'stock_take_item', 'stock_take', 'mst_item_status', 'item', 'mst_location', 'group_access', 'mst_module', 'setting', 'user', 'holiday', 'slims_connect_rate_limits', 'slims_connect_settings'];
+$names = ['inventory_network_documents', 'inventory_member_fixes', 'inventory_member_locations', 'member', 'mst_member_type', 'inventory_api_codes', 'inventory_room_plans', 'inventory_room_areas', 'inventory_software', 'inventory_api_idempotency', 'inventory_api_sessions', 'inventory_watch_photos', 'inventory_watch_events', 'inventory_watch_actions', 'inventory_watch_findings', 'inventory_watch_results', 'inventory_watch_inspections', 'inventory_watch_schedules', 'inventory_watch_templates', 'inventory_item_code_reservations', 'inventory_item_code_sequences', 'inventory_item_photos', 'inventory_items', 'inventory_locations', 'stock_take_item', 'stock_take', 'mst_item_status', 'item', 'mst_location', 'group_access', 'mst_module', 'setting', 'user', 'holiday', 'slims_connect_rate_limits', 'slims_connect_settings'];
 final class PrefixedConnection extends PDO {
     public array $names = []; public string $prefix = '';
     private function sql(string $sql): string { foreach ($this->names as $name) $sql = preg_replace('/(?<![A-Za-z0-9_.])' . $name . '\b/', $this->prefix . $name, $sql); return $sql; }
@@ -88,7 +88,7 @@ try {
     $db->exec('CREATE TABLE item (item_id INT PRIMARY KEY, item_code VARCHAR(20), item_status_id CHAR(3) NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     $db->exec('CREATE TABLE slims_connect_rate_limits (rate_key CHAR(64) PRIMARY KEY, attempts INT, window_started_at DATETIME, blocked_until DATETIME NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     $db->exec('CREATE TABLE slims_connect_settings (name VARCHAR(64) PRIMARY KEY, value TEXT, updated_at DATETIME) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
-    foreach (['CreateInventoryTables', 'AddSlimsLocationToInventoryLocations', 'CreateInventoryItemPhotos', 'MoveInventoryPhotosToFiles', 'AllowSharedInventoryLocationCodes', 'CreateInventoryItemCodes', 'CreateInventorySupervision', 'CreateInvensyncApi', 'AddFacilityProfileData', 'AllowSeveralItemCategories', 'CreateRoomAreasAndPlans', 'AllowAgentConnections', 'MapMembersToLocations'] as $migration) (new $migration())->up();
+    foreach (['CreateInventoryTables', 'AddSlimsLocationToInventoryLocations', 'CreateInventoryItemPhotos', 'MoveInventoryPhotosToFiles', 'AllowSharedInventoryLocationCodes', 'CreateInventoryItemCodes', 'CreateInventorySupervision', 'CreateInvensyncApi', 'AddFacilityProfileData', 'AllowSeveralItemCategories', 'CreateRoomAreasAndPlans', 'AllowAgentConnections', 'MapMembersToLocations', 'CreateNetworkDocuments'] as $migration) (new $migration())->up();
     (new CreateInvensyncApi())->up();
     check(true, 'migration 8 is repeatable');
 
@@ -305,6 +305,25 @@ try {
         && call('GET', 'CatalogController@summary', headers: bearer($agentToken), query: ['categories' => 'mebel'])['code'] === 'validation_failed'
         && call('GET', 'CatalogController@summary', headers: bearer($agentToken), query: ['photos' => 'semua'])['code'] === 'validation_failed'
         && call('GET', 'CatalogController@document', headers: bearer($agentToken), query: ['library' => 'X99'])['details']['fields']['library'][0] === 'Lokasi perpustakaan tidak ditemukan. Pilih salah satu: P01.', 'an unknown grouping, category or location is refused, saying what to choose');
+
+    // What shows the library's internet: the figures, their evidence, and the network documents.
+    $network = call('GET', 'NetworkController@index', headers: bearer($agentToken))['body']['data'];
+    check(count($network['locations']) === 1 && $network['locations'][0]['code'] === 'P01' && $network['locations'][0]['evidence'] === null && $network['locations'][0]['documents'] === [] && $network['kinds']['wifi'] === 'Peta jangkauan Wi-Fi',
+        'a location\'s internet is listed before anything is uploaded');
+    \SLiMS\Plugins\Inventory\Sarpras::saveSettings($db, ['bandwidth_mbps' => '300', 'bandwidth_users' => '60', 'bandwidth_coverage' => 'partial', 'bandwidth_date' => '2026-09-15'], 'P01');
+    $networkFile = 'jaringan-' . str_repeat('cd', 16) . '.pdf';
+    mkdir(\SLiMS\Plugins\Inventory\NetworkDocuments::directory(), 0700, true);
+    file_put_contents(\SLiMS\Plugins\Inventory\NetworkDocuments::directory() . '/' . $networkFile, '%PDF speedtest');
+    $db->prepare('INSERT INTO inventory_network_documents (library_code, kind, location_id, title, filename, mime, created_by, created_at) VALUES (?, ?, 2, ?, ?, ?, 1, NOW())')->execute(['P01', 'speedtest', 'Uji kecepatan ruang referensi', $networkFile, 'application/pdf']);
+    $place = call('GET', 'NetworkController@index', headers: bearer($baca), query: ['library' => 'P01'])['body']['data']['locations'][0];
+    check($place['bandwidth'] === ['mbps' => 300.0, 'users' => 60, 'coverage' => ['key' => 'partial', 'label' => 'Sebagian area layanan'], 'measured_at' => '2026-09-15'], 'the bandwidth figures come as saved, to a read-only librarian too');
+    check(count($place['documents']) === 1 && $place['documents'][0]['kind'] === ['key' => 'speedtest', 'label' => 'Hasil uji kecepatan'] && $place['documents'][0]['type'] === 'pdf' && $place['documents'][0]['room'] === ['id' => 2, 'name' => 'Ruang referensi'],
+        'a network document comes with its kind and the room it is of');
+    $sent = call('GET', 'NetworkController@document', params: [$place['documents'][0]['id']], headers: bearer($agentToken))['body'];
+    check($sent instanceof \SLiMS\Plugins\Inventory\Api\BytesResponse && $sent->bytes === '%PDF speedtest' && $sent->mimeType === 'application/pdf' && $sent->filename === 'uji-kecepatan-ruang-referensi.pdf', 'a network document comes as the file that was uploaded');
+    check(call('GET', 'NetworkController@document', params: [999], headers: bearer($agentToken))['code'] === 'not_found'
+        && call('GET', 'NetworkController@evidence', headers: bearer($agentToken), query: ['library' => 'P01'])['code'] === 'not_found', 'an unknown document, or evidence not uploaded, is not found');
+    check(call('GET', 'NetworkController@index', headers: bearer($agentToken), query: ['library' => 'X99'])['code'] === 'validation_failed', 'an unknown location is refused');
 
     // Floor plans, as an agent lists and fetches them.
     check(call('GET', 'PlanController@index', headers: bearer($agentToken))['body']['data'] === [], 'no plans are listed before one is uploaded');

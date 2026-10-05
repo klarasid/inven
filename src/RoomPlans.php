@@ -45,16 +45,16 @@ final class RoomPlans
         return array_map(static fn(array $row): array => ['id' => (int) $row['id'], 'title' => (string) $row['title'], 'mime' => (string) $row['mime'], 'created_at' => (string) $row['created_at'], 'room_id' => (int) $row['room_id'], 'room_name' => (string) $row['room_name']], $rows);
     }
 
-    /** The kind of file at $path, read from its content: one of TYPES, or refused. */
-    public static function mime(string $path): string
+    /** The kind of file at $path, read from its content: one of TYPES, or refused. $what names the file in the refusal. */
+    public static function mime(string $path, string $what = 'denah'): string
     {
         $size = @filesize($path);
-        if ($size === false || $size < 1 || $size > self::MAX_BYTES) throw new RuntimeException('Berkas denah maksimal 5 MB.');
+        if ($size === false || $size < 1 || $size > self::MAX_BYTES) throw new RuntimeException('Berkas ' . $what . ' maksimal 5 MB.');
         $mime = (string) (new \finfo(FILEINFO_MIME_TYPE))->file($path);
-        if (!isset(self::TYPES[$mime])) throw new RuntimeException('Denah harus berupa PDF, JPEG, PNG, atau WebP.');
-        // A picture must really be one: its type is sent as stored when the plan is opened.
+        if (!isset(self::TYPES[$mime])) throw new RuntimeException(ucfirst($what) . ' harus berupa PDF, JPEG, PNG, atau WebP.');
+        // A picture must really be one: its type is sent as stored when the file is opened.
         if ($mime !== 'application/pdf' && (($info = @getimagesize($path)) === false || ($info['mime'] ?? '') !== $mime)) {
-            throw new RuntimeException('Gambar denah tidak dapat dibaca.');
+            throw new RuntimeException('Gambar ' . $what . ' tidak dapat dibaca.');
         }
         return $mime;
     }

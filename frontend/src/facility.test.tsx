@@ -7,7 +7,8 @@ import { WorkspaceContext, type ContextValue } from './context'
 
 const places=[{code:'00',name:'Kampus Tembalang',rooms:5},{code:'10',name:'Kampus Tegal',rooms:1}]
 const settings={designed:false,building_area:0,bandwidth_mbps:0,bandwidth_users:0,bandwidth_coverage:'all',bandwidth_date:'',evidence:null}
-const data=(more:object={})=>({settings,sivitas:{count:1200,single:false,unmapped:30},coverage:{all:'Seluruh area layanan',partial:'Sebagian area layanan'},levels:{a:'Sangat baik',b:'Baik',c:'Cukup',d:'Kurang'},
+const network={documents:[],kinds:{speedtest:'Hasil uji kecepatan',isp:'Layanan ISP',wifi:'Peta jangkauan Wi-Fi'},rooms:[{id:4,name:'Ruang baca'}],max_bytes:5242880,max:100}
+const data=(more:object={})=>({settings,network,sivitas:{count:1200,single:false,unmapped:30},coverage:{all:'Seluruh area layanan',partial:'Sebagian area layanan'},levels:{a:'Sangat baik',b:'Baik',c:'Cukup',d:'Kurang'},
  result:[{no:1,name:'Luas gedung dan ruang',value:'Belum diisi',level:null,checks:[{label:'Ada sivitas (anggota aktif) yang dilayani',ok:true}]},{no:6,name:'Jaringan internet',value:'Belum diisi',level:null,checks:[]}],
  locations:places,location:places[1],write:true,csrf:'token',...more})
 const pages={sarpras:'http://localhost/sarpras.php',software:'http://localhost/software.php',facility:'http://localhost/facility.php'}
@@ -94,4 +95,55 @@ test('picture evidence opens in a popup on the page; a PDF is left to the browse
  const link=await screen.findByRole('link',{name:'Lihat'})
  expect(link.getAttribute('href')).toBe('http://localhost/facility.php?evidence=1&library=10')
  expect(link.getAttribute('target')).toBe('_blank')
+})
+
+test('network documents are listed with their kind and room, added from a dialog, and removed after confirming',async()=>{
+ const documents=[{id:7,kind:'speedtest',title:'Uji kecepatan ruang baca',mime:'image/png',created_at:'2026-10-01 08:00:00',room:{id:4,name:'Ruang baca'}},{id:8,kind:'isp',title:'Tagihan ISP',mime:'application/pdf',created_at:'2026-10-01 08:00:00',room:null}]
+ const fetch=vi.fn((_:string,init:RequestInit)=>Promise.resolve(init.method==='POST'?reply({ok:true,message:'Dokumen jaringan tersimpan.'}):reply({ok:true,data:data({network:{...network,documents}})})))
+ vi.stubGlobal('fetch',fetch)
+ mount(context())
+ expect(await screen.findByText(/Hasil uji kecepatan · Ruang baca · Diunggah/)).toBeTruthy()
+ expect(screen.getByText(/^Layanan ISP · Diunggah/)).toBeTruthy()
+ // A picture opens in a popup on the page.
+ fireEvent.click(screen.getByRole('button',{name:'Lihat Uji kecepatan ruang baca'}))
+ const popup=await screen.findByRole('dialog',{name:'Uji kecepatan ruang baca'})
+ expect(popup.querySelector('img')?.getAttribute('src')).toBe('http://localhost/facility.php?network=7&library=10')
+ fireEvent.keyDown(popup,{key:'Escape'})
+ // Adding: a speed test unless another kind is chosen, for this location.
+ fireEvent.click(screen.getByRole('button',{name:'Tambah dokumen'}))
+ const dialog=await screen.findByRole('dialog',{name:'Tambah dokumen jaringan'})
+ const upload=screen.getByRole('button',{name:'Unggah'}) as HTMLButtonElement
+ expect(upload.disabled).toBe(true)
+ fireEvent.change(dialog.querySelector('input[type=file]')!,{target:{files:[new File(['x'],'catatan.txt',{type:'text/plain'})]}})
+ expect(screen.getByText('Gunakan PDF, JPEG, PNG, atau WebP maksimal 5 MB.')).toBeTruthy()
+ expect(upload.disabled).toBe(true)
+ fireEvent.change(dialog.querySelector('input[type=file]')!,{target:{files:[new File(['x'],'speedtest.png',{type:'image/png'})]}})
+ fireEvent.change(screen.getByLabelText('Judul'),{target:{value:'Uji lantai 2'}})
+ fireEvent.click(upload)
+ await waitFor(()=>expect(fetch.mock.calls.some(([,init])=>init.method==='POST')).toBe(true))
+ const body=fetch.mock.calls.find(([,init])=>init.method==='POST')![1].body as FormData
+ expect(Object.fromEntries(['action','kind','room_id','title','library','csrf'].map(k=>[k,body.get(k)]))).toEqual({action:'network_upload',kind:'speedtest',room_id:'',title:'Uji lantai 2',library:'10',csrf:'token'})
+ expect((body.get('document') as File).name).toBe('speedtest.png')
+ // Removing asks first.
+ fetch.mockClear()
+ fireEvent.click(await screen.findByRole('button',{name:'Hapus Tagihan ISP'}))
+ fireEvent.click(await screen.findByRole('button',{name:'Hapus dokumen'}))
+ await waitFor(()=>expect(fetch.mock.calls.some(([,init])=>init.method==='POST')).toBe(true))
+ const removed=fetch.mock.calls.find(([,init])=>init.method==='POST')![1].body as FormData
+ expect([removed.get('action'),removed.get('record_id'),removed.get('library')]).toEqual(['network_delete','8','10'])
+})
+
+test('readers open network documents but cannot add or remove them; before the migration the page says what to run',async()=>{
+ const documents=[{id:8,kind:'isp',title:'Tagihan ISP',mime:'application/pdf',created_at:'2026-10-01 08:00:00',room:null}]
+ vi.stubGlobal('fetch',vi.fn().mockResolvedValue(reply({ok:true,data:data({write:false,csrf:'',network:{...network,documents}})})))
+ mount(context())
+ const view=await screen.findByRole('button',{name:'Lihat Tagihan ISP'}) as HTMLButtonElement
+ expect(view.disabled).toBe(false)
+ expect(screen.queryByRole('button',{name:'Tambah dokumen'})).toBeNull()
+ expect(screen.queryByRole('button',{name:'Hapus Tagihan ISP'})).toBeNull()
+ cleanup()
+ vi.stubGlobal('fetch',vi.fn().mockResolvedValue(reply({ok:true,data:data({network:{...network,documents:null}})})))
+ mount(context())
+ expect(await screen.findByText(/Jalankan migrasi plugin hingga versi 15/)).toBeTruthy()
+ expect(screen.queryByRole('button',{name:'Tambah dokumen'})).toBeNull()
 })

@@ -38,6 +38,9 @@ final class Routes
 
         $map('GET', '/catalog', [CatalogController::class, 'summary']);
         $map('GET', '/catalog/document', [CatalogController::class, 'document']);
+        $map('GET', '/network', [NetworkController::class, 'index']);
+        $map('GET', '/network/evidence', [NetworkController::class, 'evidence']);
+        $map('GET', '/network/documents/[i:id]', [NetworkController::class, 'document']);
         $map('GET', '/plans', [PlanController::class, 'index']);
         $map('GET', '/plans/[i:id]', [PlanController::class, 'show']);
 
