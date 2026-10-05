@@ -6,7 +6,8 @@
  *   recap     Rekap Sarpras: eleven aspects computed from the inventory, the software register,
  *             the facility figures and supervision history. Read only; also serves the PDF
  *             (?pdf=<style>).
- *   software  Perangkat Lunak: the register of software the library runs.
+ *   software  Perangkat Lunak: the register of software the library runs, and the files that
+ *             show each application's licence (?licence_file=<id>).
  *   facility  Gedung & Jaringan: the figures that do not live in the inventory (building area,
  *             bandwidth), the bandwidth evidence file (?evidence=1), and the location's network
  *             documents: speed tests, the ISP's service, the Wi-Fi coverage map (?network=<id>).
@@ -39,10 +40,12 @@ require_once __DIR__ . '/PdfLayout.php';
 require_once __DIR__ . '/Sarpras.php';
 require_once __DIR__ . '/Sivitas.php';
 require_once __DIR__ . '/NetworkDocuments.php';
+require_once __DIR__ . '/SoftwareFiles.php';
 
 use SLiMS\Plugins\Inventory\NetworkDocuments;
 use SLiMS\Plugins\Inventory\Sarpras;
 use SLiMS\Plugins\Inventory\Sivitas;
+use SLiMS\Plugins\Inventory\SoftwareFiles;
 
 if (!utility::havePrivilege('stock_take', 'r')) {
     die('<div class="errorBox">' . __('You are not authorized to view this section') . '</div>');
@@ -51,7 +54,7 @@ if (!utility::havePrivilege('stock_take', 'r')) {
 // What each page may change. The recap changes nothing.
 $actions = [
     'recap' => [],
-    'software' => ['software', 'software_delete'],
+    'software' => ['software', 'software_delete', 'licence_upload', 'licence_delete'],
     'facility' => ['settings', 'evidence', 'evidence_delete', 'network_upload', 'network_delete'],
     'sivitas' => ['map', 'counting', 'merge', 'undo'],
 ];
@@ -100,7 +103,7 @@ $place = static function () use ($places, $library): ?array {
     return null;
 };
 
-$schemaMessage = 'Struktur data sarpras belum tersedia. Jalankan migrasi plugin hingga versi 15 melalui System → Plugins.';
+$schemaMessage = 'Struktur data sarpras belum tersedia. Jalankan migrasi plugin hingga versi 16 melalui System → Plugins.';
 $isSchema = static fn(Throwable $e): bool => $e instanceof PDOException && in_array((int) ($e->errorInfo[1] ?? 0), [1054, 1146], true);
 // An unexpected error goes into the daily usage report, stripped of its data. A schema not migrated
 // yet is not one: the report already carries the migration level.
@@ -169,12 +172,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $log('Perbaikan institusi #' . (int) $_POST['record_id'] . ' diurungkan untuk ' . $restored . ' anggota.', 'Update');
                 $json(['ok' => true, 'message' => 'Institusi ' . $restored . ' anggota dikembalikan.']);
             }
+        } elseif ($action === 'licence_upload') {
+            $softwareId = (int) ($_POST['software_id'] ?? 0);
+            $id = SoftwareFiles::upload($db, $softwareId, is_array($_FILES['file'] ?? null) ? $_FILES['file'] : [], (string) ($_POST['title'] ?? ''), isset($_SESSION['uid']) ? (int) $_SESSION['uid'] : null, date('Y-m-d H:i:s'));
+            $log('Bukti lisensi #' . $id . ' perangkat lunak #' . $softwareId . ' diunggah.', 'Update');
+            $json(['ok' => true, 'message' => 'Bukti lisensi tersimpan.']);
+        } elseif ($action === 'licence_delete') {
+            $softwareId = (int) ($_POST['software_id'] ?? 0);
+            $id = (int) ($_POST['record_id'] ?? 0);
+            SoftwareFiles::delete($db, $softwareId, $id);
+            $log('Bukti lisensi #' . $id . ' perangkat lunak #' . $softwareId . ' dihapus.', 'Delete');
+            $json(['ok' => true, 'message' => 'Bukti lisensi dihapus.']);
         } elseif ($action === 'software') {
             $id = Sarpras::saveSoftware($db, $_POST, (int) ($_POST['record_id'] ?? 0), isset($_SESSION['uid']) ? (int) $_SESSION['uid'] : null);
             $log('Perangkat lunak #' . $id . ' disimpan.', 'Update');
             $json(['ok' => true, 'message' => 'Aplikasi tersimpan.', 'record' => $id]);
         } else {
             $id = (int) ($_POST['record_id'] ?? 0);
+            // Its licence files go with it; before migration 16 there are none to remove.
+            try {
+                SoftwareFiles::deleteSoftware($db, $id);
+            } catch (PDOException $error) {
+                if (!$isSchema($error)) throw $error;
+            }
             Sarpras::deleteSoftware($db, $id);
             $log('Perangkat lunak #' . $id . ' dihapus.', 'Delete');
             $json(['ok' => true, 'message' => 'Aplikasi dihapus.']);
@@ -203,6 +223,29 @@ if ($page === 'facility' && ($_GET['evidence'] ?? '') === '1') {
     header('Content-Type: ' . $file['mime']);
     header('Content-Length: ' . filesize($file['path']));
     header('Content-Disposition: inline; filename="' . str_replace(['"', "\r", "\n"], '', $file['name']) . '"');
+    header('X-Content-Type-Options: nosniff');
+    header('Cache-Control: private, no-store');
+    readfile($file['path']);
+    exit;
+}
+
+if ($page === 'software' && isset($_GET['licence_file'])) {
+    $file = null;
+    try {
+        $file = SoftwareFiles::file($db, (int) $_GET['licence_file']);
+    } catch (Throwable $error) {
+        error_log('[sarpras] ' . $error->getMessage());
+    }
+    if (!$file) {
+        http_response_code(404);
+        echo 'Bukti lisensi tidak ditemukan.';
+        exit;
+    }
+    // A picture opened on its own gets no scripts or forms; a PDF needs the browser's viewer.
+    if ($file['mime'] !== 'application/pdf') header("Content-Security-Policy: default-src 'none'; sandbox");
+    header('Content-Type: ' . $file['mime']);
+    header('Content-Length: ' . filesize($file['path']));
+    header('Content-Disposition: inline; filename="' . $file['name'] . '"');
     header('X-Content-Type-Options: nosniff');
     header('Cache-Control: private, no-store');
     readfile($file['path']);
@@ -279,7 +322,15 @@ if (($_GET['format'] ?? '') === 'json') {
     try {
         $access = ['write' => $canWrite, 'csrf' => $canWrite ? $_SESSION['inventory_sarpras_csrf'] : ''];
         if ($page === 'software') {
-            $json(['ok' => true, 'data' => ['software' => Sarpras::software($db), 'licences' => Sarpras::LICENCES] + $access]);
+            // Before migration 16 the register still works; it says the licence files need the migration.
+            try {
+                $files = SoftwareFiles::bySoftware($db);
+            } catch (PDOException $error) {
+                if (!$isSchema($error)) throw $error;
+                $files = null;
+            }
+            $software = array_map(static fn(array $row): array => $row + ['files' => $files === null ? null : ($files[(int) $row['id']] ?? [])], Sarpras::software($db));
+            $json(['ok' => true, 'data' => ['software' => $software, 'licences' => Sarpras::LICENCES, 'files' => ['available' => $files !== null, 'max' => SoftwareFiles::MAX_PER_SOFTWARE, 'max_bytes' => SoftwareFiles::MAX_BYTES]] + $access]);
         } elseif ($page === 'sivitas') {
             $settings = Sivitas::settings($db);
             $maps = Sivitas::maps($db);

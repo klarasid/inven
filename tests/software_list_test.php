@@ -10,8 +10,10 @@ use SLiMS\Plugins\Inventory\SoftwareList;
 function check(bool $ok, string $label): void { if (!$ok) throw new RuntimeException('FAIL ' . $label); echo "ok   $label\n"; }
 
 $db = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+$db->exec('CREATE TABLE inventory_software_files (id INTEGER PRIMARY KEY, software_id INTEGER, title TEXT, filename TEXT, mime TEXT, created_by INTEGER, created_at TEXT)');
 $db->exec('CREATE TABLE inventory_software (id INTEGER PRIMARY KEY, name TEXT, version TEXT NOT NULL DEFAULT \'\', purpose TEXT NOT NULL DEFAULT \'\', licence TEXT, licence_ref TEXT NOT NULL DEFAULT \'\', valid_until TEXT, installs INTEGER NOT NULL DEFAULT 1, notes TEXT)');
 check(SoftwareList::build($db, '2026-10-06') === ['applications' => 0, 'licensed' => 0, 'percent' => null, 'groups' => []], 'register kosong tidak punya persentase');
+$db->exec("INSERT INTO inventory_software_files (software_id, title, filename, mime, created_at) VALUES (1, 'Stiker COA', 'lisensi-a.png', 'image/png', '2026-10-01 08:00:00'), (1, 'Faktur', 'lisensi-b.pdf', 'application/pdf', '2026-10-01 08:00:00'), (4, 'Halaman lisensi', 'lisensi-c.png', 'image/png', '2026-10-01 08:00:00')");
 $db->exec("INSERT INTO inventory_software (id, name, version, purpose, licence, licence_ref, valid_until, installs) VALUES
     (1, 'Windows 11 Pro', '23H2', 'Sistem operasi', 'komersial', 'OEM-<123>', NULL, 12),
     (2, 'Ubuntu', '24.04', 'sistem  operasi', 'open_source', '', NULL, 3),
@@ -35,5 +37,7 @@ check($byName['Microsoft 365']['expired'] === true && $byName['Microsoft 365']['
 
 $html = SoftwareList::html($list, ['printed_by' => 'Rina']);
 check(str_contains($html, 'Sistem operasi (2 aplikasi)') && str_contains($html, '4 dari 6 (66,7%)') && str_contains($html, 'OEM-&lt;123&gt;'), 'tiap kelompok dicetak dengan jumlahnya, dan bukti lisensi di-escape');
+check(array_column($byName['Windows 11 Pro']['files'], 'title') === ['Stiker COA', 'Faktur'] && $byName['Ubuntu']['files'] === [] && str_contains($html, '2 berkas bukti terlampir') && substr_count($html, 'berkas bukti terlampir') === 2,
+    'berkas bukti lisensi ikut pada aplikasinya, dan jumlahnya dicetak');
 check(substr_count($html, '>Resmi<') === 4 && substr_count($html, '>Kedaluwarsa<') === 1 && substr_count($html, '>Tidak resmi<') === 1, 'status tiap aplikasi dicetak');
 echo "ok   done\n";

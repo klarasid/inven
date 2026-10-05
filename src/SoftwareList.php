@@ -8,11 +8,13 @@ use PDO;
 
 require_once __DIR__ . '/PdfLayout.php';
 require_once __DIR__ . '/Sarpras.php';
+require_once __DIR__ . '/SoftwareFiles.php';
 
 /**
  * Daftar perangkat lunak: the software register (menu Perangkat Lunak) as an accreditation asks
  * for it, grouped by what each application is used for (operating system, office suite, library
- * automation, ...) with the licence that makes it legal. The register is one for the institution.
+ * automation, ...) with the licence that makes it legal and the files that show it (SoftwareFiles).
+ * The register is one for the institution.
  */
 final class SoftwareList
 {
@@ -26,7 +28,15 @@ final class SoftwareList
         $groups = [];
         $licensed = 0;
         $rows = Sarpras::software($db);
+        // Before migration 16 no application has licence files.
+        try {
+            $files = SoftwareFiles::bySoftware($db);
+        } catch (\PDOException $error) {
+            if (!in_array((int) ($error->errorInfo[1] ?? 0), [1054, 1146], true)) throw $error;
+            $files = [];
+        }
         foreach ($rows as $row) {
+            $row['files'] = $files[(int) $row['id']] ?? [];
             $row['licensed'] = Sarpras::licensed($row, $today);
             // A licence that ran out, as against software that never had one.
             $row['expired'] = !$row['licensed'] && $row['licence'] !== 'tidak';
@@ -77,7 +87,8 @@ final class SoftwareList
                     (string) ($n + 1),
                     '<span class="strong">' . $e($item['name']) . '</span>' . (trim((string) $item['version']) !== '' ? ' ' . $e($item['version']) : ''),
                     $e(Sarpras::LICENCES[$item['licence']] ?? $item['licence']),
-                    trim((string) $item['licence_ref']) !== '' ? $e($item['licence_ref']) : '—',
+                    (trim((string) $item['licence_ref']) !== '' ? $e($item['licence_ref']) : '—')
+                        . ($item['files'] ? '<br><span class="muted small">' . count($item['files']) . ' berkas bukti terlampir</span>' : ''),
                     $item['valid_until'] === null ? '—' : PdfLayout::date($item['valid_until']),
                     (string) (int) $item['installs'],
                     $status,

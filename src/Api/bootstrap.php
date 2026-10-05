@@ -7,7 +7,7 @@
  */
 foreach ([
     'PhotoStorage', 'ItemPhotos', 'ItemCodes', 'PublicLink', 'Holidays', 'WatchRecurrence', 'Supervision',
-    'Workspace', 'UpdateCheck', 'Telemetry', 'Inventory', 'StockTake', 'Documents', 'RoomPlans', 'Sarpras', 'InventoryCatalog', 'NetworkDocuments', 'SoftwareList',
+    'Workspace', 'UpdateCheck', 'Telemetry', 'Inventory', 'StockTake', 'Documents', 'RoomPlans', 'Sarpras', 'InventoryCatalog', 'NetworkDocuments', 'SoftwareFiles', 'SoftwareList',
 ] as $class) {
     require_once dirname(__DIR__) . '/' . $class . '.php';
 }

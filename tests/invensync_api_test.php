@@ -36,7 +36,7 @@ require dirname(__DIR__, 3) . '/lib/Migration/Migration.php';
 foreach (glob(__DIR__ . '/../migration/*.php') as $migration) require $migration;
 require __DIR__ . '/../src/Api/bootstrap.php';
 
-$names = ['inventory_network_documents', 'inventory_member_fixes', 'inventory_member_locations', 'member', 'mst_member_type', 'inventory_api_codes', 'inventory_room_plans', 'inventory_room_areas', 'inventory_software', 'inventory_api_idempotency', 'inventory_api_sessions', 'inventory_watch_photos', 'inventory_watch_events', 'inventory_watch_actions', 'inventory_watch_findings', 'inventory_watch_results', 'inventory_watch_inspections', 'inventory_watch_schedules', 'inventory_watch_templates', 'inventory_item_code_reservations', 'inventory_item_code_sequences', 'inventory_item_photos', 'inventory_items', 'inventory_locations', 'stock_take_item', 'stock_take', 'mst_item_status', 'item', 'mst_location', 'group_access', 'mst_module', 'setting', 'user', 'holiday', 'slims_connect_rate_limits', 'slims_connect_settings'];
+$names = ['inventory_software_files', 'inventory_network_documents', 'inventory_member_fixes', 'inventory_member_locations', 'member', 'mst_member_type', 'inventory_api_codes', 'inventory_room_plans', 'inventory_room_areas', 'inventory_software', 'inventory_api_idempotency', 'inventory_api_sessions', 'inventory_watch_photos', 'inventory_watch_events', 'inventory_watch_actions', 'inventory_watch_findings', 'inventory_watch_results', 'inventory_watch_inspections', 'inventory_watch_schedules', 'inventory_watch_templates', 'inventory_item_code_reservations', 'inventory_item_code_sequences', 'inventory_item_photos', 'inventory_items', 'inventory_locations', 'stock_take_item', 'stock_take', 'mst_item_status', 'item', 'mst_location', 'group_access', 'mst_module', 'setting', 'user', 'holiday', 'slims_connect_rate_limits', 'slims_connect_settings'];
 final class PrefixedConnection extends PDO {
     public array $names = []; public string $prefix = '';
     private function sql(string $sql): string { foreach ($this->names as $name) $sql = preg_replace('/(?<![A-Za-z0-9_.])' . $name . '\b/', $this->prefix . $name, $sql); return $sql; }
@@ -88,7 +88,7 @@ try {
     $db->exec('CREATE TABLE item (item_id INT PRIMARY KEY, item_code VARCHAR(20), item_status_id CHAR(3) NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     $db->exec('CREATE TABLE slims_connect_rate_limits (rate_key CHAR(64) PRIMARY KEY, attempts INT, window_started_at DATETIME, blocked_until DATETIME NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     $db->exec('CREATE TABLE slims_connect_settings (name VARCHAR(64) PRIMARY KEY, value TEXT, updated_at DATETIME) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
-    foreach (['CreateInventoryTables', 'AddSlimsLocationToInventoryLocations', 'CreateInventoryItemPhotos', 'MoveInventoryPhotosToFiles', 'AllowSharedInventoryLocationCodes', 'CreateInventoryItemCodes', 'CreateInventorySupervision', 'CreateInvensyncApi', 'AddFacilityProfileData', 'AllowSeveralItemCategories', 'CreateRoomAreasAndPlans', 'AllowAgentConnections', 'MapMembersToLocations', 'CreateNetworkDocuments'] as $migration) (new $migration())->up();
+    foreach (['CreateInventoryTables', 'AddSlimsLocationToInventoryLocations', 'CreateInventoryItemPhotos', 'MoveInventoryPhotosToFiles', 'AllowSharedInventoryLocationCodes', 'CreateInventoryItemCodes', 'CreateInventorySupervision', 'CreateInvensyncApi', 'AddFacilityProfileData', 'AllowSeveralItemCategories', 'CreateRoomAreasAndPlans', 'AllowAgentConnections', 'MapMembersToLocations', 'CreateNetworkDocuments', 'CreateSoftwareFiles'] as $migration) (new $migration())->up();
     (new CreateInvensyncApi())->up();
     check(true, 'migration 8 is repeatable');
 
@@ -313,8 +313,26 @@ try {
         && $register['body']['data']['software'][0]['purpose'] === 'Sistem operasi' && $register['body']['data']['software'][0]['licence'] === ['key' => 'komersial', 'label' => 'Komersial (berbayar)']
         && $register['body']['data']['software'][0]['licensed'] === true && $register['body']['data']['software'][1]['licensed'] === false, 'the software register comes with each application\'s use and licence, to a read-only librarian too');
     check($register['body']['data']['software'][0]['has_licence_reference'] === true && !str_contains((string) json_encode($register['body']), 'KUNCI-RAHASIA-123'), 'the licence number itself stays out of what an AI app reads');
+    $licenceFile = 'lisensi-' . str_repeat('ef', 16) . '.png';
+    mkdir(\SLiMS\Plugins\Inventory\SoftwareFiles::directory(), 0700, true);
+    file_put_contents(\SLiMS\Plugins\Inventory\SoftwareFiles::directory() . '/' . $licenceFile, "\x89PNG licence");
+    $db->prepare('INSERT INTO inventory_software_files (software_id, title, filename, mime, created_by, created_at) VALUES (?, ?, ?, ?, 1, NOW())')->execute([$register['body']['data']['software'][0]['id'], 'Stiker COA', $licenceFile, 'image/png']);
+    $proofs = array_column(call('GET', 'SoftwareController@index', headers: bearer($agentToken))['body']['data']['software'], 'files', 'name');
+    check(count($proofs['Windows 11 Pro']) === 1 && $proofs['Windows 11 Pro'][0]['title'] === 'Stiker COA' && $proofs['Windows 11 Pro'][0]['type'] === 'png' && $proofs['Photoshop'] === [], 'an application comes with the files that show its licence');
+    $proof = call('GET', 'SoftwareController@file', params: [$proofs['Windows 11 Pro'][0]['id']], headers: bearer($baca))['body'];
+    check($proof instanceof \SLiMS\Plugins\Inventory\Api\BytesResponse && $proof->bytes === "\x89PNG licence" && $proof->mimeType === 'image/png' && $proof->filename === 'stiker-coa.png', 'a licence file comes as it was uploaded');
+    check(call('GET', 'SoftwareController@file', params: [999], headers: bearer($agentToken))['code'] === 'not_found', 'an unknown licence file is not found');
     check($pdf(call('GET', 'SoftwareController@document', headers: bearer($agentToken))), 'the software register comes as PDF');
+    // Before migration 16 the register is still listed, without licence files.
+    $db->exec('RENAME TABLE inventory_software_files TO ' . $prefix . 'licence_files_later');
+    try {
+        $unmigrated = call('GET', 'SoftwareController@index', headers: bearer($agentToken));
+    } finally {
+        $db->exec('RENAME TABLE ' . $prefix . 'licence_files_later TO inventory_software_files');
+    }
+    check(array_column($unmigrated['body']['data']['software'], 'files') === [[], []], 'a SLiMS that has not run the licence file migration still lists its software');
     $db->exec('DELETE FROM inventory_software');
+    $db->exec('DELETE FROM inventory_software_files');
 
     // What shows the library's internet: the figures, their evidence, and the network documents.
     $network = call('GET', 'NetworkController@index', headers: bearer($agentToken))['body']['data'];

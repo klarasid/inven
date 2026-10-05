@@ -40,6 +40,7 @@ final class Routes
         $map('GET', '/catalog/document', [CatalogController::class, 'document']);
         $map('GET', '/software', [SoftwareController::class, 'index']);
         $map('GET', '/software/document', [SoftwareController::class, 'document']);
+        $map('GET', '/software/files/[i:id]', [SoftwareController::class, 'file']);
         $map('GET', '/network', [NetworkController::class, 'index']);
         $map('GET', '/network/evidence', [NetworkController::class, 'evidence']);
         $map('GET', '/network/documents/[i:id]', [NetworkController::class, 'document']);

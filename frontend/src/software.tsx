@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { toast } from "sonner";
-import { AppWindow, ChartNoAxesColumn, Pencil, Plus, Trash2 } from "lucide-react";
+import { AppWindow, ChartNoAxesColumn, FileText, Paperclip, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./components/ui/table";
-import { FieldGroup } from "./components/ui/field";
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "./components/ui/field";
+import { Input } from "./components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -14,10 +15,12 @@ import {
   DialogTitle,
 } from "./components/ui/dialog";
 import { useWorkspace } from "./context";
-import { dateLabel } from "./api";
-import { Blank, Choice, ErrorBox, Loading, PageHeader, TextField } from "./shared";
+import { dateLabel, url } from "./api";
+import { Blank, Choice, ErrorBox, ImagePreview, Loading, PageHeader, TextField, previewPdf } from "./shared";
 import { Confirm, usePage } from "./settings";
 
+/** A file that shows an application's licence: a certificate, an invoice, a screenshot. */
+type LicenceFile = { id: number; title: string; mime: string; created_at: string };
 type Software = {
   id: number;
   name: string;
@@ -28,8 +31,12 @@ type Software = {
   valid_until: string | null;
   installs: number;
   notes: string | null;
+  /** Null until the plugin's migration 16 has run. */
+  files: LicenceFile[] | null;
 };
-type Data = { software: Software[]; licences: Record<string, string>; write: boolean; csrf: string };
+/** `available` is false until the plugin's migration 16 has run. */
+type Data = { software: Software[]; licences: Record<string, string>; files: { available: boolean; max: number; max_bytes: number }; write: boolean; csrf: string };
+type Post = (values: Record<string, unknown>) => Promise<{ message?: string }>;
 
 const blank = { name: "", version: "", purpose: "", licence: "", licence_ref: "", valid_until: "", installs: "1", notes: "" };
 
@@ -64,6 +71,53 @@ export function SoftwarePage() {
   const { data, error: loadError, reload, post } = usePage<Data>(w.config.pages!.software);
   const [editing, setEditing] = useState<{ id: number; values: typeof blank; other: boolean } | null>(null);
   const [remove, setRemove] = useState<Software | null>(null);
+  // The application whose licence files are open, by id: the list reloads under the dialog.
+  const [proofOf, setProofOf] = useState<number | null>(null);
+  const proof = data?.software.find((s) => s.id === proofOf);
+  // Licence files chosen in the form: uploaded once the application itself is saved.
+  const [pending, setPending] = useState<File[]>([]);
+  const [picker, setPicker] = useState(0);
+  const proofId = useId();
+  const edited = data?.software.find((s) => s.id === editing?.id);
+  const megabytes = data ? Math.round(data.files.max_bytes / 1024 / 1024) : 5;
+  const room = data ? data.files.max - (edited?.files?.length ?? 0) : 0;
+  const pendingError = !data
+    ? ""
+    : pending.some((f) => !fileTypes.includes(f.type) || f.size > data.files.max_bytes)
+      ? `Gunakan PDF, JPEG, PNG, atau WebP maksimal ${megabytes} MB.`
+      : pending.length > room
+        ? `Satu aplikasi memuat paling banyak ${data.files.max} berkas. Pilih paling banyak ${Math.max(room, 0)} berkas lagi.`
+        : "";
+  const close = () => {
+    setEditing(null);
+    setPending([]);
+    setPicker((n) => n + 1);
+  };
+
+  async function save() {
+    if (!editing || !data) return;
+    if (editing.other && !editing.values.purpose.trim()) return setError("Tulis kegunaan aplikasi, atau pilih dari daftar.");
+    if (pendingError) return setError(pendingError);
+    setBusy(true);
+    setError("");
+    try {
+      const reply = (await post({ action: "software", record_id: editing.id, ...editing.values, csrf: data.csrf })) as { message?: string; record?: number };
+      const id = editing.id || Number(reply.record);
+      // The application is saved: a failed upload must not save it a second time on the next try.
+      setEditing((e) => e && { ...e, id });
+      for (const file of pending) {
+        await post({ action: "licence_upload", software_id: id, title: "", file, csrf: data.csrf });
+        setPending((files) => files.filter((f) => f !== file));
+      }
+      toast.success(reply.message);
+      close();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+      reload();
+    }
+  }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const today = w.config.today;
@@ -156,6 +210,7 @@ export function SoftwarePage() {
                 <TableHead>Lisensi</TableHead>
                 <TableHead className="hidden sm:table-cell">Berlaku sampai</TableHead>
                 <TableHead className="hidden text-right sm:table-cell">Instalasi</TableHead>
+                <TableHead>Bukti</TableHead>
                 {data.write && (
                   <TableHead className="w-0">
                     <span className="sr-only">Tindakan</span>
@@ -179,6 +234,12 @@ export function SoftwarePage() {
                   </TableCell>
                   <TableCell className="hidden sm:table-cell">{s.valid_until ? dateLabel(s.valid_until) : "—"}</TableCell>
                   <TableCell className="hidden text-right tabular-nums sm:table-cell">{s.installs}</TableCell>
+                  <TableCell>
+                    <Button size="sm" variant="ghost" aria-label={`Bukti lisensi ${s.name}`} onClick={() => setProofOf(s.id)}>
+                      <Paperclip data-icon="inline-start" />
+                      {s.files?.length ?? 0}
+                    </Button>
+                  </TableCell>
                   {data.write && (
                     <TableCell>
                       <div className="flex justify-end gap-1">
@@ -197,7 +258,7 @@ export function SoftwarePage() {
           </Table>
         </div>
       )}
-      <Dialog open={!!editing} onOpenChange={(o) => !o && !busy && setEditing(null)}>
+      <Dialog open={!!editing} onOpenChange={(o) => !o && !busy && close()}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{editing?.id ? "Ubah aplikasi" : "Tambah aplikasi"}</DialogTitle>
@@ -248,27 +309,50 @@ export function SoftwarePage() {
                   />
                   <TextField label="Instalasi" type="number" value={editing.values.installs} onChange={(v) => set("installs", v)} />
                 </FieldGroup>
+                <Field data-invalid={!!pendingError}>
+                  <FieldLabel htmlFor={proofId}>Berkas bukti lisensi</FieldLabel>
+                  {!data.files.available ? (
+                    <p className="text-sm text-muted-foreground">Jalankan migrasi plugin hingga versi 16 di System → Plugins untuk menyimpan bukti lisensi.</p>
+                  ) : (
+                    <>
+                      {edited && <LicenceFileList software={edited} data={data} page={w.config.pages!.software} post={post} reload={reload} onError={setError} />}
+                      <Input
+                        key={picker}
+                        id={proofId}
+                        type="file"
+                        multiple
+                        accept={fileTypes.join(",")}
+                        onChange={(e) => {
+                          setPending(Array.from(e.target.files ?? []));
+                          setError("");
+                        }}
+                      />
+                      {pendingError ? (
+                        <FieldError>{pendingError}</FieldError>
+                      ) : (
+                        <FieldDescription>
+                          Opsional. Sertifikat lisensi, faktur, atau tangkapan layar halaman lisensi. PDF, JPEG, PNG, atau WebP, maksimal {megabytes} MB, paling banyak{" "}
+                          {data.files.max} berkas per aplikasi. Diunggah saat Anda menyimpan.
+                        </FieldDescription>
+                      )}
+                    </>
+                  )}
+                </Field>
                 <TextField label="Catatan" multiline value={editing.values.notes} onChange={(v) => set("notes", v)} />
               </FieldGroup>
             </fieldset>
           )}
           <DialogFooter>
-            <Button variant="outline" disabled={busy} onClick={() => setEditing(null)}>
+            <Button variant="outline" disabled={busy} onClick={close}>
               Batal
             </Button>
-            <Button
-              disabled={busy}
-              onClick={() => {
-                if (!editing) return;
-                if (editing.other && !editing.values.purpose.trim()) return setError("Tulis kegunaan aplikasi, atau pilih dari daftar.");
-                run({ action: "software", record_id: editing.id, ...editing.values }, () => setEditing(null), setError);
-              }}
-            >
-              {busy ? "Menyimpan…" : "Simpan"}
+            <Button disabled={busy} onClick={save}>
+              {busy ? (pending.length ? "Menyimpan dan mengunggah…" : "Menyimpan…") : "Simpan"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {proof && data && <LicenceFiles software={proof} data={data} page={w.config.pages!.software} post={post} reload={reload} onClose={() => setProofOf(null)} />}
       <Confirm
         open={!!remove}
         title={`Hapus ${remove?.name ?? "aplikasi"}?`}
@@ -279,5 +363,169 @@ export function SoftwarePage() {
         onConfirm={() => remove && run({ action: "software_delete", record_id: remove.id }, () => setRemove(null), (m) => toast.error(m))}
       />
     </>
+  );
+}
+
+const fileTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
+
+/** An application's licence files: opened by anyone who may see the register, removed by those who may write it. */
+function LicenceFileList({ software, data, page, post, reload, onError }: { software: Software; data: Data; page: string; post: Post; reload: () => void; onError: (message: string) => void }) {
+  const w = useWorkspace();
+  const [viewing, setViewing] = useState<LicenceFile>();
+  const [removing, setRemoving] = useState<LicenceFile>();
+  const [busy, setBusy] = useState(false);
+  const files = software.files ?? [];
+  const href = (f: LicenceFile) => url(page, { licence_file: f.id });
+  // Both kinds open in a popup over the page: a PDF in the print viewer, a picture in a dialog.
+  const open = (f: LicenceFile) => (f.mime === "application/pdf" ? previewPdf(w.config, href(f), f.title) : setViewing(f));
+
+  async function remove() {
+    if (!removing) return;
+    setBusy(true);
+    onError("");
+    try {
+      const reply = await post({ action: "licence_delete", software_id: software.id, record_id: removing.id, csrf: data.csrf });
+      toast.success(reply.message);
+      setRemoving(undefined);
+      reload();
+    } catch (e) {
+      onError((e as Error).message);
+      setRemoving(undefined);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      {files.length > 0 && (
+        <ul className="flex flex-col gap-2">
+          {files.map((f) => (
+            <li key={f.id} className="flex flex-wrap items-center gap-3 rounded-xl border p-3">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                <FileText className="size-4" />
+              </span>
+              <div className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-sm font-medium">{f.title}</span>
+                <span className="text-xs text-muted-foreground">Diunggah {dateLabel(f.created_at)}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Button type="button" size="sm" variant="outline" aria-label={`Lihat ${f.title}`} onClick={() => open(f)}>
+                  Lihat
+                </Button>
+                {data.write && (
+                  <Button type="button" size="icon-sm" variant="ghost" className="text-destructive" aria-label={`Hapus ${f.title}`} disabled={busy} onClick={() => setRemoving(f)}>
+                    <Trash2 />
+                  </Button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      <ImagePreview
+        image={viewing && { url: href(viewing), title: viewing.title, description: `Bukti lisensi ${software.name}, diunggah ${dateLabel(viewing.created_at)}.` }}
+        onClose={() => setViewing(undefined)}
+      />
+      <Confirm
+        open={!!removing}
+        title="Hapus bukti lisensi?"
+        description={`${removing?.title || "Berkas"} dihapus permanen.`}
+        action="Hapus bukti"
+        busy={busy}
+        onCancel={() => setRemoving(undefined)}
+        onConfirm={remove}
+      />
+    </>
+  );
+}
+
+/** One application's licence files in a dialog of their own, opened from its row: where a reader sees them. */
+function LicenceFiles({ software, data, page, post, reload, onClose }: { software: Software; data: Data; page: string; post: Post; reload: () => void; onClose: () => void }) {
+  const fileId = useId();
+  const titleId = useId();
+  const [file, setFile] = useState<File>();
+  const [title, setTitle] = useState("");
+  const [picker, setPicker] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const files = software.files;
+  const megabytes = Math.round(data.files.max_bytes / 1024 / 1024);
+  const fileError = file && (!fileTypes.includes(file.type) || file.size > data.files.max_bytes) ? `Gunakan PDF, JPEG, PNG, atau WebP maksimal ${megabytes} MB.` : "";
+
+  async function upload() {
+    if (!file) return;
+    setBusy(true);
+    setError("");
+    try {
+      const reply = await post({ action: "licence_upload", software_id: software.id, title, file, csrf: data.csrf });
+      toast.success(reply.message);
+      setFile(undefined);
+      setTitle("");
+      setPicker((n) => n + 1);
+      reload();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Bukti lisensi {software.name}</DialogTitle>
+          <DialogDescription>Sertifikat lisensi, faktur, atau tangkapan layar halaman lisensi. Tidak mengubah hitungan di Rekap Sarpras.</DialogDescription>
+        </DialogHeader>
+        <ErrorBox message={error} />
+        {files === null ? (
+          <p className="text-sm text-muted-foreground">Jalankan migrasi plugin hingga versi 16 di System → Plugins untuk menyimpan bukti lisensi.</p>
+        ) : (
+          <>
+            {files.length === 0 && <p className="text-sm text-muted-foreground">Belum ada bukti lisensi.</p>}
+            <LicenceFileList software={software} data={data} page={page} post={post} reload={reload} onError={setError} />
+            {data.write &&
+              (files.length >= data.files.max ? (
+                <p className="text-sm text-muted-foreground">Satu aplikasi memuat paling banyak {data.files.max} berkas. Hapus berkas yang tidak dipakai untuk menambah.</p>
+              ) : (
+                <fieldset disabled={busy} className="min-w-0">
+                  <FieldGroup>
+                    <Field data-invalid={!!fileError}>
+                      <FieldLabel htmlFor={fileId}>Berkas bukti</FieldLabel>
+                      <Input
+                        key={picker}
+                        id={fileId}
+                        type="file"
+                        accept={fileTypes.join(",")}
+                        onChange={(e) => {
+                          setFile(e.target.files?.[0]);
+                          setError("");
+                        }}
+                      />
+                      {fileError ? <FieldError>{fileError}</FieldError> : <FieldDescription>PDF, JPEG, PNG, atau WebP, maksimal {megabytes} MB.</FieldDescription>}
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor={titleId}>Judul</FieldLabel>
+                      <Input id={titleId} maxLength={150} value={title} placeholder="Contoh: Sertifikat lisensi" onChange={(e) => setTitle(e.target.value)} />
+                      <FieldDescription>Opsional. Tanpa judul, nama berkas yang dipakai.</FieldDescription>
+                    </Field>
+                  </FieldGroup>
+                </fieldset>
+              ))}
+          </>
+        )}
+        <DialogFooter>
+          <Button variant="outline" disabled={busy} onClick={onClose}>
+            Tutup
+          </Button>
+          {data.write && files !== null && files.length < data.files.max && (
+            <Button disabled={busy || !file || !!fileError} onClick={upload}>
+              {busy ? "Mengunggah…" : "Unggah"}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
