@@ -297,6 +297,14 @@ try {
     check($sarpras['aspects'][0]['columns'] === ['Ruangan', 'Luas'] && $sarpras['aspects'][0]['rows'] === [['Ruang baca umum', '120,50 m²'], ['Ruang referensi', '—']], 'the size of each room comes with the building aspect');
     check($sarpras['aspects'][1]['rows'] === [['Ruang baca umum', 'Area baca, Area literasi / pojok baca (Pojok baca)'], ['Ruang referensi', '—']], 'the areas of each room come with the service area aspect');
 
+    // Daftar inventaris berfoto, as an agent asks for it.
+    $catalog = call('GET', 'CatalogController@summary', headers: bearer($agentToken), query: ['group' => 'area', 'categories' => 'komputer'])['body']['data'];
+    check($catalog['items'] === 1 && $catalog['with_photos'] === 0 && array_column($catalog['groups'], 'items', 'label') === ['Area baca' => 1, 'Area literasi / pojok baca' => 1], 'the photo inventory is summed up by the areas of the items\' rooms');
+    check($pdf(call('GET', 'CatalogController@document', headers: bearer($baca), query: ['categories' => 'komputer'])), 'the photo inventory comes as PDF, to a read-only librarian too');
+    check(call('GET', 'CatalogController@summary', headers: bearer($agentToken), query: ['group' => 'ruangan'])['code'] === 'validation_failed'
+        && call('GET', 'CatalogController@summary', headers: bearer($agentToken), query: ['categories' => 'mebel'])['code'] === 'validation_failed'
+        && call('GET', 'CatalogController@document', headers: bearer($agentToken), query: ['library' => 'X99'])['details']['fields']['library'][0] === 'Lokasi perpustakaan tidak ditemukan. Pilih salah satu: P01.', 'an unknown grouping, category or location is refused, saying what to choose');
+
     // Floor plans, as an agent lists and fetches them.
     check(call('GET', 'PlanController@index', headers: bearer($agentToken))['body']['data'] === [], 'no plans are listed before one is uploaded');
     $planFile = 'denah-' . str_repeat('ab', 16) . '.png';

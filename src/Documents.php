@@ -124,6 +124,24 @@ final class Documents
     }
 
     /**
+     * Daftar inventaris berfoto: the items with one photo each, grouped by category or by area.
+     *
+     * @param  list<string>  $categories
+     * @return array{filename: string, bytes: string, count: int}
+     */
+    public function catalog(PhotoStorage $photos, string $group, array $categories, string $library, string $libraryName, string $printedBy): array
+    {
+        self::ensureRuntime();
+        require_once __DIR__ . '/InventoryCatalog.php';
+        $catalog = InventoryCatalog::build($this->db, $group, $categories, $library);
+        $html = InventoryCatalog::html($catalog, static fn (string $filename): ?string => $photos->read($filename), ['library_name' => $libraryName, 'printed_by' => $printedBy]);
+        $pdf = PdfLayout::mpdf($this->tempDir, 'Daftar Inventaris Berfoto', PdfLayout::footer('Daftar inventaris berfoto'));
+        $pdf->WriteHTML($html);
+
+        return ['filename' => 'daftar-inventaris-berfoto-' . self::slug($group . '-' . $library, $group) . '.pdf', 'bytes' => $pdf->Output('', 'S'), 'count' => $catalog['items']];
+    }
+
+    /**
      * The supervision report for a period, as the admin Reports page prints it.
      *
      * @param  array{from: string, to: string, library: string, room: int, inspection_status: string, finding_status: string}  $filter

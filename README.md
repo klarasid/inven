@@ -221,6 +221,7 @@ php tests/history_workbook_test.php
 php tests/menu_structure_test.php
 php tests/sarpras_combine_test.php
 php tests/sarpras_categories_test.php
+php tests/inventory_catalog_test.php
 php tests/room_areas_test.php
 php tests/agent_codes_test.php
 php tests/sivitas_test.php
