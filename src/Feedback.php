@@ -19,6 +19,10 @@ require_once __DIR__ . '/UpdateCheck.php';
  * the versions of the plugin, SLiMS and PHP, and the librarian's name and email only when they tick
  * "Boleh dihubungi". Who wrote it is kept here either way, for the history.
  *
+ * SLiMS opens its connection as utf8, which holds no emoji: they would be kept, and sent, as
+ * "????". Everything here that reads or writes the feedback tables does so as utf8mb4 (unicode())
+ * and gives the connection back as it found it.
+ *
  * Runs on PHP 7.4 like the rest of the plugin.
  */
 final class Feedback
@@ -48,6 +52,14 @@ final class Feedback
      * @return array<string,mixed> the piece as list() shows it
      */
     public static function submit(PDO $db, array $input, int $uid, string $now): array
+    {
+        return self::unicode($db, static function () use ($db, $input, $uid, $now): array {
+            return self::keep($db, $input, $uid, $now);
+        });
+    }
+
+    /** @return array<string,mixed> */
+    private static function keep(PDO $db, array $input, int $uid, string $now): array
     {
         $kind = is_scalar($input['kind'] ?? null) ? (string) $input['kind'] : '';
         if (!isset(self::KINDS[$kind])) throw new RuntimeException('Pilih jenis masukan.');
@@ -102,6 +114,11 @@ final class Feedback
     /** Sends what is still waiting, a few at a time. @return int how many were sent */
     public static function flush(PDO $db): int
     {
+        return self::unicode($db, static function () use ($db): int { return self::flushNow($db); });
+    }
+
+    private static function flushNow(PDO $db): int
+    {
         $sent = 0;
         $waiting = $db->query("SELECT * FROM inventory_feedback WHERE panel_id IS NULL ORDER BY id LIMIT " . self::MAX_FLUSH)->fetchAll(PDO::FETCH_ASSOC);
         foreach ($waiting as $row) {
@@ -115,6 +132,11 @@ final class Feedback
      * Asked at most every six hours, or every minute when a librarian opens the history.
      */
     public static function refresh(PDO $db, bool $force = false): bool
+    {
+        return self::unicode($db, static function () use ($db, $force): bool { return self::refreshNow($db, $force); });
+    }
+
+    private static function refreshNow(PDO $db, bool $force): bool
     {
         $checked = (int) self::setting($db, self::CHECKED);
         if (time() - $checked < ($force ? self::REFRESH_FORCED : self::REFRESH)) return false;
@@ -155,6 +177,12 @@ final class Feedback
      * @return list<array<string,mixed>>
      */
     public static function list(PDO $db, int $limit = 50): array
+    {
+        return self::unicode($db, static function () use ($db, $limit): array { return self::listNow($db, $limit); });
+    }
+
+    /** @return list<array<string,mixed>> */
+    private static function listNow(PDO $db, int $limit): array
     {
         $rows = $db->query('SELECT f.*, u.realname FROM inventory_feedback f LEFT JOIN user u ON u.user_id = f.user_id ORDER BY f.id DESC LIMIT ' . max(1, min(200, $limit)))->fetchAll(PDO::FETCH_ASSOC);
         if (!$rows) return [];
@@ -275,6 +303,30 @@ final class Feedback
         if ($status < 200 || $status >= 300 || !is_string($body)) return null;
         $decoded = json_decode($body, true);
         return is_array($decoded) ? $decoded : null;
+    }
+
+    /**
+     * Runs $work with the connection speaking utf8mb4, so emoji are kept and read back whole, then
+     * gives the connection back the character set it had. Only MySQL needs it.
+     *
+     * @template T
+     * @param callable(): T $work
+     * @return T
+     */
+    private static function unicode(PDO $db, callable $work)
+    {
+        if ($db->getAttribute(PDO::ATTR_DRIVER_NAME) !== 'mysql') return $work();
+        $client = (string) $db->query('SELECT @@character_set_client')->fetchColumn();
+        if ($client === 'utf8mb4') return $work();
+        $db->query('SET NAMES utf8mb4');
+        try {
+            return $work();
+        } finally {
+            // As SLiMS opened it (lib/Connection.php): SET NAMES, then the character set it reads with.
+            $restore = preg_match('/\A[a-z0-9_]+\z/', $client) ? $client : 'utf8';
+            $db->query('SET NAMES ' . $restore);
+            $db->query('SET CHARACTER SET ' . $restore);
+        }
     }
 
     private static function datetime($value, string $fallback): string

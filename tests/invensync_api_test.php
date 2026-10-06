@@ -36,7 +36,7 @@ require dirname(__DIR__, 3) . '/lib/Migration/Migration.php';
 foreach (glob(__DIR__ . '/../migration/*.php') as $migration) require $migration;
 require __DIR__ . '/../src/Api/bootstrap.php';
 
-$names = ['inventory_area_photos', 'inventory_software_files', 'inventory_support_documents', 'inventory_network_documents', 'inventory_member_fixes', 'inventory_member_locations', 'member', 'mst_member_type', 'inventory_api_codes', 'inventory_room_plans', 'inventory_room_areas', 'inventory_software', 'inventory_api_idempotency', 'inventory_api_sessions', 'inventory_watch_photos', 'inventory_watch_events', 'inventory_watch_actions', 'inventory_watch_findings', 'inventory_watch_results', 'inventory_watch_inspections', 'inventory_watch_schedules', 'inventory_watch_templates', 'inventory_item_code_reservations', 'inventory_item_code_sequences', 'inventory_item_photos', 'inventory_items', 'inventory_locations', 'stock_take_item', 'stock_take', 'mst_item_status', 'item', 'mst_location', 'group_access', 'mst_module', 'setting', 'user', 'holiday', 'slims_connect_rate_limits', 'slims_connect_settings'];
+$names = ['inventory_feedback_replies', 'inventory_feedback', 'inventory_area_photos', 'inventory_software_files', 'inventory_support_documents', 'inventory_network_documents', 'inventory_member_fixes', 'inventory_member_locations', 'member', 'mst_member_type', 'inventory_api_codes', 'inventory_room_plans', 'inventory_room_areas', 'inventory_software', 'inventory_api_idempotency', 'inventory_api_sessions', 'inventory_watch_photos', 'inventory_watch_events', 'inventory_watch_actions', 'inventory_watch_findings', 'inventory_watch_results', 'inventory_watch_inspections', 'inventory_watch_schedules', 'inventory_watch_templates', 'inventory_item_code_reservations', 'inventory_item_code_sequences', 'inventory_item_photos', 'inventory_items', 'inventory_locations', 'stock_take_item', 'stock_take', 'mst_item_status', 'item', 'mst_location', 'group_access', 'mst_module', 'setting', 'user', 'holiday', 'slims_connect_rate_limits', 'slims_connect_settings'];
 final class PrefixedConnection extends PDO {
     public array $names = []; public string $prefix = '';
     private function sql(string $sql): string { foreach ($this->names as $name) $sql = preg_replace('/(?<![A-Za-z0-9_.])' . $name . '\b/', $this->prefix . $name, $sql); return $sql; }
@@ -88,7 +88,7 @@ try {
     $db->exec('CREATE TABLE item (item_id INT PRIMARY KEY, item_code VARCHAR(20), item_status_id CHAR(3) NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     $db->exec('CREATE TABLE slims_connect_rate_limits (rate_key CHAR(64) PRIMARY KEY, attempts INT, window_started_at DATETIME, blocked_until DATETIME NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     $db->exec('CREATE TABLE slims_connect_settings (name VARCHAR(64) PRIMARY KEY, value TEXT, updated_at DATETIME) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
-    foreach (['CreateInventoryTables', 'AddSlimsLocationToInventoryLocations', 'CreateInventoryItemPhotos', 'MoveInventoryPhotosToFiles', 'AllowSharedInventoryLocationCodes', 'CreateInventoryItemCodes', 'CreateInventorySupervision', 'CreateInvensyncApi', 'AddFacilityProfileData', 'AllowSeveralItemCategories', 'CreateRoomAreasAndPlans', 'AllowAgentConnections', 'MapMembersToLocations', 'CreateNetworkDocuments', 'CreateSoftwareFiles', 'RenameNetworkDocumentsToSupportDocuments', 'MoveBandwidthEvidenceToSupportDocuments', 'CreateAreaPhotos'] as $migration) (new $migration())->up();
+    foreach (['CreateInventoryTables', 'AddSlimsLocationToInventoryLocations', 'CreateInventoryItemPhotos', 'MoveInventoryPhotosToFiles', 'AllowSharedInventoryLocationCodes', 'CreateInventoryItemCodes', 'CreateInventorySupervision', 'CreateInvensyncApi', 'AddFacilityProfileData', 'AllowSeveralItemCategories', 'CreateRoomAreasAndPlans', 'AllowAgentConnections', 'MapMembersToLocations', 'CreateNetworkDocuments', 'CreateSoftwareFiles', 'RenameNetworkDocumentsToSupportDocuments', 'MoveBandwidthEvidenceToSupportDocuments', 'CreateAreaPhotos', 'CreateFeedback'] as $migration) (new $migration())->up();
     (new CreateInvensyncApi())->up();
     check(true, 'migration 8 is repeatable');
 
@@ -324,6 +324,18 @@ try {
         && call('GET', 'CatalogController@summary', headers: bearer($agentToken), query: ['categories' => 'mebel'])['code'] === 'validation_failed'
         && call('GET', 'CatalogController@summary', headers: bearer($agentToken), query: ['photos' => 'semua'])['code'] === 'validation_failed'
         && call('GET', 'CatalogController@document', headers: bearer($agentToken), query: ['library' => 'X99'])['details']['fields']['library'][0] === 'Lokasi perpustakaan tidak ditemukan. Pilih salah satu: P01.', 'an unknown grouping, category or location is refused, saying what to choose');
+
+    // Feedback keeps emoji whole, over a connection opened as SLiMS opens it (utf8), and leaves it so.
+    require_once __DIR__ . '/../src/Feedback.php';
+    $db->query('SET NAMES utf8');
+    $db->query('SET CHARACTER SET utf8');
+    $toKlaras = null;
+    \SLiMS\Plugins\Inventory\Feedback::$transport = static function (string $url, array $payload) use (&$toKlaras): ?array { $toKlaras = $payload; return null; };
+    $piece = \SLiMS\Plugins\Inventory\Feedback::submit($db, ['kind' => 'praise', 'message' => 'Mantap sekali 👍🏽 terima kasih 🙏'], 1, date('Y-m-d H:i:s'));
+    check($piece['message'] === 'Mantap sekali 👍🏽 terima kasih 🙏' && ($toKlaras['message'] ?? '') === 'Mantap sekali 👍🏽 terima kasih 🙏', 'feedback keeps and sends emoji whole');
+    check($db->query('SELECT @@character_set_client')->fetchColumn() === 'utf8' || $db->query('SELECT @@character_set_client')->fetchColumn() === 'utf8mb3', 'and gives SLiMS\'s connection back its own character set');
+    \SLiMS\Plugins\Inventory\Feedback::$transport = null;
+    $db->query('SET NAMES utf8mb4');
 
     // The areas and public facilities with their photos, as an agent asks for them.
     $db->exec("INSERT INTO inventory_room_areas (location_id, type, name, created_at, updated_at) VALUES (2, 'toilet', '', NOW(), NOW())");
