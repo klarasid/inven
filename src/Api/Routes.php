@@ -36,6 +36,8 @@ final class Routes
         $map('GET', '/rooms/[i:id]/documents/kir', [RoomController::class, 'kir']);
         $map('GET', '/rooms/[i:id]/documents/labels', [RoomController::class, 'labels']);
 
+        $map('GET', '/areas', [AreaController::class, 'summary']);
+        $map('GET', '/areas/document', [AreaController::class, 'document']);
         $map('GET', '/catalog', [CatalogController::class, 'summary']);
         $map('GET', '/catalog/document', [CatalogController::class, 'document']);
         $map('GET', '/software', [SoftwareController::class, 'index']);

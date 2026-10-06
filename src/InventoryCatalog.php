@@ -116,7 +116,7 @@ final class InventoryCatalog
     }
 
     /** A photo small enough to print a few hundred of: a JPEG data URI, or null when it cannot be read. */
-    private static function thumbnail(?string $bytes): ?string
+    public static function thumbnail(?string $bytes): ?string
     {
         $image = $bytes === null || $bytes === '' ? false : @imagecreatefromstring($bytes);
         if (!$image) return null;

@@ -36,7 +36,7 @@ require dirname(__DIR__, 3) . '/lib/Migration/Migration.php';
 foreach (glob(__DIR__ . '/../migration/*.php') as $migration) require $migration;
 require __DIR__ . '/../src/Api/bootstrap.php';
 
-$names = ['inventory_software_files', 'inventory_support_documents', 'inventory_network_documents', 'inventory_member_fixes', 'inventory_member_locations', 'member', 'mst_member_type', 'inventory_api_codes', 'inventory_room_plans', 'inventory_room_areas', 'inventory_software', 'inventory_api_idempotency', 'inventory_api_sessions', 'inventory_watch_photos', 'inventory_watch_events', 'inventory_watch_actions', 'inventory_watch_findings', 'inventory_watch_results', 'inventory_watch_inspections', 'inventory_watch_schedules', 'inventory_watch_templates', 'inventory_item_code_reservations', 'inventory_item_code_sequences', 'inventory_item_photos', 'inventory_items', 'inventory_locations', 'stock_take_item', 'stock_take', 'mst_item_status', 'item', 'mst_location', 'group_access', 'mst_module', 'setting', 'user', 'holiday', 'slims_connect_rate_limits', 'slims_connect_settings'];
+$names = ['inventory_area_photos', 'inventory_software_files', 'inventory_support_documents', 'inventory_network_documents', 'inventory_member_fixes', 'inventory_member_locations', 'member', 'mst_member_type', 'inventory_api_codes', 'inventory_room_plans', 'inventory_room_areas', 'inventory_software', 'inventory_api_idempotency', 'inventory_api_sessions', 'inventory_watch_photos', 'inventory_watch_events', 'inventory_watch_actions', 'inventory_watch_findings', 'inventory_watch_results', 'inventory_watch_inspections', 'inventory_watch_schedules', 'inventory_watch_templates', 'inventory_item_code_reservations', 'inventory_item_code_sequences', 'inventory_item_photos', 'inventory_items', 'inventory_locations', 'stock_take_item', 'stock_take', 'mst_item_status', 'item', 'mst_location', 'group_access', 'mst_module', 'setting', 'user', 'holiday', 'slims_connect_rate_limits', 'slims_connect_settings'];
 final class PrefixedConnection extends PDO {
     public array $names = []; public string $prefix = '';
     private function sql(string $sql): string { foreach ($this->names as $name) $sql = preg_replace('/(?<![A-Za-z0-9_.])' . $name . '\b/', $this->prefix . $name, $sql); return $sql; }
@@ -88,7 +88,7 @@ try {
     $db->exec('CREATE TABLE item (item_id INT PRIMARY KEY, item_code VARCHAR(20), item_status_id CHAR(3) NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     $db->exec('CREATE TABLE slims_connect_rate_limits (rate_key CHAR(64) PRIMARY KEY, attempts INT, window_started_at DATETIME, blocked_until DATETIME NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     $db->exec('CREATE TABLE slims_connect_settings (name VARCHAR(64) PRIMARY KEY, value TEXT, updated_at DATETIME) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
-    foreach (['CreateInventoryTables', 'AddSlimsLocationToInventoryLocations', 'CreateInventoryItemPhotos', 'MoveInventoryPhotosToFiles', 'AllowSharedInventoryLocationCodes', 'CreateInventoryItemCodes', 'CreateInventorySupervision', 'CreateInvensyncApi', 'AddFacilityProfileData', 'AllowSeveralItemCategories', 'CreateRoomAreasAndPlans', 'AllowAgentConnections', 'MapMembersToLocations', 'CreateNetworkDocuments', 'CreateSoftwareFiles', 'RenameNetworkDocumentsToSupportDocuments', 'MoveBandwidthEvidenceToSupportDocuments'] as $migration) (new $migration())->up();
+    foreach (['CreateInventoryTables', 'AddSlimsLocationToInventoryLocations', 'CreateInventoryItemPhotos', 'MoveInventoryPhotosToFiles', 'AllowSharedInventoryLocationCodes', 'CreateInventoryItemCodes', 'CreateInventorySupervision', 'CreateInvensyncApi', 'AddFacilityProfileData', 'AllowSeveralItemCategories', 'CreateRoomAreasAndPlans', 'AllowAgentConnections', 'MapMembersToLocations', 'CreateNetworkDocuments', 'CreateSoftwareFiles', 'RenameNetworkDocumentsToSupportDocuments', 'MoveBandwidthEvidenceToSupportDocuments', 'CreateAreaPhotos'] as $migration) (new $migration())->up();
     (new CreateInvensyncApi())->up();
     check(true, 'migration 8 is repeatable');
 
@@ -311,6 +311,22 @@ try {
         && call('GET', 'CatalogController@summary', headers: bearer($agentToken), query: ['categories' => 'mebel'])['code'] === 'validation_failed'
         && call('GET', 'CatalogController@summary', headers: bearer($agentToken), query: ['photos' => 'semua'])['code'] === 'validation_failed'
         && call('GET', 'CatalogController@document', headers: bearer($agentToken), query: ['library' => 'X99'])['details']['fields']['library'][0] === 'Lokasi perpustakaan tidak ditemukan. Pilih salah satu: P01.', 'an unknown grouping, category or location is refused, saying what to choose');
+
+    // The areas and public facilities with their photos, as an agent asks for them.
+    $db->exec("INSERT INTO inventory_room_areas (location_id, type, name, created_at, updated_at) VALUES (2, 'toilet', '', NOW(), NOW())");
+    $toilet = (int) $db->lastInsertId();
+    $areaStorage = \SLiMS\Plugins\Inventory\AreaPhotos::storage();
+    $areaPicture = imagecreatetruecolor(640, 480);
+    ob_start(); imagejpeg($areaPicture); $areaJpeg = (string) ob_get_clean();
+    \SLiMS\Plugins\Inventory\AreaPhotos::store($db, $areaStorage, 2, $toilet, $areaJpeg, 1, date('Y-m-d H:i:s'));
+    $areas = call('GET', 'AreaController@summary', headers: bearer($baca), query: ['group' => 'umum'])['body']['data'];
+    check($areas['areas'] === 1 && $areas['with_photos'] === 1 && $areas['groups'][0]['key'] === 'umum' && $areas['groups'][0]['kinds'] === [['label' => 'Toilet', 'count' => 1]], 'public facilities are summed up by kind, with how many have a photo, to a read-only librarian too');
+    check(array_column(call('GET', 'AreaController@summary', headers: bearer($agentToken))['body']['data']['groups'], 'key') === ['dasar', 'pendukung', 'umum'], 'every group of areas is listed when none is named');
+    check($pdf(call('GET', 'AreaController@document', headers: bearer($agentToken), query: ['group' => 'umum'])), 'the list of areas and facilities comes as PDF, photos and all');
+    check(call('GET', 'AreaController@summary', headers: bearer($agentToken), query: ['group' => 'gedung'])['code'] === 'validation_failed'
+        && call('GET', 'AreaController@summary', headers: bearer($agentToken), query: ['library' => 'X99'])['code'] === 'validation_failed', 'an unknown group or location is refused');
+    $db->prepare('DELETE FROM inventory_area_photos WHERE area_id = ?')->execute([$toilet]);
+    $db->prepare('DELETE FROM inventory_room_areas WHERE id = ?')->execute([$toilet]);
 
     // The software register, as an agent asks for it.
     $db->exec("INSERT INTO inventory_software (name, version, purpose, licence, licence_ref, valid_until, installs, created_at, updated_at) VALUES ('Windows 11 Pro', '23H2', 'Sistem operasi', 'komersial', 'KUNCI-RAHASIA-123', NULL, 12, NOW(), NOW()), ('Photoshop', 'CS6', '', 'tidak', '', NULL, 2, NOW(), NOW())");

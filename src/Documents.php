@@ -142,6 +142,24 @@ final class Documents
     }
 
     /**
+     * Daftar area dan fasilitas: the areas inside the rooms with their rooms and photos, by group.
+     *
+     * @return array{filename: string, bytes: string, count: int}
+     */
+    public function areas(PhotoStorage $itemPhotos, string $group, string $library, string $libraryName, string $printedBy): array
+    {
+        self::ensureRuntime();
+        require_once __DIR__ . '/AreaCatalog.php';
+        $catalog = AreaCatalog::build($this->db, $group, $library);
+        $areaPhotos = AreaPhotos::storage();
+        $html = AreaCatalog::html($catalog, static fn (string $filename): ?string => $areaPhotos->read($filename), static fn (string $filename): ?string => $itemPhotos->read($filename), ['library_name' => $libraryName, 'printed_by' => $printedBy]);
+        $pdf = PdfLayout::mpdf($this->tempDir, 'Daftar Area dan Fasilitas', PdfLayout::footer('Daftar area dan fasilitas'));
+        $pdf->WriteHTML($html);
+
+        return ['filename' => 'daftar-area-dan-fasilitas' . ($group !== '' ? '-' . $group : '') . '.pdf', 'bytes' => $pdf->Output('', 'S'), 'count' => $catalog['areas']];
+    }
+
+    /**
      * Daftar perangkat lunak: the software register by use, with each application's licence.
      *
      * @return array{filename: string, bytes: string, count: int}
