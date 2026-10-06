@@ -84,7 +84,7 @@ final class Sarpras
         'multimedia' => ['Komputer multimedia', 'Proyektor', 'Layar proyektor', 'Televisi / monitor besar', 'Panel interaktif', 'Pengeras suara', 'Headphone', 'Pemutar audio', 'Mikrofon', 'Perekam suara', 'Kamera', 'Pemindai (scanner)', 'Printer', 'Printer 3D', 'Perangkat VR'],
         // No aspect scores these yet: the category is there so the inventory can list them.
         'kenyamanan' => ['AC / penyejuk udara', 'Kipas angin', 'Lampu penerangan', 'Tempat sampah', 'Stopkontak / colokan listrik', 'Tirai / gorden', 'Pengharum ruangan'],
-        'keamanan' => ['APAR', 'CCTV', 'Security gate', 'Alarm kebakaran', 'Detektor asap', 'Hidran', 'Rambu dan jalur evakuasi', 'Kotak P3K', 'Loker penitipan', 'Pintu darurat'],
+        'keamanan' => ['CCTV', 'Security gate', 'Gerbang / perangkat RFID', 'Mesin peminjaman mandiri', 'Loker penitipan', 'APAR', 'Alarm kebakaran', 'Detektor asap', 'Hidran', 'Rambu dan jalur evakuasi', 'Pintu darurat', 'Lampu darurat', 'Kotak P3K'],
         // Toilets, prayer rooms and the like are areas of a room (AREA_TYPES), not items.
         'fasilitas_umum' => ['Akses difabel (ramp)', 'Wi-Fi publik', 'Dispenser air minum', 'Stasiun pengisian daya', 'Tempat sampah terpilah'],
         'perabot' => ['Meja baca', 'Kursi', 'Rak buku', 'Meja sirkulasi', 'Lemari katalog', 'Sofa', 'Meja komputer'],

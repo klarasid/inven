@@ -41,6 +41,10 @@ check(strlen((string) Sarpras::categories(array_keys(Sarpras::CATEGORIES))) <= 1
 check(!array_diff(['Komputer multimedia', 'Proyektor', 'Pengeras suara', 'Headphone', 'Panel interaktif', 'Printer 3D', 'Perangkat VR', 'Perekam suara', 'Kamera', 'Pemutar audio'], Sarpras::lists()['types']['multimedia']),
     'saran jenis multimedia memuat sepuluh perangkat multimedia yang umum');
 
+// The security and safety devices the instrument names each have a type to pick, too.
+check(!array_diff(['CCTV', 'Security gate', 'Mesin peminjaman mandiri', 'Gerbang / perangkat RFID', 'Loker penitipan', 'APAR', 'Alarm kebakaran', 'Rambu dan jalur evakuasi', 'Pintu darurat', 'Lampu darurat'], Sarpras::lists()['types']['keamanan']),
+    'saran jenis keamanan memuat sarana keamanan koleksi dan keselamatan yang umum');
+
 // What the recap counts -------------------------------------------------------------------------
 $db = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 foreach ([
