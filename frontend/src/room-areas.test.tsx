@@ -46,6 +46,41 @@ const form=(w:ContextValue,area:object)=>{
  return screen.findByRole('dialog',{name:'Ubah area'})
 }
 
+test('the kinds of area are offered under the heading of their group',async()=>{
+ // What the select needs to open that jsdom lacks.
+ Element.prototype.hasPointerCapture??=()=>false
+ Element.prototype.scrollIntoView??=()=>{}
+ globalThis.ResizeObserver??=class{observe(){}unobserve(){}disconnect(){}} as unknown as typeof ResizeObserver
+ const w=context()
+ mount(w,<AreaDialog room="5" maxPhotos={3} maxPhotoBytes={2097152} onClose={vi.fn()} onSaved={vi.fn()}/>)
+ fireEvent.keyDown(await screen.findByRole('combobox',{name:/Jenis area/}),{key:'ArrowDown'})
+ const basic=(await screen.findByText('Area layanan dasar')).closest('[data-slot="select-group"]') as HTMLElement
+ expect(within(basic).getByRole('option',{name:'Area baca'})).toBeTruthy()
+ expect(within(basic).queryByRole('option',{name:'Toilet'})).toBeNull()
+ const general=screen.getByText('Fasilitas umum').closest('[data-slot="select-group"]') as HTMLElement
+ expect(within(general).getByRole('option',{name:'Toilet'})).toBeTruthy()
+ // The group is the heading, no longer part of each kind's own text.
+ expect(screen.queryByText(/Toilet ·/)).toBeNull()
+})
+
+test('a new area takes its photos too: they go to the id the server gave it',async()=>{
+ Element.prototype.hasPointerCapture??=()=>false
+ Element.prototype.scrollIntoView??=()=>{}
+ globalThis.ResizeObserver??=class{observe(){}unobserve(){}disconnect(){}} as unknown as typeof ResizeObserver
+ const w=context();(w.mutate as ReturnType<typeof vi.fn>).mockResolvedValue({ok:true,message:'Area tersimpan.',record:9})
+ const saved=vi.fn()
+ mount(w,<AreaDialog room="5" maxPhotos={3} maxPhotoBytes={2097152} onClose={vi.fn()} onSaved={saved}/>)
+ fireEvent.keyDown(await screen.findByRole('combobox',{name:/Jenis area/}),{key:'ArrowDown'})
+ fireEvent.keyDown(await screen.findByRole('option',{name:'Toilet'}),{key:'Enter'})
+ const photo=new File(['a'],'toilet.jpg',{type:'image/jpeg'})
+ fireEvent.change(screen.getByLabelText('Foto area'),{target:{files:[photo]}})
+ fireEvent.click(screen.getByRole('button',{name:'Simpan'}))
+ await waitFor(()=>expect(saved).toHaveBeenCalled())
+ const calls=(w.mutate as ReturnType<typeof vi.fn>).mock.calls
+ expect(calls.map(([values])=>values)).toEqual([{form_action:'save_area',location_id:'5',record_id:0,type:'toilet',name:''},{form_action:'upload_area_photo',location_id:'5',area_id:9}])
+ expect((calls[1][1] as FormData).get('photo')).toBe(photo)
+})
+
 test('an area shows its photos in the list, and one opens in a popup on the page',async()=>{
  serve(details)
  mount(context(false),<RoomAreasTab room="5"/>)

@@ -26,6 +26,8 @@ import {
   SelectContent,
   SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
 } from "./components/ui/select";
 import { Alert, AlertTitle, AlertDescription } from "./components/ui/alert";
 import {
@@ -271,7 +273,8 @@ export function Choice({
   label?: string;
   value: unknown;
   onChange: (s: string) => void;
-  items: { value: unknown; label: string }[];
+  /** Items that name a `group` are listed under that group's heading, in the order the groups first appear. */
+  items: ChoiceItem[];
   placeholder?: string;
   disabled?: boolean;
   error?: string;
@@ -302,6 +305,8 @@ export function Choice({
   );
 }
 
+type ChoiceItem = { value: unknown; label: string; group?: string };
+
 function ChoiceSelect({
   id,
   value,
@@ -317,7 +322,7 @@ function ChoiceSelect({
   id?: string;
   value: unknown;
   onChange: (s: string) => void;
-  items: { value: unknown; label: string }[];
+  items: ChoiceItem[];
   placeholder: string;
   disabled?: boolean;
   invalid?: boolean;
@@ -326,6 +331,14 @@ function ChoiceSelect({
   /** Whether the placeholder is itself a choice (of nothing). */
   clearable?: boolean;
 }) {
+  const shown = items.filter((x) => String(x.value) !== "");
+  const option = (x: ChoiceItem) => (
+    <SelectItem key={String(x.value)} value={String(x.value)}>
+      {x.label}
+    </SelectItem>
+  );
+  // Grouped only when an item names its group: the headings in the order the groups first appear.
+  const groups = shown.some((x) => x.group) ? [...new Set(shown.map((x) => x.group ?? ""))] : null;
   return (
     <Select
       value={String(value ?? "") || "__empty"}
@@ -336,16 +349,29 @@ function ChoiceSelect({
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
-        <SelectGroup>
-          {clearable && <SelectItem value="__empty">{placeholder}</SelectItem>}
-          {items
-            .filter((x) => String(x.value) !== "")
-            .map((x) => (
-              <SelectItem key={String(x.value)} value={String(x.value)}>
-                {x.label}
-              </SelectItem>
+        {groups ? (
+          <>
+            {clearable && (
+              <SelectGroup>
+                <SelectItem value="__empty">{placeholder}</SelectItem>
+              </SelectGroup>
+            )}
+            {groups.map((group, n) => (
+              <Fragment key={group}>
+                {(clearable || n > 0) && <SelectSeparator />}
+                <SelectGroup>
+                  {group && <SelectLabel>{group}</SelectLabel>}
+                  {shown.filter((x) => (x.group ?? "") === group).map(option)}
+                </SelectGroup>
+              </Fragment>
             ))}
-        </SelectGroup>
+          </>
+        ) : (
+          <SelectGroup>
+            {clearable && <SelectItem value="__empty">{placeholder}</SelectItem>}
+            {shown.map(option)}
+          </SelectGroup>
+        )}
       </SelectContent>
     </Select>
   );

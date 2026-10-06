@@ -259,7 +259,7 @@ export function AreaDialog({
             value={type}
             onChange={setType}
             placeholder="Pilih jenis area"
-            items={Object.entries(lists.areaTypes).map(([value, t]) => ({ value, label: `${t.label} · ${lists.areaGroups[t.group] || t.group}` }))}
+            items={Object.entries(lists.areaTypes).map(([value, t]) => ({ value, label: t.label, group: lists.areaGroups[t.group] || t.group }))}
           />
           <Field>
             <FieldLabel htmlFor={id}>Nama area</FieldLabel>

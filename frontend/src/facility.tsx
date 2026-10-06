@@ -306,7 +306,7 @@ function SupportDocumentDialog({ data, library, post, onClose, onSaved }: { data
             label="Jenis dokumen"
             value={kind}
             onChange={(v) => v && setKind(v)}
-            items={Object.entries(support.kinds).map(([value, about]) => ({ value, label: `${support.topics[about.topic] ?? about.topic}: ${about.label}` }))}
+            items={Object.entries(support.kinds).map(([value, about]) => ({ value, label: about.label, group: support.topics[about.topic] ?? about.topic }))}
           />
           {ofRoom && (
             <Choice
