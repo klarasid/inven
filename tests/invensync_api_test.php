@@ -249,6 +249,12 @@ try {
 
     $summary = call('GET', 'ReportController@summary', headers: bearer($token), query: ['period' => 'month'])['body']['data'];
     check($summary['findings']['open'] === 2 && $summary['inspections']['routine_final'] === 1, 'the report counts this month');
+    $listed = call('GET', 'ReportController@inspections', headers: bearer($baca), query: ['period' => 'month'])['body']['data']['inspections'];
+    $mine = array_values(array_filter($listed, static fn (array $row): bool => $row['id'] === $id))[0] ?? null;
+    check($mine !== null && $mine['status'] === ['key' => 'final', 'label' => 'Difinalisasi'] && $mine['room']['name'] !== '' && $mine['performed_date'] !== null, 'the period\'s inspections are listed with their room and status, to a read-only librarian too');
+    check(call('GET', 'ReportController@inspections', headers: bearer($token), query: ['period' => 'month', 'room' => 999])['body']['data']['inspections'] === [], 'the list narrows to one room');
+    check($pdf(call('GET', 'ReportController@inspection', params: ['id' => $id], headers: bearer($token))), 'an inspection comes as its own document');
+    check(call('GET', 'ReportController@inspection', params: ['id' => 999999], headers: bearer($token))['code'] === 'not_found', 'an unknown inspection has no document');
     check($pdf(call('GET', 'ReportController@document', headers: bearer($token), query: ['period' => 'month'])), 'the period report comes as PDF');
     $home = call('GET', 'HomeController@show', headers: bearer($token))['body']['data'];
     check($home['stock_take'] === null && $home['counts']['inspections'] === 0, 'home shows no running stock take and nothing left to inspect');

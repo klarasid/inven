@@ -2,11 +2,15 @@
 
 namespace SLiMS\Plugins\Inventory\Api;
 
+use SLiMS\Plugins\Inventory\Supervision;
 use SlimsConnect\Http\ApiException;
 use SlimsConnect\Http\JsonResponse;
 use SlimsConnect\Http\Sendable;
 
-/** Laporan: the supervision summary for this month, the last three months, or this year. */
+/**
+ * Laporan: the supervision summary for this month, the last three months, or this year, the
+ * inspections of the period, and the documents: the period report and one inspection's own.
+ */
 final class ReportController
 {
     /**
@@ -75,6 +79,48 @@ final class ReportController
                 'missing_rooms' => array_values(array_map(static fn (array $room): string => (string) $room['room_name'], $summary['missing_rooms'])),
             ],
         ]);
+    }
+
+    private const KINDS = ['routine' => 'Terjadwal', 'incidental' => 'Insidental', 'historical' => 'Impor riwayat'];
+    private const MAX_INSPECTIONS = 500;
+
+    /** The inspections of the period, newest first, optionally of one room (?room=<id>). */
+    public function inspections(Context $context): JsonResponse
+    {
+        $filter = self::filter($context);
+        $filter['room'] = max(0, (int) $context->request->query('room', '0'));
+        $rows = $context->watch()->inspections($filter, 1, self::MAX_INSPECTIONS + 1);
+        if (count($rows) > self::MAX_INSPECTIONS) {
+            throw Failure::rejected('Periode ini memuat lebih dari ' . self::MAX_INSPECTIONS . ' pemeriksaan. Pilih periode yang lebih pendek atau satu ruangan.');
+        }
+
+        return JsonResponse::ok([
+            'period' => ['from' => $filter['from'], 'to' => $filter['to']],
+            'inspections' => array_map(static function (array $row): array {
+                $snapshot = Supervision::decode((string) $row['snapshot']);
+
+                return [
+                    'id' => (int) $row['id'],
+                    'kind' => ['key' => (string) $row['kind'], 'label' => self::KINDS[$row['kind']] ?? 'Pemeriksaan'],
+                    'checklist' => (string) ($snapshot['template_name'] ?? ''),
+                    'room' => ['id' => (int) ($snapshot['room_id'] ?? 0), 'name' => (string) ($snapshot['room_name'] ?? '')],
+                    'due_date' => (string) $row['due_date'],
+                    'performed_date' => $row['performed_date'] === null ? null : (string) $row['performed_date'],
+                    'examiner' => (string) ($row['examiner_name'] ?? ''),
+                    'status' => ['key' => (string) $row['status'], 'label' => Supervision::STATUSES[$row['status']] ?? (string) $row['status']],
+                ];
+            }, $rows),
+        ]);
+    }
+
+    /** One inspection as PDF: its berita acara, with what was examined, the findings and their photos. */
+    public function inspection(Context $context, int $id): Sendable
+    {
+        RoomController::throttlePdf($context);
+        $document = $context->documents()->inspection($context->watch(), $id);
+        $context->log('Dokumen pemeriksaan #' . $id . ' diunduh.', 'Print');
+
+        return new BytesResponse($document['bytes'], 'application/pdf', $document['filename']);
     }
 
     public function document(Context $context): Sendable

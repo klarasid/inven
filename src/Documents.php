@@ -158,6 +158,26 @@ final class Documents
     }
 
     /**
+     * One inspection as a document, as the admin Reports page prints it: what was examined, the
+     * findings with their photos, and the examiner's signature block. The berita acara of the check.
+     *
+     * @return array{filename: string, bytes: string, count: int}
+     */
+    public function inspection(Supervision $watch, int $id): array
+    {
+        self::ensureRuntime();
+        require_once __DIR__ . '/WatchPdf.php';
+        require_once __DIR__ . '/PdfDocuments.php';
+        $document = $watch->document($id);
+        $html = WatchPdf::detail($document, static fn (array $photo): ?string => $watch->photo($id, (int) $photo['id']), 'latex', PdfDocuments::load($this->db));
+        $pdf = WatchPdf::mpdf($this->tempDir, 'Dokumen Pemeriksaan #' . $id, 'latex');
+        $pdf->WriteHTML($html);
+        Telemetry::count('inspection_pdf');
+
+        return ['filename' => 'pemeriksaan-' . $id . '.pdf', 'bytes' => $pdf->Output('', 'S'), 'count' => count($document['results'])];
+    }
+
+    /**
      * The supervision report for a period, as the admin Reports page prints it.
      *
      * @param  array{from: string, to: string, library: string, room: int, inspection_status: string, finding_status: string}  $filter
