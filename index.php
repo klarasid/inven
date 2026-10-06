@@ -59,6 +59,29 @@ if (($_GET['action'] ?? '') === 'item_photo') {
     exit;
 }
 
+// A photo of an area inside a room (the Area tab), to staff with Stock Take access only.
+if (($_GET['action'] ?? '') === 'area_photo') {
+    require_once __DIR__ . '/src/AreaPhotos.php';
+    header('Cache-Control: private, no-store');
+    header('X-Content-Type-Options: nosniff');
+    header("Content-Security-Policy: default-src 'none'; sandbox");
+    $photo = null;
+    try {
+        $photo = \SLiMS\Plugins\Inventory\AreaPhotos::read($db, \SLiMS\Plugins\Inventory\AreaPhotos::storage(), (int) ($_GET['photo_id'] ?? 0));
+    } catch (Throwable $exception) {
+        error_log('Inventory area photo error: ' . $exception->getMessage());
+    }
+    if ($photo === null) {
+        http_response_code(404);
+        exit('Foto tidak ditemukan.');
+    }
+    header('Content-Type: image/jpeg');
+    header('Content-Disposition: inline; filename="foto-area.jpg"');
+    header('Content-Length: ' . strlen($photo));
+    echo $photo;
+    exit;
+}
+
 // A room's floor plan (the Denah tab): the uploaded file, to staff with Stock Take access only.
 if (($_GET['action'] ?? '') === 'room_plan') {
     require_once __DIR__ . '/src/RoomPlans.php';
@@ -399,8 +422,29 @@ try {
                 $message = 'Area tersimpan.';
             } else {
                 \SLiMS\Plugins\Inventory\RoomAreas::delete($db, $roomId, $id);
+                // Its photos go with it; before migration 19 an area has none.
+                require_once __DIR__ . '/src/AreaPhotos.php';
+                try {
+                    \SLiMS\Plugins\Inventory\AreaPhotos::storage()->cleanup(\SLiMS\Plugins\Inventory\AreaPhotos::deleteArea($db, $id));
+                } catch (PDOException $exception) {
+                    if ((int) ($exception->errorInfo[1] ?? 0) !== 1146) throw $exception;
+                }
                 inventory_log((string) $roomId, 'Area #' . $id . ' dihapus dari ruangan.', 'Delete');
                 $message = 'Area dihapus.';
+            }
+        } elseif (in_array($postAction, ['upload_area_photo', 'delete_area_photo'], true)) {
+            require_once __DIR__ . '/src/AreaPhotos.php';
+            $roomId = (int) ($_POST['location_id'] ?? 0);
+            if ($postAction === 'upload_area_photo') {
+                $areaId = (int) ($_POST['area_id'] ?? 0);
+                $id = \SLiMS\Plugins\Inventory\AreaPhotos::add($db, \SLiMS\Plugins\Inventory\AreaPhotos::storage(), $roomId, $areaId, is_array($_FILES['photo'] ?? null) ? $_FILES['photo'] : [], $uid, $now);
+                inventory_log((string) $roomId, 'Foto #' . $id . ' area #' . $areaId . ' diunggah.', 'Create');
+                $message = 'Foto area tersimpan.';
+            } else {
+                $id = (int) ($_POST['record_id'] ?? 0);
+                \SLiMS\Plugins\Inventory\AreaPhotos::delete($db, \SLiMS\Plugins\Inventory\AreaPhotos::storage(), $roomId, $id);
+                inventory_log((string) $roomId, 'Foto area #' . $id . ' dihapus.', 'Delete');
+                $message = 'Foto area dihapus.';
             }
         } elseif (in_array($postAction, ['upload_plan', 'delete_plan'], true)) {
             require_once __DIR__ . '/src/RoomPlans.php';
@@ -439,9 +483,11 @@ try {
             // A room's areas and floor plans go with it (tables of migration 12).
             $roomDetailsAvailable = !$isItem && (bool) $db->query("SHOW TABLES LIKE 'inventory_room_areas'")->fetchColumn();
             $removedPlans = [];
+            $removedAreaPhotos = [];
             if ($roomDetailsAvailable) {
                 require_once __DIR__ . '/src/RoomAreas.php';
                 require_once __DIR__ . '/src/RoomPlans.php';
+                require_once __DIR__ . '/src/AreaPhotos.php';
             }
             $db->beginTransaction();
             $statement = $db->prepare($sql);
@@ -463,6 +509,12 @@ try {
                     $db->prepare('UPDATE inventory_watch_schedules SET active=0,version=version+1 WHERE location_id=?')->execute([$id]);
                 }
                 if ($roomDetailsAvailable) {
+                    // The photos of its areas first, while the areas still say which room they are in.
+                    try {
+                        $removedAreaPhotos = array_merge($removedAreaPhotos, \SLiMS\Plugins\Inventory\AreaPhotos::deleteRoom($db, $id));
+                    } catch (PDOException $exception) {
+                        if ((int) ($exception->errorInfo[1] ?? 0) !== 1146) throw $exception;
+                    }
                     \SLiMS\Plugins\Inventory\RoomAreas::deleteRoom($db, $id);
                     $removedPlans = array_merge($removedPlans, \SLiMS\Plugins\Inventory\RoomPlans::deleteRoom($db, $id));
                 }
@@ -473,6 +525,7 @@ try {
             $photoStorage->cleanup($removedPhotos);
             $removedPhotos = [];
             if ($removedPlans) \SLiMS\Plugins\Inventory\RoomPlans::cleanup($removedPlans);
+            if ($removedAreaPhotos) \SLiMS\Plugins\Inventory\AreaPhotos::storage()->cleanup($removedAreaPhotos);
             foreach ($deletedIds as $id) {
                 inventory_log((string) $id, $isItem ? 'Barang inventaris dihapus.' : 'Lokasi inventaris beserta barang terkait dihapus.', 'Delete');
             }
@@ -514,6 +567,9 @@ try {
         : ((int) ($exception->errorInfo[1] ?? 0) === 1062 && str_contains($exception->getMessage(), 'inventory_locations_code_unique')
             ? 'Kode lokasi masih dibatasi unik oleh struktur database lama. Jalankan migrasi plugin hingga versi 5 melalui System → Plugins agar beberapa ruangan dapat memakai kode lokasi yang sama.'
             : 'Operasi database gagal. Periksa data yang dimasukkan dan log PHP.'))))));
+    if ((int) ($exception->errorInfo[1] ?? 0) === 1146 && str_contains($exception->getMessage(), 'inventory_area_photos')) {
+        $message = 'Foto area belum tersedia. Jalankan migrasi plugin hingga versi 19 melalui System → Plugins.';
+    }
 } catch (RuntimeException $exception) {
     if ($db->inTransaction()) { $db->rollBack(); }
     $photoStorage->cleanup($createdPhotos);

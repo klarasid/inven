@@ -130,7 +130,12 @@ final class Workspace
                 $plans=RoomPlans::of($w->pdo(),$room);
                 foreach($plans as &$plan)$plan['url']=self::endpoint('index.php',['action'=>'room_plan','plan_id'=>$plan['id']]);
                 unset($plan);
-                return ['areas'=>RoomAreas::of($w->pdo(),$room),'plans'=>$plans,'maxPlanBytes'=>RoomPlans::MAX_BYTES,'maxPlans'=>RoomPlans::MAX_PER_ROOM];
+                // Each area with its photos; null until migration 19 has run.
+                require_once __DIR__.'/AreaPhotos.php';
+                try {$photos=AreaPhotos::byArea($w->pdo(),$room);}
+                catch(\PDOException $e){if((int)($e->errorInfo[1]??0)!==1146)throw $e;$photos=null;}
+                $areas=array_map(static fn(array $area):array=>$area+['photos'=>$photos===null?null:array_map(static fn(array $photo):array=>['id'=>$photo['id'],'created_at'=>$photo['created_at'],'url'=>self::endpoint('index.php',['action'=>'area_photo','photo_id'=>$photo['id']])],$photos[$area['id']]??[])],RoomAreas::of($w->pdo(),$room));
+                return ['areas'=>$areas,'plans'=>$plans,'maxPlanBytes'=>RoomPlans::MAX_BYTES,'maxPlans'=>RoomPlans::MAX_PER_ROOM,'maxAreaPhotos'=>AreaPhotos::MAX_PER_AREA,'maxPhotoBytes'=>ItemPhotos::MAX_BYTES];
             } catch(\PDOException $e) {
                 if(in_array((int)($e->errorInfo[1]??0),[1146,1054],true))throw new \RuntimeException('Area dan denah ruangan belum tersedia. Jalankan migrasi plugin hingga versi 12 melalui System → Plugins.');
                 throw $e;

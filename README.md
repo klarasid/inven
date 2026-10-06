@@ -93,7 +93,7 @@ Semua menu tersedia di modul **Stock Take**, dalam tiga bagian. Pengguna dengan 
 
 | Menu | Kegunaan |
 | --- | --- |
-| **Ruangan & Barang** | Mencatat ruangan dan barang, mengunggah hingga 5 foto per barang, membuat kode barang otomatis (misalnya `P01-INV-000001`), dan mencetak KIR. Halaman tiap ruangan memiliki tab **Area** (area apa saja di dalam ruangan) dan **Denah** (gambar atau PDF denah, beberapa per ruangan). |
+| **Ruangan & Barang** | Mencatat ruangan dan barang, mengunggah hingga 5 foto per barang, membuat kode barang otomatis (misalnya `P01-INV-000001`), dan mencetak KIR. Halaman tiap ruangan memiliki tab **Area** (area apa saja di dalam ruangan, masing-masing dengan fotonya setelah migrasi 19) dan **Denah** (gambar atau PDF denah, beberapa per ruangan). |
 | **Perangkat Lunak** | Mencatat aplikasi yang dipakai perpustakaan beserta jenis dan masa berlaku lisensinya. |
 | **Gedung & Jaringan** | Mengisi luas gedung dan bandwidth internet, serta menyimpan dokumen pendukung (jaringan, keamanan dan keselamatan), untuk tiap lokasi perpustakaan. |
 | **Sivitas per Lokasi** | Menghitung sivitas dari anggota SLiMS yang aktif, memetakannya ke lokasi perpustakaan, dan merapikan isian Institusi anggota yang salah ketik. |
@@ -222,6 +222,7 @@ php tests/menu_structure_test.php
 php tests/sarpras_combine_test.php
 php tests/sarpras_categories_test.php
 php tests/inventory_catalog_test.php
+php tests/area_photos_test.php
 php tests/support_documents_test.php
 php tests/software_list_test.php
 php tests/software_files_test.php

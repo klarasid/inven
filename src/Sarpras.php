@@ -63,6 +63,7 @@ final class Sarpras
         'parkir' => ['label' => 'Area parkir', 'group' => 'umum'],
         'kantin' => ['label' => 'Kantin / pantri', 'group' => 'umum'],
         'laktasi' => ['label' => 'Ruang laktasi', 'group' => 'umum'],
+        'outdoor' => ['label' => 'Area outdoor / taman', 'group' => 'umum', 'open' => true],
     ];
 
     public const AREA_GROUPS = ['dasar' => 'Area layanan dasar', 'pendukung' => 'Area pendukung', 'umum' => 'Fasilitas umum'];
@@ -86,7 +87,7 @@ final class Sarpras
         'kenyamanan' => ['AC / penyejuk udara', 'Kipas angin', 'Lampu penerangan', 'Tempat sampah', 'Stopkontak / colokan listrik', 'Tirai / gorden', 'Pengharum ruangan'],
         'keamanan' => ['CCTV', 'Security gate', 'Gerbang / perangkat RFID', 'Mesin peminjaman mandiri', 'Loker penitipan', 'APAR', 'Alarm kebakaran', 'Detektor asap', 'Hidran', 'Rambu dan jalur evakuasi', 'Pintu darurat', 'Lampu darurat', 'Kotak P3K'],
         // Toilets, prayer rooms and the like are areas of a room (AREA_TYPES), not items.
-        'fasilitas_umum' => ['Akses difabel (ramp)', 'Wi-Fi publik', 'Dispenser air minum', 'Stasiun pengisian daya', 'Tempat sampah terpilah'],
+        'fasilitas_umum' => ['Penunjuk arah / papan petunjuk', 'Akses difabel (ramp)', 'Wi-Fi publik', 'Dispenser air minum', 'Stasiun pengisian daya', 'Tempat sampah terpilah'],
         'perabot' => ['Meja baca', 'Kursi', 'Rak buku', 'Meja sirkulasi', 'Lemari katalog', 'Sofa', 'Meja komputer'],
         'peralatan' => ['Troli buku', 'Book drop', 'Mesin fotokopi', 'Barcode scanner', 'Label printer', 'Tangga rak'],
     ];
@@ -593,7 +594,7 @@ final class Sarpras
         $public = array_values($public);
         $aspects[] = self::typeAspect(10, 'Keamanan dan fasilitas umum', 'Ketersediaan fasilitas umum', $public,
             count($public) > 6 ? 'a' : (count($public) === 6 ? 'b' : (count($public) === 5 ? 'c' : 'd')),
-            'Lebih dari 6 jenis fasilitas umum', 'Catat toilet, musala, parkir, kantin, atau ruang laktasi sebagai area di ruangannya (tab Area). Barang seperti dispenser air minum dicatat sebagai barang berkategori Fasilitas umum.',
+            'Lebih dari 6 jenis fasilitas umum', 'Catat toilet, musala, parkir, kantin, ruang laktasi, atau area outdoor sebagai area di ruangannya (tab Area). Barang seperti papan petunjuk dan dispenser air minum dicatat sebagai barang berkategori Fasilitas umum.',
             'Jenis berbeda dari area fasilitas umum di ruangan dan dari barang yang berfungsi (tidak Rusak berat).');
 
         // 11. Pengawasan dan pemeliharaan, over the last twelve months.

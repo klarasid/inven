@@ -2,11 +2,11 @@
 import React from 'react'
 import { afterEach, expect, test, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { RoomAreasTab, RoomPlansTab } from './room-areas'
+import { AreaDialog, RoomAreasTab, RoomPlansTab } from './room-areas'
 import { WorkspaceContext, type ContextValue } from './context'
 
 const sarpras={areaTypes:{baca:{label:'Area baca',group:'dasar'},diskusi:{label:'Ruang diskusi',group:'pendukung'},toilet:{label:'Toilet',group:'umum'}},areaGroups:{dasar:'Area layanan dasar',pendukung:'Area pendukung',umum:'Fasilitas umum'},categories:{},types:{}}
-const details={areas:[{id:1,type:'baca',name:''},{id:2,type:'baca',name:'Pojok baca anak'},{id:3,type:'toilet',name:''}],plans:[{id:7,title:'Lantai 1',mime:'image/png',created_at:'2026-10-02 09:00:00',url:'http://localhost/plan?plan_id=7'},{id:8,title:'Jalur evakuasi',mime:'application/pdf',created_at:'2026-10-02 09:00:00',url:'http://localhost/plan?plan_id=8'}],maxPlanBytes:5*1024*1024,maxPlans:10}
+const details={maxAreaPhotos:3,maxPhotoBytes:2097152,areas:[{id:1,type:'baca',name:'',photos:[]},{id:2,type:'baca',name:'Pojok baca anak',photos:[]},{id:3,type:'toilet',name:'',photos:[{id:11,created_at:'2026-10-05 09:00:00',url:'http://localhost/photo?photo_id=11'},{id:12,created_at:'2026-10-05 09:00:00',url:'http://localhost/photo?photo_id=12'}]}],plans:[{id:7,title:'Lantai 1',mime:'image/png',created_at:'2026-10-02 09:00:00',url:'http://localhost/plan?plan_id=7'},{id:8,title:'Jalur evakuasi',mime:'application/pdf',created_at:'2026-10-02 09:00:00',url:'http://localhost/plan?plan_id=8'}],maxPlanBytes:5*1024*1024,maxPlans:10}
 const context=(write=true):ContextValue=>({config:{write,api:'http://localhost/api'} as ContextValue['config'],options:{sarpras} as unknown as ContextValue['options'],route:{view:'inventory',room:5},go:vi.fn(),back:vi.fn(),dirty:vi.fn(),refresh:vi.fn(),revision:0,mutate:vi.fn().mockResolvedValue({ok:true})})
 const serve=(data:object)=>{const fetch=vi.fn().mockResolvedValue({ok:true,headers:{get:()=>'application/json'},json:async()=>({ok:true,data})});vi.stubGlobal('fetch',fetch);return fetch}
 const mount=(w:ContextValue,tab:React.ReactNode)=>render(<WorkspaceContext.Provider value={w}>{tab}</WorkspaceContext.Provider>)
@@ -38,6 +38,60 @@ test('an area is not saved without its kind',async()=>{
  fireEvent.click(screen.getByRole('button',{name:'Simpan'}))
  expect(await screen.findByText('Pilih jenis area.')).toBeTruthy()
  expect(w.mutate).not.toHaveBeenCalled()
+})
+
+// The form as the list opens it for an area: from a menu, which jsdom cannot open.
+const form=(w:ContextValue,area:object)=>{
+ mount(w,<AreaDialog room="5" area={area as never} maxPhotos={3} maxPhotoBytes={2097152} onClose={vi.fn()} onSaved={w.refresh}/>)
+ return screen.findByRole('dialog',{name:'Ubah area'})
+}
+
+test('an area shows its photos in the list, and one opens in a popup on the page',async()=>{
+ serve(details)
+ mount(context(false),<RoomAreasTab room="5"/>)
+ const photo=await screen.findByRole('button',{name:'Lihat foto 2 Toilet'})
+ expect(within(card('Fasilitas umum')).getAllByRole('button',{name:/Lihat foto/})).toHaveLength(2)
+ expect(within(card('Area layanan dasar')).queryByRole('button',{name:/Lihat foto/})).toBeNull()
+ fireEvent.click(photo)
+ const popup=await screen.findByRole('dialog',{name:'Foto Toilet'})
+ expect(within(popup).getByRole('img',{name:'Foto Toilet'}).getAttribute('src')).toBe('http://localhost/photo?photo_id=12')
+})
+
+test('the area form takes photos and uploads them once the area is saved, up to what the area may still hold',async()=>{
+ const w=context();(w.mutate as ReturnType<typeof vi.fn>).mockResolvedValue({ok:true,message:'Area tersimpan.',record:3})
+ const dialog=await form(w,details.areas[2])
+ // Two are kept already: they show in the form, and one more fits.
+ expect(within(dialog).getAllByRole('img')).toHaveLength(2)
+ const picker=within(dialog).getByLabelText('Foto area') as HTMLInputElement
+ expect(picker.multiple).toBe(true)
+ const one=new File(['a'],'toilet-1.jpg',{type:'image/jpeg'}),two=new File(['b'],'toilet-2.jpg',{type:'image/jpeg'})
+ fireEvent.change(picker,{target:{files:[one,two]}})
+ expect(within(dialog).getByText('Satu area memuat paling banyak 3 foto. Pilih paling banyak 1 foto lagi.')).toBeTruthy()
+ fireEvent.click(within(dialog).getByRole('button',{name:'Simpan'}))
+ expect(w.mutate).not.toHaveBeenCalled()
+ fireEvent.change(picker,{target:{files:[new File(['x'],'catatan.pdf',{type:'application/pdf'})]}})
+ expect(within(dialog).getByText('Gunakan foto JPEG, PNG, atau WebP maksimal 2 MB.')).toBeTruthy()
+ fireEvent.change(picker,{target:{files:[one]}})
+ fireEvent.click(within(dialog).getByRole('button',{name:'Simpan'}))
+ await waitFor(()=>expect(w.mutate).toHaveBeenCalledTimes(2))
+ const calls=(w.mutate as ReturnType<typeof vi.fn>).mock.calls
+ expect(calls[0][0]).toEqual({form_action:'save_area',location_id:'5',record_id:3,type:'toilet',name:''})
+ expect(calls[1][0]).toEqual({form_action:'upload_area_photo',location_id:'5',area_id:3})
+ expect((calls[1][1] as FormData).get('photo')).toBe(one)
+ await waitFor(()=>expect(w.refresh).toHaveBeenCalled())
+})
+
+test('a photo is removed from the area form, and before the migration the form says what to run',async()=>{
+ const w=context();(w.mutate as ReturnType<typeof vi.fn>).mockResolvedValue({ok:true,message:'Foto area dihapus.'})
+ const dialog=await form(w,details.areas[2])
+ fireEvent.click(within(dialog).getByRole('button',{name:'Hapus foto 1'}))
+ await waitFor(()=>expect(w.mutate).toHaveBeenCalledTimes(1))
+ expect((w.mutate as ReturnType<typeof vi.fn>).mock.calls[0][0]).toEqual({form_action:'delete_area_photo',location_id:'5',record_id:11})
+ await waitFor(()=>expect(w.refresh).toHaveBeenCalled())
+ cleanup()
+ const unmigrated=await form(context(),{id:3,type:'toilet',name:'',photos:null})
+ expect(within(unmigrated).getByText(/Jalankan migrasi plugin hingga versi 19/)).toBeTruthy()
+ expect(unmigrated.querySelector('input[type=file]')).toBeNull()
 })
 
 test('the Denah tab shows pictures as pictures and PDFs as documents, and a picture opens in a popup on the page',async()=>{

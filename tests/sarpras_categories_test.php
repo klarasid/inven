@@ -45,6 +45,9 @@ check(!array_diff(['Komputer multimedia', 'Proyektor', 'Pengeras suara', 'Headph
 check(!array_diff(['CCTV', 'Security gate', 'Mesin peminjaman mandiri', 'Gerbang / perangkat RFID', 'Loker penitipan', 'APAR', 'Alarm kebakaran', 'Rambu dan jalur evakuasi', 'Pintu darurat', 'Lampu darurat'], Sarpras::lists()['types']['keamanan']),
     'saran jenis keamanan memuat sarana keamanan koleksi dan keselamatan yang umum');
 
+// An outdoor area is a public facility, and signage is a type of public facility item.
+check((Sarpras::AREA_TYPES['outdoor']['group'] ?? '') === 'umum' && in_array('Penunjuk arah / papan petunjuk', Sarpras::lists()['types']['fasilitas_umum'], true), 'area outdoor dan papan petunjuk tercatat sebagai fasilitas umum');
+
 // What the recap counts -------------------------------------------------------------------------
 $db = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 foreach ([
