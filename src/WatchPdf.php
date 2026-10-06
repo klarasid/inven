@@ -13,7 +13,7 @@ require_once __DIR__ . '/PdfDocuments.php';
 final class WatchPdf
 {
     private const KINDS = ['routine' => 'Terjadwal', 'incidental' => 'Insidental', 'historical' => 'Impor riwayat'];
-    private const ACTIONS = ['repair' => 'Perbaikan', 'maintenance' => 'Pemeliharaan', 'none' => 'Tanpa pekerjaan'];
+    public const ACTIONS = ['repair' => 'Perbaikan', 'maintenance' => 'Pemeliharaan', 'none' => 'Tanpa pekerjaan'];
     private const EVENTS = ['report' => 'Kerusakan dilaporkan', 'progress' => 'Catatan perkembangan', 'import_history' => 'Riwayat diimpor', 'import_action' => 'Pekerjaan historis diimpor', 'import_verification' => 'Verifikasi historis', 'verify' => 'Verifikasi diterima', 'reject' => 'Dikembalikan', 'correction' => 'Catatan koreksi', 'finalize' => 'Pemeriksaan difinalisasi', 'start' => 'Pekerjaan dimulai', 'submit' => 'Diajukan untuk verifikasi', 'save_draft' => 'Draf disimpan', 'save_action' => 'Pekerjaan disimpan'];
 
     /** 'kop' typesets on an institution letterhead; PdfLetterhead::configure() must receive the template first. */

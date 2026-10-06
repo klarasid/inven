@@ -3,6 +3,7 @@
 namespace SLiMS\Plugins\Inventory\Api;
 
 use SLiMS\Plugins\Inventory\Supervision;
+use SLiMS\Plugins\Inventory\WatchPdf;
 use SlimsConnect\Http\ApiException;
 use SlimsConnect\Http\JsonResponse;
 use SlimsConnect\Http\Sendable;
@@ -110,6 +111,56 @@ final class ReportController
                     'status' => ['key' => (string) $row['status'], 'label' => Supervision::STATUSES[$row['status']] ?? (string) $row['status']],
                 ];
             }, $rows),
+        ]);
+    }
+
+    /**
+     * The findings of the period's inspections, by deadline, each with the work recorded on it:
+     * what was found where, who handles it, and what was done. Optionally of one room (?room=<id>).
+     */
+    public function findings(Context $context): JsonResponse
+    {
+        require_once dirname(__DIR__) . '/WatchPdf.php';
+        $filter = self::filter($context);
+        $filter['room'] = max(0, (int) $context->request->query('room', '0'));
+        $watch = $context->watch();
+        $rows = $watch->summary($filter, true)['finding_rows'];
+        if (count($rows) > self::MAX_INSPECTIONS) {
+            throw Failure::rejected('Periode ini memuat lebih dari ' . self::MAX_INSPECTIONS . ' temuan. Pilih periode yang lebih pendek atau satu ruangan.');
+        }
+        $actions = [];
+        if ($rows) {
+            $ids = array_map(static fn (array $row): int => (int) $row['id'], $rows);
+            foreach ($watch->query('SELECT * FROM inventory_watch_actions WHERE finding_id IN (' . implode(',', array_fill(0, count($ids), '?')) . ') ORDER BY id', $ids)->fetchAll(\PDO::FETCH_ASSOC) as $action) {
+                $actions[(int) $action['finding_id']][] = [
+                    'kind' => ['key' => (string) $action['kind'], 'label' => WatchPdf::ACTIONS[$action['kind']] ?? (string) $action['kind']],
+                    'description' => (string) $action['description'],
+                    'performed_date' => (string) $action['performed_date'],
+                    'actor' => (string) $action['actor_name'],
+                    'cost' => $action['cost'] === null ? null : (float) $action['cost'],
+                    // Work still being written is a draft until it is handed in for verification.
+                    'submitted' => $action['submitted_at'] !== null,
+                ];
+            }
+        }
+        $today = date('Y-m-d');
+
+        return JsonResponse::ok([
+            'period' => ['from' => $filter['from'], 'to' => $filter['to']],
+            'findings' => array_map(static fn (array $row): array => [
+                'id' => (int) $row['id'],
+                'inspection_id' => (int) $row['inspection_id'],
+                'object' => (string) $row['object'],
+                'room' => (string) $row['room'],
+                'status' => ['key' => (string) $row['status'], 'label' => Supervision::STATUSES[$row['status']] ?? (string) $row['status']],
+                'priority' => ['key' => (string) $row['priority'], 'label' => Supervision::PRIORITIES[$row['priority']] ?? (string) $row['priority']],
+                'deadline' => (string) $row['deadline'],
+                'overdue' => $row['status'] !== 'closed' && (string) $row['deadline'] < $today,
+                'assignee' => (string) $row['assignee_name'],
+                'found_at' => (string) $row['created_at'],
+                'closed_at' => $row['closed_at'] === null ? null : (string) $row['closed_at'],
+                'actions' => $actions[(int) $row['id']] ?? [],
+            ], $rows),
         ]);
     }
 

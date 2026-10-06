@@ -85,6 +85,7 @@ final class Routes
         $map('GET', '/reports/summary', [ReportController::class, 'summary']);
         $map('GET', '/reports/document', [ReportController::class, 'document']);
         $map('GET', '/reports/inspections', [ReportController::class, 'inspections']);
+        $map('GET', '/reports/findings', [ReportController::class, 'findings']);
         $map('GET', '/inspections/[i:id]/document', [ReportController::class, 'inspection']);
 
         // Anything else under the prefix is a JSON 404, not SLiMS's HTML page.

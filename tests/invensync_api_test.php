@@ -255,6 +255,13 @@ try {
     check(call('GET', 'ReportController@inspections', headers: bearer($token), query: ['period' => 'month', 'room' => 999])['body']['data']['inspections'] === [], 'the list narrows to one room');
     check($pdf(call('GET', 'ReportController@inspection', params: ['id' => $id], headers: bearer($token))), 'an inspection comes as its own document');
     check(call('GET', 'ReportController@inspection', params: ['id' => 999999], headers: bearer($token))['code'] === 'not_found', 'an unknown inspection has no document');
+    $found = call('GET', 'ReportController@findings', headers: bearer($baca), query: ['period' => 'month'])['body']['data']['findings'];
+    $handled = array_values(array_filter($found, static fn (array $row): bool => $row['id'] === $findingId))[0] ?? null;
+    check(count($found) === 2 && $handled !== null && $handled['object'] !== '' && $handled['room'] !== '' && $handled['priority']['label'] !== '' && $handled['inspection_id'] === $id,
+        'the period\'s findings are listed with what was found where, to a read-only librarian too');
+    check(count($handled['actions']) >= 1 && $handled['actions'][0]['kind'] === ['key' => 'repair', 'label' => 'Perbaikan'] && $handled['actions'][0]['description'] === 'Power supply diganti' && is_bool($handled['actions'][0]['submitted']),
+        'a finding comes with the work recorded on it');
+    check(call('GET', 'ReportController@findings', headers: bearer($token), query: ['period' => 'month', 'room' => 999])['body']['data']['findings'] === [], 'the findings narrow to one room');
     check($pdf(call('GET', 'ReportController@document', headers: bearer($token), query: ['period' => 'month'])), 'the period report comes as PDF');
     $home = call('GET', 'HomeController@show', headers: bearer($token))['body']['data'];
     check($home['stock_take'] === null && $home['counts']['inspections'] === 0, 'home shows no running stock take and nothing left to inspect');
