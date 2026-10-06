@@ -55,7 +55,7 @@ Plugin memeriksa rilis baru di GitHub setiap 12 jam. Jika tersedia, pengguna den
 
 ## Mengamankan folder foto dan folder plugin
 
-Foto barang, bukti pemeriksaan, template kop, denah ruangan, dan bukti pengukuran bandwidth disimpan di `images/inventaris-barang` dan hanya dapat dibuka melalui panel admin. Plugin membuat `.htaccess` di folder itu dan di tiap subfoldernya untuk memblokir akses langsung di Apache (memerlukan `AllowOverride`).
+Foto barang, bukti pemeriksaan, template kop, denah ruangan, bukti lisensi, dan dokumen pendukung disimpan di `images/inventaris-barang` dan hanya dapat dibuka melalui panel admin. Plugin membuat `.htaccess` di folder itu dan di tiap subfoldernya untuk memblokir akses langsung di Apache (memerlukan `AllowOverride`).
 
 Berkas PHP plugin dijalankan oleh SLiMS, bukan lewat alamatnya sendiri. `.htaccess` di folder plugin menolak permintaan langsung ke berkas PHP di dalamnya; hanya folder `assets` yang perlu dibuka browser.
 
@@ -95,7 +95,7 @@ Semua menu tersedia di modul **Stock Take**, dalam tiga bagian. Pengguna dengan 
 | --- | --- |
 | **Ruangan & Barang** | Mencatat ruangan dan barang, mengunggah hingga 5 foto per barang, membuat kode barang otomatis (misalnya `P01-INV-000001`), dan mencetak KIR. Halaman tiap ruangan memiliki tab **Area** (area apa saja di dalam ruangan) dan **Denah** (gambar atau PDF denah, beberapa per ruangan). |
 | **Perangkat Lunak** | Mencatat aplikasi yang dipakai perpustakaan beserta jenis dan masa berlaku lisensinya. |
-| **Gedung & Jaringan** | Mengisi luas gedung dan bandwidth internet beserta bukti pengukurannya, untuk tiap lokasi perpustakaan. |
+| **Gedung & Jaringan** | Mengisi luas gedung dan bandwidth internet, serta menyimpan dokumen pendukung (jaringan, keamanan dan keselamatan), untuk tiap lokasi perpustakaan. |
 | **Sivitas per Lokasi** | Menghitung sivitas dari anggota SLiMS yang aktif, memetakannya ke lokasi perpustakaan, dan merapikan isian Institusi anggota yang salah ketik. |
 
 **Pengaturan Inven**
@@ -111,7 +111,7 @@ Rekap dihitung dari data yang sudah ada, jadi lengkapi dulu klasifikasinya:
 
 1. Di **Ruangan & Barang**, ubah tiap ruangan dan isi **Luas (m²)**. Lalu buka ruangannya dan catat areanya di tab **Area**. Ada empat area layanan dasar (koleksi, baca, kerja staf, layanan), area pendukung, dan fasilitas umum. Toilet, musala, parkir, kantin, dan ruang laktasi dicatat sebagai ruangan dengan area berjenis itu, bukan sebagai barang.
 2. Beri **Kategori** dan **Jenis** pada barang (perabot, peralatan, komputer, multimedia, keamanan, fasilitas umum). Satu barang boleh memiliki lebih dari satu kategori dan dihitung di tiap kategorinya, misalnya komputer yang juga perangkat multimedia. Centang beberapa barang di tabel ruangan, lalu klik **Beri kategori** untuk mengisinya sekaligus; pilihan itu menggantikan kategori barang yang dicentang.
-3. Di **Gedung & Jaringan**, isi luas gedung bila diketahui, serta bandwidth beserta bukti pengukurannya. Bila ada beberapa lokasi, pilih lokasinya dulu. Di samping formulir tampil hasilnya di Rekap Sarpras menurut data yang tersimpan. Di bagian **Dokumen jaringan** (setelah migrasi 15), unggah hasil uji kecepatan tiap ruang, bukti layanan ISP, dan peta jangkauan Wi-Fi.
+3. Di **Gedung & Jaringan**, isi luas gedung bila diketahui, serta bandwidth dan tanggal pengukurannya. Bila ada beberapa lokasi, pilih lokasinya dulu. Di samping formulir tampil hasilnya di Rekap Sarpras menurut data yang tersimpan. Di bagian **Dokumen pendukung** (setelah migrasi 18), unggah bukti jaringan (hasil uji kecepatan tiap ruang, yang juga menjadi bukti pengukuran di Rekap Sarpras; layanan ISP; peta jangkauan Wi-Fi) serta bukti keamanan dan keselamatan (sertifikat atau uji fungsi perangkat, POS tanggap darurat, berita acara pelatihan atau simulasi).
 4. Di **Perangkat Lunak**, catat aplikasi yang dipakai beserta jenis lisensinya. Di form aplikasi (setelah migrasi 16), isian **Berkas bukti lisensi** menerima sertifikat lisensi, faktur, atau tangkapan layar halaman lisensinya; tombol **Bukti** di tiap baris membuka berkas-berkas itu.
 5. Periksa **Sivitas per Lokasi** (lihat di bawah).
 
@@ -222,7 +222,7 @@ php tests/menu_structure_test.php
 php tests/sarpras_combine_test.php
 php tests/sarpras_categories_test.php
 php tests/inventory_catalog_test.php
-php tests/network_documents_test.php
+php tests/support_documents_test.php
 php tests/software_list_test.php
 php tests/software_files_test.php
 php tests/room_areas_test.php

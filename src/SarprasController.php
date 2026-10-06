@@ -9,8 +9,9 @@
  *   software  Perangkat Lunak: the register of software the library runs, and the files that
  *             show each application's licence (?licence_file=<id>).
  *   facility  Gedung & Jaringan: the figures that do not live in the inventory (building area,
- *             bandwidth), the bandwidth evidence file (?evidence=1), and the location's network
- *             documents: speed tests, the ISP's service, the Wi-Fi coverage map (?network=<id>).
+ *             bandwidth) and the location's supporting documents (?document=<id>): of its
+ *             internet (speed tests, the ISP's service, the Wi-Fi coverage map) and of its
+ *             security and safety (SupportDocuments).
  *   sivitas   Sivitas per Lokasi: active members counted as sivitas, placed at locations by
  *             Institusi, member type or a default (Sivitas). Putting mistyped Institusi right
  *             changes SLiMS's member data, so it also needs Membership write access.
@@ -39,13 +40,13 @@ require_once __DIR__ . '/Supervision.php';
 require_once __DIR__ . '/PdfLayout.php';
 require_once __DIR__ . '/Sarpras.php';
 require_once __DIR__ . '/Sivitas.php';
-require_once __DIR__ . '/NetworkDocuments.php';
+require_once __DIR__ . '/SupportDocuments.php';
 require_once __DIR__ . '/SoftwareFiles.php';
 
-use SLiMS\Plugins\Inventory\NetworkDocuments;
 use SLiMS\Plugins\Inventory\Sarpras;
 use SLiMS\Plugins\Inventory\Sivitas;
 use SLiMS\Plugins\Inventory\SoftwareFiles;
+use SLiMS\Plugins\Inventory\SupportDocuments;
 
 if (!utility::havePrivilege('stock_take', 'r')) {
     die('<div class="errorBox">' . __('You are not authorized to view this section') . '</div>');
@@ -55,7 +56,7 @@ if (!utility::havePrivilege('stock_take', 'r')) {
 $actions = [
     'recap' => [],
     'software' => ['software', 'software_delete', 'licence_upload', 'licence_delete'],
-    'facility' => ['settings', 'evidence', 'evidence_delete', 'network_upload', 'network_delete'],
+    'facility' => ['settings', 'document_upload', 'document_delete'],
     'sivitas' => ['map', 'counting', 'merge', 'undo'],
 ];
 $page = (string) ($inventorySarprasPage ?? 'recap');
@@ -103,7 +104,7 @@ $place = static function () use ($places, $library): ?array {
     return null;
 };
 
-$schemaMessage = 'Struktur data sarpras belum tersedia. Jalankan migrasi plugin hingga versi 16 melalui System → Plugins.';
+$schemaMessage = 'Struktur data sarpras belum tersedia. Jalankan migrasi plugin hingga versi 18 melalui System → Plugins.';
 $isSchema = static fn(Throwable $e): bool => $e instanceof PDOException && in_array((int) ($e->errorInfo[1] ?? 0), [1054, 1146], true);
 // An unexpected error goes into the daily usage report, stripped of its data. A schema not migrated
 // yet is not one: the report already carries the migration level.
@@ -125,24 +126,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             Sarpras::saveSettings($db, $_POST, $library);
             $log('Data gedung dan jaringan' . ($library !== '' ? ' lokasi ' . $library : '') . ' diperbarui.', 'Update');
             $json(['ok' => true, 'message' => 'Data gedung dan jaringan tersimpan.']);
-        } elseif ($action === 'evidence') {
-            Sarpras::uploadEvidence($db, $_FILES['evidence'] ?? [], $library);
-            $log('Bukti pengukuran bandwidth' . ($library !== '' ? ' lokasi ' . $library : '') . ' diunggah.', 'Update');
-            $json(['ok' => true, 'message' => 'Bukti pengukuran tersimpan.']);
-        } elseif ($action === 'evidence_delete') {
-            Sarpras::deleteEvidence($db, $library);
-            $log('Bukti pengukuran bandwidth' . ($library !== '' ? ' lokasi ' . $library : '') . ' dihapus.', 'Delete');
-            $json(['ok' => true, 'message' => 'Bukti pengukuran dihapus.']);
-        } elseif ($action === 'network_upload') {
+        } elseif ($action === 'document_upload') {
             $kind = (string) ($_POST['kind'] ?? '');
-            $id = NetworkDocuments::upload($db, $library, is_array($_FILES['document'] ?? null) ? $_FILES['document'] : [], $kind, (string) ($_POST['title'] ?? ''), (int) ($_POST['room_id'] ?? 0), isset($_SESSION['uid']) ? (int) $_SESSION['uid'] : null, date('Y-m-d H:i:s'));
-            $log('Dokumen jaringan #' . $id . ' (' . (NetworkDocuments::KINDS[$kind] ?? $kind) . ')' . ($library !== '' ? ' lokasi ' . $library : '') . ' diunggah.', 'Update');
-            $json(['ok' => true, 'message' => 'Dokumen jaringan tersimpan.']);
-        } elseif ($action === 'network_delete') {
+            $id = SupportDocuments::upload($db, $library, is_array($_FILES['document'] ?? null) ? $_FILES['document'] : [], $kind, (string) ($_POST['title'] ?? ''), (int) ($_POST['room_id'] ?? 0), isset($_SESSION['uid']) ? (int) $_SESSION['uid'] : null, date('Y-m-d H:i:s'));
+            $log('Dokumen pendukung #' . $id . ' (' . (SupportDocuments::KINDS[$kind]['label'] ?? $kind) . ')' . ($library !== '' ? ' lokasi ' . $library : '') . ' diunggah.', 'Update');
+            $json(['ok' => true, 'message' => 'Dokumen pendukung tersimpan.']);
+        } elseif ($action === 'document_delete') {
             $id = (int) ($_POST['record_id'] ?? 0);
-            NetworkDocuments::delete($db, $library, $id);
-            $log('Dokumen jaringan #' . $id . ($library !== '' ? ' lokasi ' . $library : '') . ' dihapus.', 'Delete');
-            $json(['ok' => true, 'message' => 'Dokumen jaringan dihapus.']);
+            SupportDocuments::delete($db, $library, $id);
+            $log('Dokumen pendukung #' . $id . ($library !== '' ? ' lokasi ' . $library : '') . ' dihapus.', 'Delete');
+            $json(['ok' => true, 'message' => 'Dokumen pendukung dihapus.']);
         } elseif ($page === 'sivitas' && $action === 'map') {
             $basis = (string) ($_POST['basis'] ?? '');
             $values = is_array($_POST['values'] ?? null) ? array_map('strval', $_POST['values']) : [(string) ($_POST['value'] ?? '')];
@@ -213,22 +206,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     exit;
 }
 
-if ($page === 'facility' && ($_GET['evidence'] ?? '') === '1') {
-    $file = Sarpras::evidenceFile($db, $library);
-    if (!$file) {
-        http_response_code(404);
-        echo 'Bukti tidak ditemukan.';
-        exit;
-    }
-    header('Content-Type: ' . $file['mime']);
-    header('Content-Length: ' . filesize($file['path']));
-    header('Content-Disposition: inline; filename="' . str_replace(['"', "\r", "\n"], '', $file['name']) . '"');
-    header('X-Content-Type-Options: nosniff');
-    header('Cache-Control: private, no-store');
-    readfile($file['path']);
-    exit;
-}
-
 if ($page === 'software' && isset($_GET['licence_file'])) {
     $file = null;
     try {
@@ -252,10 +229,10 @@ if ($page === 'software' && isset($_GET['licence_file'])) {
     exit;
 }
 
-if ($page === 'facility' && isset($_GET['network'])) {
+if ($page === 'facility' && isset($_GET['document'])) {
     $file = null;
     try {
-        $file = NetworkDocuments::file($db, (int) $_GET['network']);
+        $file = SupportDocuments::file($db, (int) $_GET['document']);
     } catch (Throwable $error) {
         error_log('[sarpras] ' . $error->getMessage());
     }
@@ -350,7 +327,8 @@ if (($_GET['format'] ?? '') === 'json') {
         } elseif ($page === 'facility') {
             if ($places === null) $places = Sarpras::locations($db);
             $settings = Sarpras::settings($db, $library);
-            $settings['evidence'] = is_array($settings['evidence']) ? ['name' => $settings['evidence']['name'], 'mime' => $settings['evidence']['mime'], 'uploaded_at' => $settings['evidence']['uploaded_at']] : null;
+            // The evidence file became a supporting document (migration 18): the page no longer shows it here.
+            unset($settings['evidence']);
             // What these figures amount to in the recap, so the page can show the effect of saving them.
             $result = [];
             foreach (Sarpras::recap($db, $watch(), $library)['aspects'] as $aspect) {
@@ -361,21 +339,22 @@ if (($_GET['format'] ?? '') === 'json') {
             // The rooms a speed test may be of: this location's, or every room while the library is one unit.
             $rooms = $db->prepare('SELECT id, room_name AS name FROM inventory_locations' . ($library === '' ? '' : ' WHERE slims_location_id = ?') . ' ORDER BY room_name, id');
             $rooms->execute($library === '' ? [] : [$library]);
-            // Before migration 15 the page still works; it says the documents need the migration.
+            // Before migration 17 the page still works; it says the documents need the migration.
             try {
-                $documents = NetworkDocuments::of($db, $library);
+                $documents = SupportDocuments::of($db, $library);
             } catch (PDOException $error) {
                 if (!$isSchema($error)) throw $error;
                 $documents = null;
             }
-            $network = [
+            $support = [
                 'documents' => $documents,
-                'kinds' => NetworkDocuments::KINDS,
+                'topics' => SupportDocuments::TOPICS,
+                'kinds' => SupportDocuments::KINDS,
                 'rooms' => array_map(static fn(array $room): array => ['id' => (int) $room['id'], 'name' => (string) $room['name']], $rooms->fetchAll(PDO::FETCH_ASSOC)),
-                'max_bytes' => NetworkDocuments::MAX_BYTES,
-                'max' => NetworkDocuments::MAX_PER_LIBRARY,
+                'max_bytes' => SupportDocuments::MAX_BYTES,
+                'max' => SupportDocuments::MAX_PER_LIBRARY,
             ];
-            $json(['ok' => true, 'data' => ['settings' => $settings, 'network' => $network, 'sivitas' => $sivitas, 'coverage' => Sarpras::COVERAGE, 'result' => $result, 'levels' => Sarpras::LEVELS, 'locations' => $places['locations'], 'location' => $place()] + $access]);
+            $json(['ok' => true, 'data' => ['settings' => $settings, 'support' => $support, 'sivitas' => $sivitas, 'coverage' => Sarpras::COVERAGE, 'result' => $result, 'levels' => Sarpras::LEVELS, 'locations' => $places['locations'], 'location' => $place()] + $access]);
         } else {
             if ($places === null) $places = Sarpras::locations($db);
             $shared = ['levels' => Sarpras::LEVELS, 'locations' => $places['rooms'] > 0 ? $places['locations'] : [], 'unassigned' => $places['unassigned']];

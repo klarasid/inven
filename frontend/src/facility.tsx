@@ -4,12 +4,10 @@ import {
   ArrowRight,
   Building2,
   CheckCircle2,
-  ExternalLink,
   FileText,
-  Network,
+  FolderOpen,
   Plus,
   Trash2,
-  Upload as UploadIcon,
   Wifi,
   XCircle,
   type LucideIcon,
@@ -32,14 +30,18 @@ type Settings = {
   bandwidth_users: number;
   bandwidth_coverage: string;
   bandwidth_date: string;
-  evidence: { name: string; mime: string; uploaded_at: string } | null;
 };
-type NetworkDocument = { id: number; kind: string; title: string; mime: string; created_at: string; room: { id: number; name: string } | null };
-/** What shows the location's internet besides the figures: speed tests, the ISP's service, the Wi-Fi coverage map. */
-type NetworkData = {
-  /** Null until the plugin's migration 15 has run. */
-  documents: NetworkDocument[] | null;
-  kinds: Record<string, string>;
+type SupportDocument = { id: number; kind: string; topic: string; title: string; mime: string; created_at: string; room: { id: number; name: string } | null };
+/**
+ * The files the location keeps as evidence of its facilities, each of a kind under a topic: its
+ * internet (speed tests, the ISP's service, the Wi-Fi coverage map) and its security and safety.
+ */
+type SupportData = {
+  /** Null until the plugin's migration 17 has run. */
+  documents: SupportDocument[] | null;
+  topics: Record<string, string>;
+  /** `room`: whether a document of the kind may be of one room rather than the whole location. */
+  kinds: Record<string, { label: string; topic: string; room: boolean }>;
   rooms: { id: number; name: string }[];
   max_bytes: number;
   max: number;
@@ -48,7 +50,7 @@ type Location = { code: string; name: string; rooms: number };
 type Result = { no: number; name: string; value: string; level: Level | null; checks: { label: string; ok: boolean }[] };
 type Data = {
   settings: Settings;
-  network: NetworkData;
+  support: SupportData;
   /** Active SLiMS members counted for this location (Sivitas per Lokasi); not typed in here. */
   sivitas: { count: number; single: boolean; unmapped: number };
   coverage: Record<string, string>;
@@ -133,24 +135,25 @@ function Outcome({ data, changed, open }: { data: Data; changed: boolean; open: 
 
 const documentTypes = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
 
-/** The location's network documents: several per kind, a speed test for each room when there are many. */
-function NetworkDocuments({ data, page, library, post, reload }: { data: Data; page: string; library: string; post: Post; reload: () => void }) {
+/** The location's supporting documents, by topic: several per kind, a speed test for each room when there are many. */
+function SupportDocuments({ data, page, library, post, reload }: { data: Data; page: string; library: string; post: Post; reload: () => void }) {
   const w = useWorkspace();
-  const network = data.network;
+  const support = data.support;
   const [adding, setAdding] = useState(false);
-  const [removing, setRemoving] = useState<NetworkDocument>();
-  const [viewing, setViewing] = useState<NetworkDocument>();
+  const [removing, setRemoving] = useState<SupportDocument>();
+  const [viewing, setViewing] = useState<SupportDocument>();
   const [busy, setBusy] = useState(false);
-  const href = (document: NetworkDocument) => url(page, { network: document.id, library: library || undefined });
+  const href = (document: SupportDocument) => url(page, { document: document.id, library: library || undefined });
+  const kindLabel = (document: SupportDocument) => support.kinds[document.kind]?.label ?? document.kind;
   // Both kinds open in a popup over the page: a PDF in the print viewer, a picture in a dialog.
-  const open = (document: NetworkDocument) => (document.mime === "application/pdf" ? previewPdf(w.config, href(document), document.title) : setViewing(document));
+  const open = (document: SupportDocument) => (document.mime === "application/pdf" ? previewPdf(w.config, href(document), document.title) : setViewing(document));
 
   async function remove() {
     if (!removing) return;
     setBusy(true);
     try {
-      const reply = await post({ action: "network_delete", record_id: removing.id, library, csrf: data.csrf });
-      toast.success(reply.message || "Dokumen jaringan dihapus.");
+      const reply = await post({ action: "document_delete", record_id: removing.id, library, csrf: data.csrf });
+      toast.success(reply.message || "Dokumen pendukung dihapus.");
       setRemoving(undefined);
       reload();
     } catch (e) {
@@ -161,49 +164,58 @@ function NetworkDocuments({ data, page, library, post, reload }: { data: Data; p
   }
 
   return (
-    <Section icon={Network} title="Dokumen jaringan" description="Bukti untuk akreditasi: hasil uji kecepatan tiap ruang, layanan ISP, dan peta jangkauan Wi-Fi.">
-      {network.documents === null ? (
-        <p className="text-sm text-muted-foreground">Jalankan migrasi plugin hingga versi 15 di System → Plugins untuk menyimpan dokumen jaringan.</p>
+    <Section
+      icon={FolderOpen}
+      title="Dokumen pendukung"
+      description="Berkas bukti sarana dan prasarana lokasi ini. Jaringan: hasil uji kecepatan tiap ruang, layanan ISP, peta jangkauan Wi-Fi. Keamanan: sertifikat atau uji fungsi perangkat, POS tanggap darurat, berita acara pelatihan."
+    >
+      {support.documents === null ? (
+        <p className="text-sm text-muted-foreground">Jalankan migrasi plugin hingga versi 17 di System → Plugins untuk menyimpan dokumen pendukung.</p>
       ) : (
         <>
-          {network.documents.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Belum ada dokumen jaringan.</p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {network.documents.map((document) => (
-                <li key={document.id} className="flex flex-wrap items-center gap-3 rounded-xl border p-3">
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                    <FileText className="size-4" />
-                  </span>
-                  <div className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-sm font-medium">{document.title}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {network.kinds[document.kind] ?? document.kind}
-                      {document.room ? ` · ${document.room.name}` : ""} · Diunggah {dateLabel(document.created_at)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Button type="button" size="sm" variant="outline" aria-label={`Lihat ${document.title}`} onClick={() => open(document)}>
-                      Lihat
-                    </Button>
-                    {data.write && (
-                      <Button
-                        type="button"
-                        size="icon-sm"
-                        variant="ghost"
-                        className="text-destructive"
-                        aria-label={`Hapus ${document.title}`}
-                        onClick={() => setRemoving(document)}
-                      >
-                        <Trash2 />
-                      </Button>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-          {data.write && network.documents.length < network.max && (
+          {support.documents.length === 0 && <p className="text-sm text-muted-foreground">Belum ada dokumen pendukung.</p>}
+          {Object.entries(support.topics).map(([topic, label]) => {
+            const documents = support.documents!.filter((document) => document.topic === topic);
+            return documents.length === 0 ? null : (
+              <div key={topic} className="flex flex-col gap-2">
+                <h3 className="text-sm font-medium text-muted-foreground">{label}</h3>
+                <ul className="flex flex-col gap-2">
+                  {documents.map((document) => (
+                    <li key={document.id} className="flex flex-wrap items-center gap-3 rounded-xl border p-3">
+                      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                        <FileText className="size-4" />
+                      </span>
+                      <div className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate text-sm font-medium">{document.title}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {kindLabel(document)}
+                          {document.room ? ` · ${document.room.name}` : ""} · Diunggah {dateLabel(document.created_at)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button type="button" size="sm" variant="outline" aria-label={`Lihat ${document.title}`} onClick={() => open(document)}>
+                          Lihat
+                        </Button>
+                        {data.write && (
+                          <Button
+                            type="button"
+                            size="icon-sm"
+                            variant="ghost"
+                            className="text-destructive"
+                            aria-label={`Hapus ${document.title}`}
+                            onClick={() => setRemoving(document)}
+                          >
+                            <Trash2 />
+                          </Button>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+          {data.write && support.documents.length < support.max && (
             <div>
               <Button type="button" variant="outline" onClick={() => setAdding(true)}>
                 <Plus data-icon="inline-start" />
@@ -214,7 +226,7 @@ function NetworkDocuments({ data, page, library, post, reload }: { data: Data; p
         </>
       )}
       {adding && (
-        <NetworkDocumentDialog
+        <SupportDocumentDialog
           data={data}
           library={library}
           post={post}
@@ -230,14 +242,14 @@ function NetworkDocuments({ data, page, library, post, reload }: { data: Data; p
           viewing && {
             url: href(viewing),
             title: viewing.title,
-            description: `${network.kinds[viewing.kind] ?? "Dokumen jaringan"}, diunggah ${dateLabel(viewing.created_at)}.`,
+            description: `${kindLabel(viewing)}, diunggah ${dateLabel(viewing.created_at)}.`,
           }
         }
         onClose={() => setViewing(undefined)}
       />
       <Confirm
         open={!!removing}
-        title="Hapus dokumen jaringan?"
+        title="Hapus dokumen pendukung?"
         description={`${removing?.title || "Dokumen"} dan berkasnya dihapus permanen.`}
         action="Hapus dokumen"
         busy={busy}
@@ -248,8 +260,8 @@ function NetworkDocuments({ data, page, library, post, reload }: { data: Data; p
   );
 }
 
-function NetworkDocumentDialog({ data, library, post, onClose, onSaved }: { data: Data; library: string; post: Post; onClose: () => void; onSaved: () => void }) {
-  const network = data.network;
+function SupportDocumentDialog({ data, library, post, onClose, onSaved }: { data: Data; library: string; post: Post; onClose: () => void; onSaved: () => void }) {
+  const support = data.support;
   const fileId = useId();
   const titleId = useId();
   const [kind, setKind] = useState("speedtest");
@@ -258,10 +270,10 @@ function NetworkDocumentDialog({ data, library, post, onClose, onSaved }: { data
   const [file, setFile] = useState<File>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const megabytes = Math.round(network.max_bytes / 1024 / 1024);
-  const fileError = file && (!documentTypes.includes(file.type) || file.size > network.max_bytes) ? `Gunakan PDF, JPEG, PNG, atau WebP maksimal ${megabytes} MB.` : "";
-  // The ISP's service is the location's; a speed test or a coverage map may be of one room.
-  const ofRoom = kind !== "isp" && network.rooms.length > 0;
+  const megabytes = Math.round(support.max_bytes / 1024 / 1024);
+  const fileError = file && (!documentTypes.includes(file.type) || file.size > support.max_bytes) ? `Gunakan PDF, JPEG, PNG, atau WebP maksimal ${megabytes} MB.` : "";
+  // The ISP's service or an emergency procedure is the location's; a speed test or a device's certificate may be of one room.
+  const ofRoom = !!support.kinds[kind]?.room && support.rooms.length > 0;
 
   async function save() {
     if (!file || fileError) {
@@ -271,8 +283,8 @@ function NetworkDocumentDialog({ data, library, post, onClose, onSaved }: { data
     setBusy(true);
     setError("");
     try {
-      const reply = await post({ action: "network_upload", kind, room_id: ofRoom ? room : "", title, document: file, library, csrf: data.csrf });
-      toast.success(reply.message || "Dokumen jaringan tersimpan.");
+      const reply = await post({ action: "document_upload", kind, room_id: ofRoom ? room : "", title, document: file, library, csrf: data.csrf });
+      toast.success(reply.message || "Dokumen pendukung tersimpan.");
       onSaved();
     } catch (e) {
       setError((e as Error).message);
@@ -285,20 +297,25 @@ function NetworkDocumentDialog({ data, library, post, onClose, onSaved }: { data
     <Dialog open onOpenChange={(open) => !open && !busy && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Tambah dokumen jaringan</DialogTitle>
+          <DialogTitle>Tambah dokumen pendukung</DialogTitle>
           <DialogDescription>Gambar atau PDF, maksimal {megabytes} MB.</DialogDescription>
         </DialogHeader>
         <ErrorBox message={error} />
         <FieldGroup>
-          <Choice label="Jenis dokumen" value={kind} onChange={(v) => v && setKind(v)} items={Object.entries(network.kinds).map(([value, label]) => ({ value, label }))} />
+          <Choice
+            label="Jenis dokumen"
+            value={kind}
+            onChange={(v) => v && setKind(v)}
+            items={Object.entries(support.kinds).map(([value, about]) => ({ value, label: `${support.topics[about.topic] ?? about.topic}: ${about.label}` }))}
+          />
           {ofRoom && (
             <Choice
               label="Ruangan"
               value={room}
               onChange={setRoom}
               placeholder="Seluruh lokasi"
-              items={[{ value: "", label: "Seluruh lokasi" }, ...network.rooms.map((r) => ({ value: String(r.id), label: r.name }))]}
-              description="Opsional. Pilih ruangan bila dokumen ini hasil uji atau peta untuk satu ruangan."
+              items={[{ value: "", label: "Seluruh lokasi" }, ...support.rooms.map((r) => ({ value: String(r.id), label: r.name }))]}
+              description="Opsional. Pilih ruangan bila dokumen ini hanya untuk satu ruangan."
             />
           )}
           <Field data-invalid={!!fileError}>
@@ -340,9 +357,6 @@ function FacilityForm({ data, page, post, reload }: { data: Data; page: string; 
   const [values, setValues] = useState(() => fields(s));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [removeEvidence, setRemoveEvidence] = useState(false);
-  const [viewEvidence, setViewEvidence] = useState(false);
-  const picker = useRef<HTMLInputElement>(null);
   const changed = JSON.stringify(values) !== JSON.stringify(fields(s));
   // After saving, the form shows the figures as the server keeps them (rounded, emptied of zeros).
   const saved = useRef(false);
@@ -446,81 +460,12 @@ function FacilityForm({ data, page, post, reload }: { data: Data; page: string; 
                 />
                 <TextField label="Tanggal pengukuran" type="date" value={values.bandwidth_date} onChange={(v) => set("bandwidth_date", v)} />
               </FieldGroup>
-              <Field>
-                <FieldLabel>Bukti pengukuran</FieldLabel>
-                {s.evidence ? (
-                  <div className="flex flex-wrap items-center gap-3 rounded-xl border p-3">
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                      <FileText className="size-4" />
-                    </span>
-                    <div className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate text-sm font-medium">{s.evidence.name}</span>
-                      <span className="text-xs text-muted-foreground">Diunggah {dateLabel(s.evidence.uploaded_at)}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {s.evidence.mime.startsWith("image/") ? (
-                        // A picture opens in a popup on the page; a PDF is left to the browser's viewer.
-                        <Button type="button" size="sm" variant="outline" onClick={() => setViewEvidence(true)}>
-                          Lihat
-                        </Button>
-                      ) : (
-                        <Button size="sm" variant="outline" asChild>
-                          <a href={url(page, { evidence: 1, library: library || undefined })} target="_blank" rel="noopener" className="notAJAX">
-                            <ExternalLink data-icon="inline-start" />
-                            Lihat
-                          </a>
-                        </Button>
-                      )}
-                      {data.write && (
-                        <>
-                          <Button type="button" size="sm" variant="ghost" onClick={() => picker.current?.click()}>
-                            Ganti
-                          </Button>
-                          <Button
-                            type="button"
-                            size="icon-sm"
-                            variant="ghost"
-                            className="text-destructive"
-                            aria-label="Hapus bukti"
-                            onClick={() => setRemoveEvidence(true)}
-                          >
-                            <Trash2 />
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ) : data.write ? (
-                  <button
-                    type="button"
-                    onClick={() => picker.current?.click()}
-                    className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed p-4 text-sm font-medium outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-50"
-                  >
-                    <UploadIcon className="size-4" />
-                    {busy ? "Mengunggah…" : "Unggah bukti"}
-                  </button>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Belum ada bukti.</p>
-                )}
-                <input
-                  ref={picker}
-                  type="file"
-                  aria-label="Berkas bukti pengukuran"
-                  accept="application/pdf,image/jpeg,image/png,image/webp"
-                  className="sr-only"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    e.target.value = "";
-                    if (file) run({ action: "evidence", evidence: file });
-                  }}
-                />
-                <FieldDescription>Tangkapan layar speedtest atau kontrak layanan ISP. PDF, JPEG, PNG, atau WebP, maksimal 5 MB.</FieldDescription>
-              </Field>
+              <p className="text-sm text-muted-foreground">Unggah hasil uji kecepatannya di Dokumen pendukung di bawah, sebagai bukti pengukuran.</p>
             </FieldGroup>
           </Section>
         </fieldset>
         {/* Outside the fieldset: a reader may still open the documents. */}
-        <NetworkDocuments data={data} page={page} library={library} post={post} reload={reload} />
+        <SupportDocuments data={data} page={page} library={library} post={post} reload={reload} />
         </div>
         <Outcome data={data} changed={changed} open={() => w.go(library ? { view: "sarpras", library } : { view: "sarpras" })} />
       </div>
@@ -541,23 +486,6 @@ function FacilityForm({ data, page, post, reload }: { data: Data; page: string; 
           </Button>
         </ActionBar>
       )}
-      <ImagePreview
-        image={
-          viewEvidence && s.evidence
-            ? { url: url(page, { evidence: 1, library: library || undefined }), title: s.evidence.name, description: `Bukti pengukuran, diunggah ${dateLabel(s.evidence.uploaded_at)}.` }
-            : undefined
-        }
-        onClose={() => setViewEvidence(false)}
-      />
-      <Confirm
-        open={removeEvidence}
-        title="Hapus bukti pengukuran?"
-        description="Berkas bukti dihapus permanen. Angka bandwidth tetap tersimpan."
-        action="Hapus bukti"
-        busy={busy}
-        onCancel={() => setRemoveEvidence(false)}
-        onConfirm={() => run({ action: "evidence_delete" }, () => setRemoveEvidence(false))}
-      />
     </>
   );
 }

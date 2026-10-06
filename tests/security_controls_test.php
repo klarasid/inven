@@ -34,7 +34,8 @@ $checks = [
     'penampil PDF hanya memuat halaman plugin' => str_contains($read('assets/viewer/viewer.js'), "url.origin !== location.origin")
         && str_contains($read('assets/viewer/viewer.js'), "url.pathname.endsWith('/plugin_container.php')"),
     'folder kop, bukti, dan denah dilindungi sendiri' => str_contains($read('src/Letterheads.php'), 'PhotoStorage::protect(')
-        && str_contains($read('src/Sarpras.php'), 'PhotoStorage::protect(')
+        && substr_count($read('src/SupportDocuments.php'), 'PhotoStorage::protect(') === 2
+        && str_contains($read('src/SoftwareFiles.php'), 'PhotoStorage::protect(')
         && str_contains($read('src/RoomPlans.php'), 'PhotoStorage::protect('),
     'denah hanya disajikan lewat halaman admin' => (bool) preg_match("/'room_plan'\\) \\{.*?X-Content-Type-Options: nosniff.*?RoomPlans::file\\(/s", $index)
         && strpos($index, "=== 'room_plan'") > strpos($index, "havePrivilege('stock_take', 'r')"),

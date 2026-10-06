@@ -41,6 +41,7 @@ foreach ([
     'CREATE TABLE inventory_room_plans (id INTEGER PRIMARY KEY, location_id INTEGER, title TEXT, filename TEXT, mime TEXT, created_by INTEGER, created_at TEXT)',
     'CREATE TABLE inventory_items (id INTEGER PRIMARY KEY, location_id INTEGER, item_name TEXT, category TEXT, item_type TEXT NOT NULL DEFAULT \'\', item_condition TEXT)',
     'CREATE TABLE inventory_software (id INTEGER PRIMARY KEY, name TEXT, version TEXT, licence TEXT, valid_until TEXT)',
+    'CREATE TABLE inventory_support_documents (id INTEGER PRIMARY KEY, library_code TEXT NOT NULL DEFAULT \'\', kind TEXT, location_id INTEGER, title TEXT, filename TEXT, mime TEXT, created_by INTEGER, created_at TEXT)',
     'CREATE TABLE inventory_watch_schedules (id INTEGER PRIMARY KEY, location_id INTEGER, snapshot TEXT, frequency TEXT, start_date TEXT, end_date TEXT, active INTEGER)',
     'CREATE TABLE inventory_watch_inspections (id INTEGER PRIMARY KEY, schedule_id INTEGER, library_code TEXT, room_key INTEGER, kind TEXT, status TEXT, due_date TEXT)',
     'CREATE TABLE inventory_watch_results (id INTEGER PRIMARY KEY, inspection_id INTEGER, outcome TEXT)',

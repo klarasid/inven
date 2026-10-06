@@ -10,6 +10,7 @@ use RuntimeException;
 require_once __DIR__ . '/PhotoStorage.php';
 require_once __DIR__ . '/RoomAreas.php';
 require_once __DIR__ . '/Sivitas.php';
+require_once __DIR__ . '/SupportDocuments.php';
 
 /**
  * Rekap Sarpras: eleven aspects of the library's facilities, each computed from the inventory
@@ -104,10 +105,9 @@ final class Sarpras
     private const DEFAULTS = [
         'sivitas' => 0, 'designed' => false, 'building_area' => 0.0,
         'bandwidth_mbps' => 0.0, 'bandwidth_users' => 0, 'bandwidth_coverage' => 'all', 'bandwidth_date' => '',
+        // The bandwidth evidence file as it was kept before migration 18 made it a supporting document.
         'evidence' => null,
     ];
-    private const EVIDENCE_TYPES = ['application/pdf' => 'pdf', 'image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
-    public const EVIDENCE_MAX = 5 * 1024 * 1024;
 
     /** Classification lists for the room and item forms. */
     public static function lists(): array
@@ -255,66 +255,39 @@ final class Sarpras
         return $settings;
     }
 
-    // ---- Bandwidth evidence --------------------------------------------------------------------
+    // ---- Bandwidth evidence, as it was kept before it became a supporting document ---------------
 
-    /** Kept with the inventory photos and denied to browsers like them (PhotoStorage::protect), so it is only served through the page. */
+    /** Where the single evidence file of a location used to be kept. */
     public static function evidenceDir(): string
     {
         return SB . 'images' . DIRECTORY_SEPARATOR . 'inventaris-barang' . DIRECTORY_SEPARATOR . 'sarpras';
     }
 
-    public static function uploadEvidence(PDO $db, array $file, string $library = ''): array
-    {
-        if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || !is_string($file['tmp_name'] ?? null) || !is_uploaded_file($file['tmp_name'])) {
-            throw new RuntimeException('Pilih berkas bukti (PDF, JPEG, PNG, atau WebP) maksimal 5 MB.');
-        }
-        if ((int) $file['size'] > self::EVIDENCE_MAX) throw new RuntimeException('Berkas bukti maksimal 5 MB.');
-        $mime = (string) (new \finfo(FILEINFO_MIME_TYPE))->file($file['tmp_name']);
-        if (!isset(self::EVIDENCE_TYPES[$mime])) throw new RuntimeException('Format bukti harus PDF, JPEG, PNG, atau WebP.');
-        $dir = self::evidenceDir();
-        try {
-            PhotoStorage::protect($dir);
-        } catch (RuntimeException $error) {
-            throw new RuntimeException('Folder bukti tidak dapat dibuat atau dilindungi.');
-        }
-        $name = 'bandwidth-' . bin2hex(random_bytes(8)) . '.' . self::EVIDENCE_TYPES[$mime];
-        if (!move_uploaded_file($file['tmp_name'], $dir . DIRECTORY_SEPARATOR . $name)) throw new RuntimeException('Berkas bukti tidak dapat disimpan.');
-        @chmod($dir . DIRECTORY_SEPARATOR . $name, 0600);
-        $profiles = self::all($db);
-        $settings = self::profile($profiles, $library);
-        $old = $settings['evidence']['file'] ?? null;
-        $original = mb_substr(basename((string) ($file['name'] ?? 'bukti')), 0, 150);
-        $settings['evidence'] = ['file' => $name, 'name' => $original, 'mime' => $mime, 'uploaded_at' => date('Y-m-d H:i:s')];
-        $profiles[$library] = $settings;
-        self::store($db, $profiles);
-        if (is_string($old)) self::removeFile($old);
-        return $settings;
-    }
-
-    public static function deleteEvidence(PDO $db, string $library = ''): array
+    /**
+     * Each location's single bandwidth evidence file becomes a speed test among its supporting
+     * documents (SupportDocuments), where such files are now kept. A file that cannot be moved
+     * stays as it is, so running this again moves it. @return int the files moved
+     */
+    public static function moveEvidenceToDocuments(PDO $db): int
     {
         $profiles = self::all($db);
-        $settings = self::profile($profiles, $library);
-        $old = $settings['evidence']['file'] ?? null;
-        $settings['evidence'] = null;
-        $profiles[$library] = $settings;
-        self::store($db, $profiles);
-        if (is_string($old)) self::removeFile($old);
-        return $settings;
-    }
-
-    private static function removeFile(string $name): void
-    {
-        if (preg_match('/\Abandwidth-[0-9a-f]{16}\.(pdf|jpg|png|webp)\z/', $name)) @unlink(self::evidenceDir() . DIRECTORY_SEPARATOR . $name);
-    }
-
-    /** @return array{path:string,mime:string,name:string}|null */
-    public static function evidenceFile(PDO $db, string $library = ''): ?array
-    {
-        $evidence = self::settings($db, $library)['evidence'];
-        if (!is_array($evidence) || !preg_match('/\Abandwidth-[0-9a-f]{16}\.(pdf|jpg|png|webp)\z/', (string) ($evidence['file'] ?? ''))) return null;
-        $path = self::evidenceDir() . DIRECTORY_SEPARATOR . $evidence['file'];
-        return is_file($path) ? ['path' => $path, 'mime' => (string) $evidence['mime'], 'name' => (string) $evidence['name']] : null;
+        $moved = 0;
+        $changed = false;
+        foreach ($profiles as $library => $profile) {
+            $evidence = is_array($profile) ? ($profile['evidence'] ?? null) : null;
+            if (!is_array($evidence)) continue;
+            $name = (string) ($evidence['file'] ?? '');
+            $path = self::evidenceDir() . DIRECTORY_SEPARATOR . $name;
+            if (preg_match('/\Abandwidth-[0-9a-f]{16}\.(pdf|jpg|png|webp)\z/', $name) && is_file($path) && !is_link($path)) {
+                $title = trim((string) preg_replace('/\s+/u', ' ', pathinfo((string) ($evidence['name'] ?? ''), PATHINFO_FILENAME)));
+                if (!SupportDocuments::adopt($db, (string) $library, 'speedtest', $path, mb_substr($title !== '' ? $title : 'Bukti pengukuran', 0, 150), (string) ($evidence['mime'] ?? ''), (string) ($evidence['uploaded_at'] ?? date('Y-m-d H:i:s')))) continue;
+                $moved++;
+            }
+            $profiles[$library]['evidence'] = null;
+            $changed = true;
+        }
+        if ($changed) self::store($db, $profiles);
+        return $moved;
     }
 
     // ---- Software register ---------------------------------------------------------------------
@@ -569,10 +542,11 @@ final class Sarpras
             'checks' => [
                 ['label' => 'Lebih dari 5 Mbps per orang', 'ok' => $perUser !== null && $perUser > 5],
                 ['label' => 'Menjangkau seluruh area layanan', 'ok' => $all && $perUser !== null],
-                ['label' => 'Bukti pengukuran diunggah', 'ok' => is_array($settings['evidence'])],
+                // A speed test among the supporting documents; before migration 18, the evidence file itself.
+                ['label' => 'Bukti pengukuran diunggah', 'ok' => is_array($settings['evidence']) || SupportDocuments::has($db, $library, 'speedtest')],
             ],
             'rows' => [], 'columns' => [],
-            'fix' => 'Ukur bandwidth saat jam sibuk, lalu isi dan unggah buktinya di Gedung & Jaringan.',
+            'fix' => 'Ukur bandwidth saat jam sibuk, lalu isi angkanya di Gedung & Jaringan dan unggah hasil uji kecepatannya di Dokumen pendukung.',
             'sources' => ['facility'],
         ];
 

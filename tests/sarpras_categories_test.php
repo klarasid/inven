@@ -39,7 +39,7 @@ check(strlen((string) Sarpras::categories(array_keys(Sarpras::CATEGORIES))) <= 1
 
 // The ten multimedia devices the accreditation instrument names each have a type to pick.
 check(!array_diff(['Komputer multimedia', 'Proyektor', 'Pengeras suara', 'Headphone', 'Panel interaktif', 'Printer 3D', 'Perangkat VR', 'Perekam suara', 'Kamera', 'Pemutar audio'], Sarpras::lists()['types']['multimedia']),
-    'saran jenis multimedia memuat sepuluh perangkat di instrumen akreditasi');
+    'saran jenis multimedia memuat sepuluh perangkat multimedia yang umum');
 
 // What the recap counts -------------------------------------------------------------------------
 $db = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
@@ -52,6 +52,7 @@ foreach ([
     'CREATE TABLE inventory_room_areas (id INTEGER PRIMARY KEY, location_id INTEGER, type TEXT, name TEXT NOT NULL DEFAULT \'\', created_at TEXT, updated_at TEXT)',
     'CREATE TABLE inventory_items (id INTEGER PRIMARY KEY, location_id INTEGER, item_name TEXT, category TEXT, item_type TEXT NOT NULL DEFAULT \'\', item_condition TEXT)',
     'CREATE TABLE inventory_software (id INTEGER PRIMARY KEY, name TEXT, version TEXT, licence TEXT, valid_until TEXT)',
+    'CREATE TABLE inventory_support_documents (id INTEGER PRIMARY KEY, library_code TEXT NOT NULL DEFAULT \'\', kind TEXT, location_id INTEGER, title TEXT, filename TEXT, mime TEXT, created_by INTEGER, created_at TEXT)',
     'CREATE TABLE inventory_watch_schedules (id INTEGER PRIMARY KEY, location_id INTEGER, snapshot TEXT, frequency TEXT, start_date TEXT, end_date TEXT, active INTEGER)',
     'CREATE TABLE inventory_watch_inspections (id INTEGER PRIMARY KEY, schedule_id INTEGER, library_code TEXT, room_key INTEGER, kind TEXT, status TEXT, due_date TEXT)',
     'CREATE TABLE inventory_watch_results (id INTEGER PRIMARY KEY, inspection_id INTEGER, outcome TEXT)',
@@ -93,4 +94,10 @@ $open = array_column(Sarpras::recap($db, new Supervision($db, new PhotoStorage(s
 $aspect = static fn (int $no): array => $open[$no];
 check(str_ends_with($aspect(2)['value'], '4 area pendukung') && in_array(['Halaman', 'Gazebo, Taman baca, Taman literasi'], $aspect(2)['rows'], true), 'ruang disabilitas, gazebo, taman baca, dan taman literasi dihitung sebagai area pendukung');
 check(array_column($aspect(5)['checks'], 'label') === ['Komputer di area baca', 'Komputer di area koleksi', 'Komputer di ruang layanan disabilitas'] && str_contains($aspect(5)['basis'], '1 dari 3 fungsi layanan'), 'area terbuka tidak dituntut memiliki komputer');
+// The recap's "Bukti pengukuran diunggah": a speed test among the location's supporting documents.
+$evidence = static fn (): bool => array_column(array_column(Sarpras::recap($db, new Supervision($db, new PhotoStorage(sys_get_temp_dir() . '/inventory-test-unused')))['aspects'], null, 'no')[6]['checks'], 'ok', 'label')['Bukti pengukuran diunggah'];
+$db->exec("INSERT INTO inventory_support_documents (library_code, kind, title) VALUES ('', 'isp', 'Tagihan ISP'), ('P09', 'speedtest', 'Uji lokasi lain')");
+check(!$evidence(), 'dokumen ISP, atau uji kecepatan lokasi lain, belum menjadi bukti pengukuran');
+$db->exec("INSERT INTO inventory_support_documents (library_code, kind, title) VALUES ('', 'speedtest', 'Uji kecepatan')");
+check($evidence(), 'hasil uji kecepatan lokasi ini memenuhi bukti pengukuran');
 echo "ok   done\n";

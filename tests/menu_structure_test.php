@@ -36,12 +36,11 @@ $checks = [
     'Rekap Sarpras tidak menerima perubahan data' => ($actions['recap'] ?? null) === []
         && str_contains($controller, 'if (!in_array($action, $actions[$page], true))'),
     'input sarpras hanya di halamannya sendiri' => ($actions['software'] ?? null) === ['software', 'software_delete', 'licence_upload', 'licence_delete']
-        && ($actions['facility'] ?? null) === ['settings', 'evidence', 'evidence_delete', 'network_upload', 'network_delete']
+        && ($actions['facility'] ?? null) === ['settings', 'document_upload', 'document_delete']
         && ($actions['sivitas'] ?? null) === ['map', 'counting', 'merge', 'undo'],
     'memperbaiki institusi anggota butuh hak tulis Keanggotaan' => str_contains($controller, "havePrivilege('membership', 'w')")
         && str_contains($controller, 'if (!$canFixMembers)'),
-    'bukti dan PDF hanya dilayani halamannya' => str_contains($controller, "\$page === 'facility' && (\$_GET['evidence'] ?? '') === '1'")
-        && str_contains($controller, "\$page === 'facility' && isset(\$_GET['network'])")
+    'bukti dan PDF hanya dilayani halamannya' => str_contains($controller, "\$page === 'facility' && isset(\$_GET['document'])")
         && str_contains($controller, "\$page === 'software' && isset(\$_GET['licence_file'])")
         && str_contains($controller, "\$page === 'recap' && isset(\$_GET['pdf'])"),
     'controller memeriksa IP, hak akses, dan CSRF' => str_contains($controller, "do_checkIP('smc-stocktake')")
