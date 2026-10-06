@@ -7,6 +7,7 @@ use SLiMS\Plugins\Inventory\WatchRecurrence;
 use SLiMS\Plugins\Inventory\Workspace;
 use SlimsConnect\Http\ApiException;
 use SlimsConnect\Http\JsonResponse;
+use SlimsConnect\Http\Sendable;
 
 /**
  * Checklists and routine inspection schedules, as the Jadwal and Checklist pages keep them. Every
@@ -66,6 +67,26 @@ final class ScheduleController
             'frequencies' => WatchRecurrence::FREQUENCIES,
             'pagination' => ['page' => $page['page'], 'pages' => $page['pages'], 'total' => $page['total']],
         ]);
+    }
+
+    /** The running schedules as one sheet, as PDF. */
+    public function document(Context $context): Sendable
+    {
+        RoomController::throttlePdf($context);
+        $document = $context->documents()->schedules($context->watch(), $context->staff()->name);
+        $context->log('Jadwal pemeriksaan diunduh (' . $document['count'] . ' jadwal).', 'Print');
+
+        return new BytesResponse($document['bytes'], 'application/pdf', $document['filename']);
+    }
+
+    /** One checklist (?id=), or those the running schedules use, as the form an examiner fills in, as PDF. */
+    public function templatesDocument(Context $context): Sendable
+    {
+        RoomController::throttlePdf($context);
+        $document = $context->documents()->checklists($context->watch(), $context->request->queryInt('id', 0, 0, PHP_INT_MAX), $context->staff()->name);
+        $context->log('Checklist pemeriksaan diunduh (' . $document['count'] . ' checklist).', 'Print');
+
+        return new BytesResponse($document['bytes'], 'application/pdf', $document['filename']);
     }
 
     /** The dates a schedule would have, before it is made. Changes nothing. */

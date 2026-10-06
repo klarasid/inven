@@ -196,6 +196,46 @@ final class Documents
     }
 
     /**
+     * Jadwal pemeriksaan: the routine inspection schedules that are running, as one sheet.
+     *
+     * @return array{filename: string, bytes: string, count: int}
+     */
+    public function schedules(Supervision $watch, string $printedBy): array
+    {
+        self::ensureRuntime();
+        require_once __DIR__ . '/WatchSheets.php';
+        $rows = $watch->query("SELECT * FROM inventory_watch_schedules WHERE active=1 AND location_id IS NOT NULL AND (end_date IS NULL OR end_date>=CURRENT_DATE) ORDER BY start_date, id LIMIT " . (self::MAX_ROWS + 1))->fetchAll(PDO::FETCH_ASSOC);
+        if (count($rows) > self::MAX_ROWS) {
+            throw new RuntimeException('Jadwal melebihi 500 baris. Cetak dari halaman Jadwal di SLiMS.');
+        }
+        usort($rows, static fn (array $a, array $b): int => [Supervision::decode((string) $a['snapshot'])['room_name'] ?? '', $a['id']] <=> [Supervision::decode((string) $b['snapshot'])['room_name'] ?? '', $b['id']]);
+        $rooms = (int) $watch->query('SELECT COUNT(*) FROM inventory_locations')->fetchColumn();
+        $pdf = PdfLayout::mpdf($this->tempDir, 'Jadwal Pemeriksaan', PdfLayout::footer('Jadwal pemeriksaan'));
+        $pdf->WriteHTML(WatchSheets::schedules($rows, ['printed_by' => $printedBy, 'rooms' => $rooms]));
+
+        return ['filename' => 'jadwal-pemeriksaan.pdf', 'bytes' => $pdf->Output('', 'S'), 'count' => count($rows)];
+    }
+
+    /**
+     * Checklist pemeriksaan: one checklist, or with no id those the running schedules use, each as
+     * the form an examiner fills in.
+     *
+     * @return array{filename: string, bytes: string, count: int}
+     */
+    public function checklists(Supervision $watch, int $id, string $printedBy): array
+    {
+        self::ensureRuntime();
+        require_once __DIR__ . '/WatchSheets.php';
+        $templates = $id > 0
+            ? [$watch->row('templates', $id)]
+            : $watch->query('SELECT t.* FROM inventory_watch_templates t WHERE t.id IN (SELECT s.template_id FROM inventory_watch_schedules s WHERE s.active=1 AND s.location_id IS NOT NULL AND (s.end_date IS NULL OR s.end_date>=CURRENT_DATE)) ORDER BY t.name, t.id')->fetchAll(PDO::FETCH_ASSOC);
+        $pdf = PdfLayout::mpdf($this->tempDir, 'Checklist Pemeriksaan', PdfLayout::footer('Checklist pemeriksaan'));
+        $pdf->WriteHTML(WatchSheets::checklists($templates, ['printed_by' => $printedBy]));
+
+        return ['filename' => 'checklist-pemeriksaan' . ($id > 0 ? '-' . $id : '') . '.pdf', 'bytes' => $pdf->Output('', 'S'), 'count' => count($templates)];
+    }
+
+    /**
      * The supervision report for a period, as the admin Reports page prints it.
      *
      * @param  array{from: string, to: string, library: string, room: int, inspection_status: string, finding_status: string}  $filter

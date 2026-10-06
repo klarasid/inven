@@ -76,8 +76,10 @@ final class Routes
         $map('GET', '/stocktake/sessions/[i:id]/document', [StockTakeController::class, 'document']);
 
         $map('GET', '/templates', [ScheduleController::class, 'templates']);
+        $map('GET', '/templates/document', [ScheduleController::class, 'templatesDocument']);
         $map('POST', '/templates', [ScheduleController::class, 'storeTemplate']);
         $map('GET', '/schedules', [ScheduleController::class, 'index']);
+        $map('GET', '/schedules/document', [ScheduleController::class, 'document']);
         $map('POST', '/schedules/preview', [ScheduleController::class, 'preview'], ['write' => false]);
         $map('POST', '/schedules', [ScheduleController::class, 'store']);
         $map('GET', '/sarpras', [SarprasController::class, 'show']);

@@ -303,6 +303,12 @@ try {
     check($schedule['status'] === 201 && $schedule['body']['data']['schedule']['room']['name'] === 'Ruang referensi' && $schedule['body']['data']['schedule']['frequency']['label'] === 'Bulanan' && $schedule['body']['data']['inspections_formed'] === 1, 'an agent makes a schedule and today\'s inspection is formed');
     $schedules = call('GET', 'ScheduleController@index', headers: bearer($agentToken))['body']['data'];
     check(in_array('Ruang referensi', array_column(array_column($schedules, 'room'), 'name'), true), 'the new schedule is listed');
+    // A librarian gets ten PDFs a minute, and this file asks for more than that on one librarian's behalf.
+    $db->exec('DELETE FROM slims_connect_rate_limits');
+    check($pdf(call('GET', 'ScheduleController@document', headers: bearer($baca))), 'the running schedules come as one sheet, to a read-only librarian too');
+    check($pdf(call('GET', 'ScheduleController@templatesDocument', headers: bearer($agentToken))) && $pdf(call('GET', 'ScheduleController@templatesDocument', headers: bearer($agentToken), query: ['id' => (string) $made['body']['data']['id']])),
+        'the checklists in use, or one checklist, come as a form to fill in');
+    check(call('GET', 'ScheduleController@templatesDocument', headers: bearer($agentToken), query: ['id' => '999999'])['code'] === 'not_found', 'an unknown checklist has no form');
     $db->exec('UPDATE inventory_locations SET area_m2 = 120.5 WHERE id = 1');
     $db->exec("INSERT INTO inventory_room_areas (location_id, type, name, created_at, updated_at) VALUES (1, 'baca', '', NOW(), NOW()), (1, 'literasi', 'Pojok baca', NOW(), NOW())");
     $sarpras = call('GET', 'SarprasController@show', headers: bearer($agentToken))['body']['data'];
