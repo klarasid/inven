@@ -208,7 +208,7 @@ Yang ikut terkirim bersama pesan:
 - Versi Klaras Inven, SLiMS, dan PHP.
 - Nama dan email petugas, **hanya** bila petugas mencentang **Boleh dihubungi**.
 
-Masukan disimpan di SLiMS lebih dulu. Bila Klaras tidak dapat dihubungi, masukan menunggu dan dikirim ulang otomatis. Tab **Riwayat** menampilkan masukan dari perpustakaan ini beserta statusnya (Diterima, Ditinjau, Direncanakan, Selesai, atau Tidak dilanjutkan) dan balasan tim Klaras. Bila masukan ditindaklanjuti sebagai issue di GitHub, tautannya ikut tampil, dan balasan otomatis muncul saat issue itu selesai.
+Masukan disimpan di SLiMS lebih dulu. Bila Klaras tidak dapat dihubungi, masukan menunggu dan dikirim ulang otomatis. Tab **Riwayat** menampilkan masukan yang Anda kirim beserta statusnya; tiap petugas hanya melihat masukannya sendiri (Diterima, Ditinjau, Direncanakan, Selesai, atau Tidak dilanjutkan) dan balasan tim Klaras. Bila masukan ditindaklanjuti sebagai issue di GitHub, tautannya ikut tampil, dan balasan otomatis muncul saat issue itu selesai.
 
 Masukan bukan saluran untuk masalah mendesak; untuk itu, hubungi tim dukungan Klaras secara langsung.
 

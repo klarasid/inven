@@ -56,7 +56,7 @@ try {
         if ($isFeedback) {
             require_once __DIR__ . '/Feedback.php';
             if ($action==='feedback_seen') {
-                \SLiMS\Plugins\Inventory\Feedback::markSeen($db,date('Y-m-d H:i:s'));
+                \SLiMS\Plugins\Inventory\Feedback::markSeen($db,(int)($_SESSION['uid']??0),date('Y-m-d H:i:s'));
                 echo json_encode(['ok'=>true]); return;
             }
             $piece=\SLiMS\Plugins\Inventory\Feedback::submit($db,$_POST,(int)($_SESSION['uid']??0),date('Y-m-d H:i:s'));

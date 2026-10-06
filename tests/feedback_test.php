@@ -74,13 +74,16 @@ check(Feedback::refresh($db) && count($sent) === $count + 1, 'status dan balasan
 $asked = end($sent)[1];
 check(count($asked['items']) === 3 && $asked['items'][0]['token'] !== '' && $asked['install_id'] === $install, 'tiap masukan diminta dengan tokennya sendiri');
 check(!Feedback::refresh($db) && !Feedback::refresh($db, true), 'tidak ditanyakan lagi sebelum waktunya, juga saat riwayat dibuka berulang kali dalam satu menit');
-$listed = Feedback::list($db);
-$newest = $listed[0];
+// Each staff member sees only what they sent. The reply went to the newest piece, sent by staff 8.
+check(array_column(Feedback::list($db, 7), 'id') === [2, 1] && array_column(Feedback::list($db, 8), 'id') === [3] && Feedback::list($db, 9) === [], 'tiap petugas hanya melihat masukannya sendiri');
+$newest = Feedback::list($db, 8)[0];
 check($newest['status']['key'] === 'planned' && $newest['issue_url'] === 'https://github.com/klarasid/inven/issues/57' && $newest['replies'][0]['message'] === 'Kami tindak lanjuti di issue #57.' && $newest['replies'][0]['unread'], 'masukan tampil dengan status, tautan issue, dan balasan yang belum dibaca');
-check(Feedback::unread($db) === 1, 'balasan baru dihitung');
+check(Feedback::unread($db, 8) === 1 && Feedback::unread($db, 7) === 0, 'balasan baru dihitung hanya untuk pengirimnya');
 $db->prepare('UPDATE setting SET setting_value = ? WHERE setting_name = ?')->execute([serialize('0'), Feedback::CHECKED]);
 Feedback::refresh($db, true);
 check((int) $db->query('SELECT COUNT(*) FROM inventory_feedback_replies')->fetchColumn() === 1, 'balasan yang sama tidak disimpan dua kali');
-Feedback::markSeen($db, '2026-10-08 00:00:00');
-check(Feedback::unread($db) === 0 && !Feedback::list($db)[0]['replies'][0]['unread'], 'setelah riwayat dibuka, balasan tidak lagi dihitung baru');
+Feedback::markSeen($db, 7, '2026-10-08 00:00:00');
+check(Feedback::unread($db, 8) === 1, 'petugas lain membuka riwayatnya tidak menandai balasan ini dibaca');
+Feedback::markSeen($db, 8, '2026-10-08 00:00:00');
+check(Feedback::unread($db, 8) === 0 && !Feedback::list($db, 8)[0]['replies'][0]['unread'], 'setelah pengirimnya membuka riwayat, balasan tidak lagi dihitung baru');
 echo "ok   done\n";

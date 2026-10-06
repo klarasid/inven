@@ -9,7 +9,8 @@ require_once __DIR__ . '/Telemetry.php';
 require_once __DIR__ . '/UpdateCheck.php';
 
 /**
- * Feedback librarians send to Klaras from the Masukan button, and what Klaras answers.
+ * Feedback librarians send to Klaras from the Masukan button, and what Klaras answers. Each staff
+ * member sees, and is told of replies to, only what they sent.
  *
  * A piece is kept here first and sent at once; when Klaras cannot be reached it waits and is sent
  * again with the daily usage report (Telemetry::sendIfDue). Each piece carries a token made here,
@@ -75,7 +76,7 @@ final class Feedback
         Telemetry::count('feedback', $db);
         self::send($db, self::row($db, $id), $now);
 
-        foreach (self::list($db) as $piece) {
+        foreach (self::list($db, $uid) as $piece) {
             if ($piece['id'] === $id) return $piece;
         }
         throw new RuntimeException('Masukan tidak tersimpan.');
@@ -176,15 +177,17 @@ final class Feedback
      *
      * @return list<array<string,mixed>>
      */
-    public static function list(PDO $db, int $limit = 50): array
+    public static function list(PDO $db, int $uid, int $limit = 50): array
     {
-        return self::unicode($db, static function () use ($db, $limit): array { return self::listNow($db, $limit); });
+        return self::unicode($db, static function () use ($db, $uid, $limit): array { return self::listNow($db, $uid, $limit); });
     }
 
     /** @return list<array<string,mixed>> */
-    private static function listNow(PDO $db, int $limit): array
+    private static function listNow(PDO $db, int $uid, int $limit): array
     {
-        $rows = $db->query('SELECT f.*, u.realname FROM inventory_feedback f LEFT JOIN user u ON u.user_id = f.user_id ORDER BY f.id DESC LIMIT ' . max(1, min(200, $limit)))->fetchAll(PDO::FETCH_ASSOC);
+        $query = $db->prepare('SELECT f.*, u.realname FROM inventory_feedback f LEFT JOIN user u ON u.user_id = f.user_id WHERE f.user_id = ? ORDER BY f.id DESC LIMIT ' . max(1, min(200, $limit)));
+        $query->execute([$uid]);
+        $rows = $query->fetchAll(PDO::FETCH_ASSOC);
         if (!$rows) return [];
         $ids = array_map('intval', array_column($rows, 'id'));
         $query = $db->prepare('SELECT * FROM inventory_feedback_replies WHERE feedback_id IN (' . implode(',', array_fill(0, count($ids), '?')) . ') ORDER BY replied_at, id');
@@ -212,15 +215,18 @@ final class Feedback
         }, $rows);
     }
 
-    /** Replies no one has opened the history to read yet. */
-    public static function unread(PDO $db): int
+    /** Replies to what the staff member $uid sent that they have not opened their history to read. */
+    public static function unread(PDO $db, int $uid): int
     {
-        return (int) $db->query("SELECT COUNT(*) FROM inventory_feedback_replies r JOIN inventory_feedback f ON f.id = r.feedback_id WHERE f.seen_at IS NULL OR r.received_at > f.seen_at")->fetchColumn();
+        $query = $db->prepare('SELECT COUNT(*) FROM inventory_feedback_replies r JOIN inventory_feedback f ON f.id = r.feedback_id WHERE f.user_id = ? AND (f.seen_at IS NULL OR r.received_at > f.seen_at)');
+        $query->execute([$uid]);
+        return (int) $query->fetchColumn();
     }
 
-    public static function markSeen(PDO $db, string $now): void
+    /** The staff member $uid has read the replies to what they sent. */
+    public static function markSeen(PDO $db, int $uid, string $now): void
     {
-        $db->prepare('UPDATE inventory_feedback SET seen_at = ?')->execute([$now]);
+        $db->prepare('UPDATE inventory_feedback SET seen_at = ? WHERE user_id = ?')->execute([$now, $uid]);
     }
 
     /** What would be sent as the contact of the staff member $uid, shown to them before they allow it. @return array{name:string,email:string} */

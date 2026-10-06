@@ -219,7 +219,7 @@ function FeedbackForm({ data, onSent }: { data: FeedbackData; onSent: (piece: Pi
 }
 
 function FeedbackHistory({ pieces }: { pieces: Piece[] }) {
-  if (pieces.length === 0) return <p className="text-sm text-muted-foreground">Belum ada masukan dari perpustakaan ini.</p>;
+  if (pieces.length === 0) return <p className="text-sm text-muted-foreground">Anda belum mengirim masukan.</p>;
   return (
     <ul className="flex flex-col gap-3">
       {pieces.map((piece) => (
@@ -227,10 +227,7 @@ function FeedbackHistory({ pieces }: { pieces: Piece[] }) {
           <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
             <Badge variant="outline">{piece.kind.label}</Badge>
             <Badge variant={statusTone[piece.status.key] ?? "outline"}>{piece.status.label}</Badge>
-            <span>
-              {dateLabel(piece.created_at)}
-              {piece.author && ` · ${piece.author}`}
-            </span>
+            <span>{dateLabel(piece.created_at)}</span>
           </div>
           <p className="line-clamp-4 text-sm whitespace-pre-wrap">{piece.message}</p>
           {piece.issue_url && (
