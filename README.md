@@ -193,9 +193,24 @@ Sekali sehari, plugin mengirim ringkasan pemakaian ke Klaras agar plugin gratis 
 - Apakah agent AI diizinkan, berapa petugas yang memakai aplikasi HP dan agent AI, serta jumlah perubahan yang dibuat agent AI (bukan isinya).
 - Frekuensi pemakaian fitur, serta galat teknis yang telah dibersihkan dari isinya.
 
-Plugin **tidak pernah** mengirim isi inventaris, nama atau kode barang, nama ruangan, nama aplikasi, angka gedung dan jaringan, data anggota, maupun data petugas.
+Laporan ini **tidak pernah** memuat isi inventaris, nama atau kode barang, nama ruangan, nama aplikasi, angka gedung dan jaringan, data anggota, maupun data petugas. Data petugas hanya terkirim lewat **Masukan**, dan hanya bila petugas itu mengizinkan.
 
 Bila Anda ingin data perpustakaan Anda dihapus, tulis ke [privasi@klaras.id](mailto:privasi@klaras.id) dengan menyebut nama perpustakaan dan alamat SLiMS Anda.
+
+## Masukan
+
+Tombol **Masukan** di bagian atas setiap halaman Klaras Inven mengirim masalah, saran, pertanyaan, atau apresiasi ke tim Klaras. Semua petugas yang dapat membuka plugin boleh mengirimnya, termasuk yang hanya punya hak baca. Fitur ini memerlukan migrasi 20.
+
+Yang ikut terkirim bersama pesan:
+
+- Jenis masukan dan halaman tempat masukan ditulis.
+- Nama perpustakaan dan alamat SLiMS.
+- Versi Klaras Inven, SLiMS, dan PHP.
+- Nama dan email petugas, **hanya** bila petugas mencentang **Boleh dihubungi**.
+
+Masukan disimpan di SLiMS lebih dulu. Bila Klaras tidak dapat dihubungi, masukan menunggu dan dikirim ulang otomatis. Tab **Riwayat** menampilkan masukan dari perpustakaan ini beserta statusnya (Diterima, Ditinjau, Direncanakan, Selesai, atau Tidak dilanjutkan) dan balasan tim Klaras. Bila masukan ditindaklanjuti sebagai issue di GitHub, tautannya ikut tampil, dan balasan otomatis muncul saat issue itu selesai.
+
+Masukan bukan saluran untuk masalah mendesak; untuk itu, hubungi tim dukungan Klaras secara langsung.
 
 ## Pemecahan masalah
 
@@ -225,6 +240,7 @@ php tests/inventory_catalog_test.php
 php tests/area_photos_test.php
 php tests/area_catalog_test.php
 php tests/watch_sheets_test.php
+php tests/feedback_test.php
 php tests/support_documents_test.php
 php tests/software_list_test.php
 php tests/software_files_test.php

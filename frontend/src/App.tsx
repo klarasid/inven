@@ -21,6 +21,7 @@ import { InventoryList, InventoryForm } from "./inventory";
 import { Reports } from "./reports";
 import { HistoryImportPage } from "./history-import";
 import { UpdateNotice } from "./updates";
+import { FeedbackButton } from "./feedback";
 import { ReportPage } from "./report";
 import { InvenSyncPage } from "./settings";
 import { SarprasPage } from "./sarpras";
@@ -277,6 +278,7 @@ export function App({ config, host }: { config: Config; host: HTMLElement }) {
               </span>
             )}
             <UpdateNotice />
+            <FeedbackButton />
             {config.write ? (
               <span className="text-xs text-muted-foreground">{me}</span>
             ) : (

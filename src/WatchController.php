@@ -28,7 +28,9 @@ function watch_log(string $action,string $message): void {
     catch (Throwable $e) { error_log('Supervision audit: '.$e->getMessage()); }
 }
 $isPost=$_SERVER['REQUEST_METHOD']==='POST';
-if (!$canRead || ($isPost && !$canWrite)) {
+// Feedback to Klaras is open to every staff member who can open the plugin, readers too; it changes no inventory data.
+$isFeedback=$isPost && in_array((string)($_POST['watch_action']??''),['feedback_submit','feedback_seen'],true);
+if (!$canRead || ($isPost && !$canWrite && !$isFeedback)) {
     http_response_code(403); watch_log('Denied','Akses pengawasan ditolak.');
     if ($isPost) { header('Content-Type: application/json; charset=utf-8'); header('X-Content-Type-Options: nosniff'); echo json_encode(['ok'=>false,'message'=>'Anda tidak memiliki hak akses pengawasan.']); }
     else echo '<div class="alert alert-danger">Anda tidak memiliki hak baca pengawasan.</div>';
@@ -51,6 +53,17 @@ try {
         }
         if ($cached=\SLiMS\Plugins\Inventory\WorkspaceRequests::cached('watch')) { echo json_encode($cached); return; }
         $action=(string)($_POST['watch_action']??'');
+        if ($isFeedback) {
+            require_once __DIR__ . '/Feedback.php';
+            if ($action==='feedback_seen') {
+                \SLiMS\Plugins\Inventory\Feedback::markSeen($db,date('Y-m-d H:i:s'));
+                echo json_encode(['ok'=>true]); return;
+            }
+            $piece=\SLiMS\Plugins\Inventory\Feedback::submit($db,$_POST,(int)($_SESSION['uid']??0),date('Y-m-d H:i:s'));
+            watch_log('Update','Masukan #'.$piece['id'].' untuk Klaras disimpan.');
+            $sent=$piece['status']['key']!=='pending';
+            echo json_encode(\SLiMS\Plugins\Inventory\WorkspaceRequests::remember('watch',['ok'=>true,'message'=>$sent?'Masukan terkirim. Terima kasih.':'Masukan tersimpan dan akan dikirim saat Klaras dapat dihubungi.','data'=>$piece])); return;
+        }
         if (in_array($action,['history_preview','history_commit'],true)) {
             $import=new \SLiMS\Plugins\Inventory\HistoryImport($db,$watch);
             if ($action==='history_preview') {
@@ -177,7 +190,7 @@ try {
     if ($db->inTransaction()) $db->rollBack();
     $expected=$e instanceof RuntimeException && !($e instanceof PDOException);
     $schema=$e instanceof PDOException && in_array((int)($e->errorInfo[1]??0),[1146,1054],true);
-    $message=$schema?'Struktur pengawasan belum tersedia. Jalankan migrasi plugin hingga versi 7 melalui System → Plugins.':($expected?$e->getMessage():'Operasi pengawasan gagal. Periksa log PHP.');
+    $message=$schema&&str_contains($e->getMessage(),'inventory_feedback')?'Masukan belum tersedia. Jalankan migrasi plugin hingga versi 20 melalui System → Plugins.':($schema?'Struktur pengawasan belum tersedia. Jalankan migrasi plugin hingga versi 7 melalui System → Plugins.':($expected?$e->getMessage():'Operasi pengawasan gagal. Periksa log PHP.'));
     if (!$expected) { error_log('Supervision error: '.$e->getMessage()); \SLiMS\Plugins\Inventory\Telemetry::error($tab==='pdf'?'pdf':($e instanceof PDOException?'db':'workspace'),$e); }
     if ($isPost || $tab==='scope' || ($_GET['workspace']??'')==='api') { header('Content-Type: application/json; charset=utf-8'); header('X-Content-Type-Options: nosniff'); if (http_response_code()<400) http_response_code(str_contains($message,'sesi lain')?409:422); echo json_encode(['ok'=>false,'message'=>$message,'errors'=>\SLiMS\Plugins\Inventory\WorkspaceRequests::errors($message)]); }
     else { if ($tab==='photo') http_response_code(404); header('Content-Type: text/html; charset=utf-8'); echo '<div class="alert alert-danger">'.htmlspecialchars($message,ENT_QUOTES,'UTF-8').'</div>'; }

@@ -31,7 +31,7 @@ final class Telemetry
     public const COUNTERS = 'inventory_usage_counters';
     public const ERRORS = 'inventory_telemetry_errors';
     public const DEFAULT_PANEL = 'https://panel.klaras.id';
-    public const FEATURES = ['kir_pdf', 'labels_pdf', 'report_pdf', 'inspection_pdf', 'history_import', 'sarpras_pdf', 'institution_merge', 'agent_changes'];
+    public const FEATURES = ['kir_pdf', 'labels_pdf', 'report_pdf', 'inspection_pdf', 'history_import', 'sarpras_pdf', 'institution_merge', 'agent_changes', 'feedback'];
     public const ERROR_CATEGORIES = ['pdf', 'db', 'photo', 'workspace', 'other'];
     private const INTERVAL = 86400;
     private const RETRY = 3600;
@@ -315,8 +315,8 @@ final class Telemetry
         ];
     }
 
-    /** This SLiMS's public address, as the browser reached it. */
-    private static function siteUrl(): ?string
+    /** This SLiMS's public address, as the browser reached it. Feedback names it too. */
+    public static function siteUrl(): ?string
     {
         $host = (string) ($_SERVER['HTTP_HOST'] ?? '');
         if ($host === '' || !preg_match('/\A[A-Za-z0-9.-]+(?::\d+)?\z/', $host)) return null;
@@ -342,11 +342,16 @@ final class Telemetry
         if (self::$deferred !== null) return;
         try {
             $db = \SLiMS\DB::getInstance();
-            if (!self::due(self::state($db))) return;
+            // Feedback has its own pace and is sent even where the usage report is off: the librarian asked to send it.
+            require_once __DIR__ . '/Feedback.php';
+            $report = self::due(self::state($db));
+            $feedback = Feedback::due($db);
+            if (!$report && !$feedback) return;
             self::$deferred = $db;
-            register_shutdown_function(function () {
+            register_shutdown_function(function () use ($report, $feedback) {
                 if (function_exists('fastcgi_finish_request')) @fastcgi_finish_request();
-                self::sendIfDue(self::$deferred);
+                if ($report) self::sendIfDue(self::$deferred);
+                if ($feedback) Feedback::background(self::$deferred);
             });
         } catch (\Throwable $error) {
         }

@@ -47,6 +47,15 @@ $checks = [
         && str_contains($controller, "havePrivilege('stock_take', 'r')")
         && str_contains($controller, "havePrivilege('stock_take', 'w')")
         && str_contains($controller, "hash_equals(\$_SESSION['inventory_sarpras_csrf'], \$token)"),
+    'masukan boleh dikirim petugas hanya-baca, tetap dengan CSRF' => (static function () use ($root): bool {
+        $watch = (string) file_get_contents($root . '/src/WatchController.php');
+        $carve = strpos($watch, "in_array((string)(\$_POST['watch_action']??''),['feedback_submit','feedback_seen'],true)");
+        $gate = strpos($watch, "if (!\$canRead || (\$isPost && !\$canWrite && !\$isFeedback))");
+        $csrf = strpos($watch, "hash_equals(\$csrf,\$_POST['csrf_token'])");
+        $handled = strpos($watch, 'if ($isFeedback) {');
+        // Only those two actions skip the write check; the CSRF check still runs before they are handled.
+        return $carve !== false && $gate !== false && $csrf !== false && $handled !== false && $carve < $gate && $csrf < $handled;
+    })(),
     'Pengaturan Cetak memakai controller pengawasan' => str_contains($entry('print-settings.php'), "\$inventoryWorkspaceView='print-settings'")
         && str_contains($entry('print-settings.php'), "/src/WatchController.php"),
 ];

@@ -160,6 +160,17 @@ final class Workspace
             require_once __DIR__.'/PdfDocuments.php';
             return ['settings'=>PdfDocuments::load($w->pdo()),'types'=>PdfDocuments::TYPES,'placeholders'=>PdfDocuments::PLACEHOLDERS];
         }
+        if($resource==='feedback') {
+            // The Masukan button: this SLiMS's feedback and Klaras's replies. Before migration 20 there is none.
+            require_once __DIR__.'/Feedback.php';
+            try {
+                if(($g['refresh']??'')==='1')Feedback::refresh($w->pdo(),true);
+                return ['available'=>true,'feedback'=>Feedback::list($w->pdo()),'unread'=>Feedback::unread($w->pdo()),'kinds'=>Feedback::KINDS,'contact'=>Feedback::contact($w->pdo(),$uid)];
+            } catch(\PDOException $e) {
+                if((int)($e->errorInfo[1]??0)!==1146)throw $e;
+                return ['available'=>false,'feedback'=>[],'unread'=>0,'kinds'=>Feedback::KINDS,'contact'=>['name'=>'','email'=>'']];
+            }
+        }
         if($resource==='update') {
             require_once __DIR__.'/UpdateCheck.php';
             return UpdateCheck::status($w->pdo(),($g['refresh']??'')==='1');
