@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Maximize, Minimize, Package, RefreshCw } from "lucide-react";
+import { Maximize, Minimize, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "./components/ui/button";
 import {
@@ -22,6 +22,7 @@ import { Reports } from "./reports";
 import { HistoryImportPage } from "./history-import";
 import { UpdateNotice } from "./updates";
 import { FeedbackButton } from "./feedback";
+import { InvenLogo } from "./logo";
 import { ReportPage } from "./report";
 import { InvenSyncPage } from "./settings";
 import { SarprasPage } from "./sarpras";
@@ -265,9 +266,7 @@ export function App({ config, host }: { config: Config; host: HTMLElement }) {
       <div className="min-h-[70vh] bg-background font-sans text-foreground">
         <div className="flex items-center justify-between gap-2 border-b px-4 py-2.5 md:px-8">
           <span className="flex items-center gap-2 text-sm font-medium">
-            <span className="flex size-6 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <Package className="size-3.5" />
-            </span>
+            <InvenLogo className="size-6 shrink-0" />
             Klaras Inven
           </span>
           <div className="flex items-center gap-2">
