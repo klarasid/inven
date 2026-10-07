@@ -42,10 +42,9 @@ final class AgentCodes
     /** The consent page, on the Aplikasi InvenSync menu of this SLiMS. */
     public static function authorizeUrl(): string
     {
-        $host = \SLiMS\Plugins\Inventory\PublicLink::host();
-        $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+        $origin = \SLiMS\Plugins\Inventory\PublicLink::scheme() . '://' . \SLiMS\Plugins\Inventory\PublicLink::host();
 
-        return ($https ? 'https' : 'http') . '://' . $host . \SLiMS\Plugins\Inventory\Workspace::endpoint('app.php', ['agent' => 'authorize']);
+        return $origin . \SLiMS\Plugins\Inventory\Workspace::endpoint('app.php', ['agent' => 'authorize']);
     }
 
     public static function enabled(PDO $db): bool

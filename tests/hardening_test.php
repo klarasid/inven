@@ -59,6 +59,24 @@ foreach (['evil.example/path', 'perpus.example.id@evil.example', 'a b', 'perpus.
     rejects(static fn () => $host($invalid), 'alamat ' . json_encode($invalid) . ' ditolak untuk label');
 }
 
+// The scheme of addresses the plugin hands out, behind a proxy that ends TLS ----------------------
+foreach ([
+    'HTTPS dari server web' => ['HTTPS' => 'on'],
+    'X-Forwarded-Proto' => ['HTTP_X_FORWARDED_PROTO' => 'HTTPS'],
+    'rantai proxy, skema pengunjung lebih dulu' => ['HTTP_X_FORWARDED_PROTO' => 'https, http'],
+    'CF-Visitor saat proxy di tengah menimpa X-Forwarded-Proto' => ['HTTP_X_FORWARDED_PROTO' => 'http', 'HTTP_CF_VISITOR' => '{"scheme":"https"}'],
+    'X-Forwarded-Ssl' => ['HTTP_X_FORWARDED_SSL' => 'on'],
+] as $label => $server) {
+    check(PublicLink::scheme($server) === 'https', 'https dikenali dari ' . $label);
+}
+foreach ([
+    'tanpa petunjuk apa pun' => [],
+    'HTTPS off' => ['HTTPS' => 'off'],
+    'pengunjung memakai http di depan proxy' => ['HTTP_X_FORWARDED_PROTO' => 'http, https', 'HTTP_CF_VISITOR' => '{"scheme":"http"}'],
+] as $label => $server) {
+    check(PublicLink::scheme($server) === 'http', 'http tetap http: ' . $label);
+}
+
 // Links in the update notice --------------------------------------------------------------------
 $github = new ReflectionMethod(UpdateCheck::class, 'github');
 $github->setAccessible(true);

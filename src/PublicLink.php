@@ -60,6 +60,30 @@ final class PublicLink
         return $host;
     }
 
+    /**
+     * The scheme visitors reach this SLiMS with. Behind Cloudflare or a hosting provider's proxy,
+     * PHP is served plain http although the address is https, and what says so differs by proxy:
+     * a chain of them lists the visitor's scheme first in X-Forwarded-Proto, and one in between
+     * may overwrite that header while Cloudflare's own CF-Visitor still passes through.
+     *
+     * @param array<string, mixed>|null $server $_SERVER, unless a test passes its own
+     */
+    public static function scheme(?array $server = null): string
+    {
+        $server ??= $_SERVER;
+        $https = strtolower((string) ($server['HTTPS'] ?? ''));
+        $forwarded = strtolower(trim(explode(',', (string) ($server['HTTP_X_FORWARDED_PROTO'] ?? ''))[0]));
+
+        $secure = ($https !== '' && $https !== 'off' && $https !== '0')
+            || strtolower((string) ($server['REQUEST_SCHEME'] ?? '')) === 'https'
+            || (string) ($server['SERVER_PORT'] ?? '') === '443'
+            || $forwarded === 'https'
+            || strtolower((string) ($server['HTTP_X_FORWARDED_SSL'] ?? '')) === 'on'
+            || str_contains(strtolower((string) ($server['HTTP_CF_VISITOR'] ?? '')), '"https"');
+
+        return $secure ? 'https' : 'http';
+    }
+
     /** Query string for the OPAC page, appended to the site's index.php URL. */
     public static function query(\PDO $db, int $itemId, array $extra = []): string
     {
