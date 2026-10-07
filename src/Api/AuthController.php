@@ -103,6 +103,19 @@ final class AuthController
         return JsonResponse::ok([...$context->staff()->toArray(), 'library_name' => Context::libraryName()]);
     }
 
+    /** The signed-in librarian's photo, for the app's avatar. */
+    public function photo(Context $context): BytesResponse
+    {
+        $path = $context->staff()->photoPath();
+        $bytes = $path === null ? false : file_get_contents($path);
+        $type = $bytes === false ? null : (getimagesizefromstring($bytes)['mime'] ?? null);
+        if (!in_array($type, ['image/jpeg', 'image/png', 'image/gif', 'image/webp'], true)) {
+            throw Failure::notFound('Foto tidak ditemukan.');
+        }
+
+        return new BytesResponse($bytes, $type, basename($path));
+    }
+
     /** People a finding can be given to. */
     public function staffList(Context $context): JsonResponse
     {

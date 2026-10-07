@@ -74,7 +74,7 @@ function login(string $username, string $password, array $extra = []): array {
 $photos = sys_get_temp_dir() . '/' . $prefix . 'photos';
 try {
     // SLiMS core tables, as far as the API reads them.
-    $db->exec("CREATE TABLE user (user_id INT AUTO_INCREMENT PRIMARY KEY, username VARCHAR(50) UNIQUE, realname VARCHAR(100), passwd VARCHAR(64), is_active ENUM('0','1') DEFAULT '1', `2fa` TEXT NULL, groups VARCHAR(200), last_update DATE NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $db->exec("CREATE TABLE user (user_id INT AUTO_INCREMENT PRIMARY KEY, username VARCHAR(50) UNIQUE, realname VARCHAR(100), passwd VARCHAR(64), is_active ENUM('0','1') DEFAULT '1', `2fa` TEXT NULL, groups VARCHAR(200), user_image VARCHAR(250) NULL, last_update DATE NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     $db->exec('CREATE TABLE mst_module (module_id INT PRIMARY KEY, module_path VARCHAR(200)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     $db->exec('CREATE TABLE group_access (group_id INT, module_id INT, menus LONGTEXT NULL, r INT(1), w INT(1)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     $db->exec('CREATE TABLE mst_location (location_id VARCHAR(3) PRIMARY KEY, location_name VARCHAR(100)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
@@ -144,6 +144,20 @@ try {
     check(!str_contains((string) $db->query('SELECT CONCAT(access_hash, refresh_hash) FROM inventory_api_sessions ORDER BY id DESC LIMIT 1')->fetchColumn(), explode('.', $token)[1]), 'only hashes of the tokens are stored');
     check(call('GET', 'AuthController@me', headers: bearer($token))['body']['data']['name'] === 'Rina Wulandari', 'the access token reaches the API');
     check(call('GET', 'AuthController@me')['code'] === 'unauthenticated', 'no token, no data');
+    // The photo from SLiMS's user form; Dimas's record names a file that is gone.
+    @mkdir(SB . 'images/persons', 0777, true);
+    $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==');
+    file_put_contents(SB . 'images/persons/rina.png', $png);
+    $setPhoto = $db->prepare('UPDATE user SET user_image = ? WHERE username = ?');
+    $setPhoto->execute(['rina.png', 'rina']);
+    $setPhoto->execute(['hilang.jpg', 'dimas']);
+    check(call('GET', 'AuthController@me', headers: bearer($token))['body']['data']['has_photo'] === true, 'a librarian with a photo in SLiMS says so');
+    $photo = call('GET', 'AuthController@photo', headers: bearer($token))['body'];
+    check($photo instanceof \SLiMS\Plugins\Inventory\Api\BytesResponse && $photo->bytes === $png && $photo->mimeType === 'image/png', 'and the photo comes with the token');
+    check(call('GET', 'AuthController@photo')['code'] === 'unauthenticated', 'but not without one');
+    $dimasToken = login('dimas', 'rahasia')['body']['data']['access_token'];
+    check(call('GET', 'AuthController@me', headers: bearer($dimasToken))['body']['data']['has_photo'] === false, 'a photo whose file is gone is no photo');
+    check(call('GET', 'AuthController@photo', headers: bearer($dimasToken))['status'] === 404, 'and asking for it finds nothing');
     $notRemembered = login('dimas', 'rahasia', ['remember' => false]);
     check($notRemembered['body']['data']['refresh_token'] === null, 'without "Ingat saya" there is no refresh token');
 

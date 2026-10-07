@@ -19,6 +19,7 @@ final class Staff
         public readonly bool $canRead,
         public readonly bool $canWrite,
         public readonly int $sessionId = 0,
+        public readonly string $photo = '',
     ) {}
 
     /** @param array<string, mixed> $user A row of SLiMS's user table. */
@@ -26,7 +27,7 @@ final class Staff
     {
         [$read, $write] = self::privileges($db, (string) ($user['groups'] ?? ''));
 
-        return new self((int) $user['user_id'], (string) $user['username'], (string) ($user['realname'] ?: $user['username']), $read, $write, $sessionId);
+        return new self((int) $user['user_id'], (string) $user['username'], (string) ($user['realname'] ?: $user['username']), $read, $write, $sessionId, (string) ($user['user_image'] ?? ''));
     }
 
     /**
@@ -48,6 +49,17 @@ final class Staff
         return [(bool) ($row['r'] ?? false), (bool) ($row['w'] ?? false)];
     }
 
+    /** The photo set on the librarian's SLiMS account, when its file is still there. */
+    public function photoPath(): ?string
+    {
+        if ($this->photo === '') {
+            return null;
+        }
+        $path = SB . 'images/persons/' . basename($this->photo);
+
+        return is_file($path) ? $path : null;
+    }
+
     /** "Rina Wulandari" → "RW", for the avatar. */
     public function initials(): string
     {
@@ -65,6 +77,7 @@ final class Staff
             'username' => $this->username,
             'name' => $this->name,
             'initials' => $this->initials(),
+            'has_photo' => $this->photoPath() !== null,
             'can_write' => $this->canWrite,
         ];
     }

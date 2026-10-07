@@ -28,6 +28,7 @@ final class Routes
         $map('POST', '/auth/token', [AuthController::class, 'issue'], ['public' => true]);
         $map('DELETE', '/auth/token', [AuthController::class, 'revoke'], ['write' => false]);
         $map('GET', '/me', [AuthController::class, 'me']);
+        $map('GET', '/me/photo', [AuthController::class, 'photo']);
         $map('GET', '/staff', [AuthController::class, 'staffList']);
         $map('GET', '/home', [HomeController::class, 'show']);
 
