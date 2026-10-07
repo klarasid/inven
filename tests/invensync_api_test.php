@@ -495,6 +495,13 @@ try {
     check(call('GET', 'AuthController@me', headers: bearer($dimas))['code'] === 'unauthenticated', 'a session revoked by the administrator stops at once');
     Guard::setEnabled($db, false);
     check(call('GET', 'AuthController@me', headers: bearer($token))['code'] === 'invensync_disabled', 'switching the app off stops every session');
+    // A path the API does not know, sent the way SLiMS's router sends it: parameters by name.
+    $routes = new class { public array $mapped = []; public function map(string $method, string $path, callable $target): void { $this->mapped[$path] = $target; } };
+    Routes::register($routes);
+    ob_start();
+    ($routes->mapped[Routes::PREFIX . '/[**:rest]'])(...['rest' => 'tidak-ada']);
+    $unknown = json_decode((string) ob_get_clean(), true);
+    check(($unknown['error']['code'] ?? null) === 'not_found', 'an unknown path is a JSON 404, not SLiMS\'s error page');
     echo "ok   done\n";
 } finally {
     $db->exec('SET FOREIGN_KEY_CHECKS=0');

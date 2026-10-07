@@ -91,8 +91,9 @@ final class Routes
         $map('GET', '/reports/findings', [ReportController::class, 'findings']);
         $map('GET', '/inspections/[i:id]/document', [ReportController::class, 'inspection']);
 
-        // Anything else under the prefix is a JSON 404, not SLiMS's HTML page.
-        $router->map('GET|POST|PUT|PATCH|DELETE', self::PREFIX . '/[**:rest]', static fn () => Kernel::handle(
+        // Anything else under the prefix is a JSON 404, not SLiMS's HTML page. The router passes
+        // the unmatched path by name, as rest:, so the handler must take it.
+        $router->map('GET|POST|PUT|PATCH|DELETE', self::PREFIX . '/[**:rest]', static fn (...$params) => Kernel::handle(
             static fn () => throw new ApiException('not_found', 'Tidak ditemukan.', 404)
         ));
     }
