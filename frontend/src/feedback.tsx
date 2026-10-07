@@ -1,6 +1,6 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ExternalLink, MessageSquareText } from "lucide-react";
+import { ExternalLink, ImagePlus, MessageSquareText, Paperclip, X } from "lucide-react";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
 import { Checkbox } from "./components/ui/checkbox";
@@ -22,6 +22,8 @@ type Piece = {
   contact: boolean;
   status: { key: string; label: string };
   issue_url: string | null;
+  /** Names of the screenshots sent with it, and whether Klaras has them. */
+  screenshots?: { name: string; state: string }[];
   /** Sent, and the thread still takes answers (migration 22). */
   can_reply: boolean;
   created_at: string;
@@ -44,6 +46,8 @@ type FeedbackData = {
   kinds: Record<string, string>;
   /** What "Boleh dihubungi" would send. */
   contact: { name: string; email: string };
+  /** How many screenshots a piece may carry; 0 until migration 23 has run. */
+  screenshots: number;
 };
 
 const statusTone: Record<string, "outline" | "info" | "success" | "warning" | "secondary"> = {
@@ -57,6 +61,11 @@ const statusTone: Record<string, "outline" | "info" | "success" | "warning" | "s
 };
 const MIN = 10;
 const MAX = 5000;
+/** One part of a problem report, as Klaras Panel takes it. */
+const PART_MAX = 1500;
+const SCREENSHOT_MAX_BYTES = 5 * 1024 * 1024;
+const SCREENSHOT_TYPES = ["image/png", "image/jpeg", "image/webp"];
+const SCREENSHOT_STATES: Record<string, string> = { pending: "menunggu terkirim", sent: "terkirim", refused: "tidak terkirim" };
 
 /**
  * Feedback to Klaras, from every page: a button in the header that opens a panel to write it and
@@ -152,23 +161,33 @@ function FeedbackForm({ data, onSent }: { data: FeedbackData; onSent: (piece: Pi
   const contactId = useId();
   const [kind, setKind] = useState("bug");
   const [message, setMessage] = useState("");
+  // A problem in three parts: what was done, what happened, what should have happened.
+  const [parts, setParts] = useState({ did: "", happened: "", expected: "" });
+  const [screenshots, setScreenshots] = useState<File[]>([]);
   const [contact, setContact] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const problem = kind === "bug";
   const length = message.trim().length;
-  const tooShort = length > 0 && length < MIN;
+  const tooShort = !problem && length > 0 && length < MIN;
+  const ready = problem ? parts.did.trim().length >= 3 && parts.happened.trim().length >= MIN : length >= MIN;
 
   async function send() {
-    if (length < MIN) {
-      setError(`Tulis masukan Anda, paling sedikit ${MIN} karakter.`);
+    if (!ready) {
+      setError(problem ? "Ceritakan apa yang Anda lakukan dan apa yang terjadi." : `Tulis masukan Anda, paling sedikit ${MIN} karakter.`);
       return;
     }
     setBusy(true);
     setError("");
     try {
-      const reply = (await w.mutate({ watch_action: "feedback_submit", kind, message, page: w.route.view, contact: contact ? "1" : "" })) as { message?: string; data?: Piece };
+      const files = new FormData();
+      screenshots.forEach((file) => files.append("screenshots[]", file, file.name));
+      const text = problem ? parts : { message };
+      const reply = (await w.mutate({ watch_action: "feedback_submit", kind, ...text, page: w.route.view, contact: contact ? "1" : "" }, screenshots.length ? files : undefined)) as { message?: string; data?: Piece };
       toast.success(reply.message || "Masukan terkirim. Terima kasih.");
       setMessage("");
+      setParts({ did: "", happened: "", expected: "" });
+      setScreenshots([]);
       if (reply.data) onSent(reply.data);
     } catch (e) {
       setError((e as Error).message);
@@ -177,8 +196,24 @@ function FeedbackForm({ data, onSent }: { data: FeedbackData; onSent: (piece: Pi
     }
   }
 
+  const part = (name: keyof typeof parts) => (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setParts({ ...parts, [name]: e.target.value });
+    setError("");
+  };
+
   return (
-    <fieldset disabled={busy} className="min-w-0">
+    <fieldset
+      disabled={busy}
+      className="min-w-0"
+      onPaste={(e) => {
+        // A screenshot pasted anywhere in the form is attached.
+        const pasted = Array.from(e.clipboardData.files).filter((file) => SCREENSHOT_TYPES.includes(file.type));
+        if (data.screenshots > 0 && pasted.length > 0) {
+          e.preventDefault();
+          setScreenshots((current) => [...current, ...pasted].slice(0, data.screenshots));
+        }
+      }}
+    >
       <FieldGroup>
         <ErrorBox message={error} />
         <Field>
@@ -191,21 +226,31 @@ function FeedbackForm({ data, onSent }: { data: FeedbackData; onSent: (piece: Pi
             ))}
           </ToggleGroup>
         </Field>
-        <Field data-invalid={tooShort}>
-          <FieldLabel htmlFor={messageId}>Masukan Anda</FieldLabel>
-          <Textarea
-            id={messageId}
-            rows={6}
-            maxLength={MAX}
-            value={message}
-            placeholder={kind === "bug" ? "Apa yang Anda lakukan, apa yang terjadi, dan apa yang seharusnya terjadi?" : "Tulis masukan Anda"}
-            onChange={(e) => {
-              setMessage(e.target.value);
-              setError("");
-            }}
-          />
-          {tooShort ? <FieldError>Paling sedikit {MIN} karakter.</FieldError> : <FieldDescription>Jangan sertakan kata sandi atau data pribadi anggota.</FieldDescription>}
-        </Field>
+        {problem ? (
+          <>
+            <PartField label="Apa yang Anda lakukan?" placeholder="Contoh: Saya membuka Ruang Baca, lalu menekan Cetak KIR." value={parts.did} onChange={part("did")} />
+            <PartField label="Apa yang terjadi?" placeholder="Contoh: Halaman kosong dan KIR tidak terunduh." value={parts.happened} onChange={part("happened")} />
+            <PartField label="Apa yang seharusnya terjadi? (opsional)" placeholder="Contoh: KIR terunduh sebagai PDF." value={parts.expected} onChange={part("expected")} />
+          </>
+        ) : (
+          <Field data-invalid={tooShort}>
+            <FieldLabel htmlFor={messageId}>Masukan Anda</FieldLabel>
+            <Textarea
+              id={messageId}
+              rows={6}
+              maxLength={MAX}
+              value={message}
+              placeholder="Tulis masukan Anda"
+              onChange={(e) => {
+                setMessage(e.target.value);
+                setError("");
+              }}
+            />
+            {tooShort && <FieldError>Paling sedikit {MIN} karakter.</FieldError>}
+          </Field>
+        )}
+        {data.screenshots > 0 && <ScreenshotPicker files={screenshots} max={data.screenshots} onChange={setScreenshots} />}
+        <p className="text-xs text-muted-foreground">Jangan sertakan kata sandi atau data pribadi anggota.</p>
         <Field orientation="horizontal" className="items-start rounded-xl border p-3">
           <Checkbox id={contactId} checked={contact} onCheckedChange={(checked) => setContact(checked === true)} />
           <FieldContent>
@@ -221,12 +266,82 @@ function FeedbackForm({ data, onSent }: { data: FeedbackData; onSent: (piece: Pi
           Ikut terkirim: nama dan alamat perpustakaan, halaman yang sedang dibuka, serta versi Klaras Inven, SLiMS, dan PHP. Untuk masalah mendesak, hubungi tim dukungan Klaras secara langsung.
         </p>
         <div>
-          <Button onClick={send} disabled={busy || length < MIN}>
+          <Button onClick={send} disabled={busy || !ready}>
             {busy ? "Mengirim…" : "Kirim masukan"}
           </Button>
         </div>
       </FieldGroup>
     </fieldset>
+  );
+}
+
+/** One part of a problem report. */
+function PartField({ label, placeholder, value, onChange }: { label: string; placeholder: string; value: string; onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void }) {
+  const id = useId();
+  return (
+    <Field>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <Textarea id={id} rows={2} maxLength={PART_MAX} value={value} placeholder={placeholder} onChange={onChange} />
+    </Field>
+  );
+}
+
+/** A few screenshots, chosen or pasted, previewed before they are sent and each removable. */
+function ScreenshotPicker({ files, max, onChange }: { files: File[]; max: number; onChange: (files: File[]) => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  const [refusal, setRefusal] = useState("");
+  const previews = useMemo(() => files.map((file) => URL.createObjectURL(file)), [files]);
+  useEffect(() => () => previews.forEach((url) => URL.revokeObjectURL(url)), [previews]);
+
+  function add(chosen: File[]) {
+    const fitting = chosen.filter((file) => SCREENSHOT_TYPES.includes(file.type) && file.size <= SCREENSHOT_MAX_BYTES);
+    setRefusal(
+      fitting.length < chosen.length ? "Lampirkan gambar PNG, JPG, atau WebP, paling besar 5 MB." : files.length + fitting.length > max ? `Lampirkan paling banyak ${max} tangkapan layar.` : "",
+    );
+    onChange([...files, ...fitting].slice(0, max));
+  }
+
+  return (
+    <Field>
+      <FieldLabel>Tangkapan layar (opsional)</FieldLabel>
+      {files.length > 0 && (
+        <ul className="grid grid-cols-3 gap-2">
+          {files.map((file, n) => (
+            <li key={previews[n]} className="relative overflow-hidden rounded-lg border">
+              <img src={previews[n]} alt={file.name} className="aspect-video w-full object-cover" />
+              <Button type="button" size="icon" variant="secondary" className="absolute top-1 right-1 size-6" aria-label={`Hapus ${file.name}`} onClick={() => onChange(files.filter((_, other) => other !== n))}>
+                <X className="size-3.5" />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <input
+        ref={input}
+        type="file"
+        accept={SCREENSHOT_TYPES.join(",")}
+        multiple
+        hidden
+        aria-label="Pilih tangkapan layar"
+        onChange={(e) => {
+          add(Array.from(e.target.files ?? []));
+          e.target.value = "";
+        }}
+      />
+      {files.length < max && (
+        <div>
+          <Button type="button" size="sm" variant="outline" onClick={() => input.current?.click()}>
+            <ImagePlus data-icon="inline-start" />
+            Tambah tangkapan layar
+          </Button>
+        </div>
+      )}
+      {refusal ? (
+        <FieldError>{refusal}</FieldError>
+      ) : (
+        <FieldDescription>Paling banyak {max} gambar, masing-masing 5 MB. Anda juga bisa menempelkannya (Ctrl+V). Tutupi data anggota yang tidak perlu terlihat.</FieldDescription>
+      )}
+    </Field>
   );
 }
 
@@ -243,7 +358,17 @@ function FeedbackHistory({ pieces, onAnswered }: { pieces: Piece[]; onAnswered: 
             <Badge variant={statusTone[piece.status.key] ?? "outline"}>{piece.status.label}</Badge>
             <span>{dateLabel(piece.created_at)}</span>
           </div>
-          <p className="line-clamp-4 text-sm whitespace-pre-wrap">{piece.message}</p>
+          <p className="line-clamp-6 text-sm whitespace-pre-wrap">{piece.message}</p>
+          {piece.screenshots && piece.screenshots.length > 0 && (
+            <ul className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+              {piece.screenshots.map((screenshot, n) => (
+                <li key={n} className="inline-flex items-center gap-1">
+                  <Paperclip className="size-3" />
+                  {screenshot.name} · {SCREENSHOT_STATES[screenshot.state] ?? screenshot.state}
+                </li>
+              ))}
+            </ul>
+          )}
           {piece.issue_url && (
             <a href={piece.issue_url} target="_blank" rel="noopener noreferrer" className="notAJAX inline-flex w-fit items-center gap-1 text-xs font-medium text-primary underline-offset-4 hover:underline">
               Lihat tindak lanjutnya di GitHub

@@ -7,6 +7,7 @@ use RuntimeException;
 
 require_once __DIR__ . '/Telemetry.php';
 require_once __DIR__ . '/UpdateCheck.php';
+require_once __DIR__ . '/PhotoStorage.php';
 
 /**
  * Feedback librarians send to Klaras from the Masukan button, and what Klaras answers. Each staff
@@ -24,6 +25,11 @@ require_once __DIR__ . '/UpdateCheck.php';
  * What is sent: the message, its kind, the page it was written on, the library's name and address,
  * the versions of the plugin, SLiMS and PHP, and the librarian's name and email only when they tick
  * "Boleh dihubungi". Who wrote it is kept here either way, for the history.
+ *
+ * A problem is told in three parts (what the librarian did, what happened, what should have happened),
+ * kept as one message the way Klaras Panel does (App\Feedback\ProblemReport). Up to three screenshots
+ * may go with a piece (migration 23): kept in images/inventaris-barang/masukan/ until Klaras has
+ * them, each sent on its own after the feedback, then deleted here, since they may show member data.
  *
  * SLiMS opens its connection as utf8, which holds no emoji: they would be kept, and sent, as
  * "????". Everything here that reads or writes the feedback tables does so as utf8mb4 (unicode())
@@ -47,6 +53,15 @@ final class Feedback
     private const REFRESH_FORCED = 60;
     private const MAX_FLUSH = 5;
     private const MAX_STATUS = 50;
+    public const MAX_SCREENSHOTS = 3;
+    public const MAX_SCREENSHOT_BYTES = 5242880;
+    /** What a screenshot may be, by its contents, and the extension it is kept under. */
+    private const SCREENSHOT_TYPES = ['image/png' => 'png', 'image/jpeg' => 'jpg', 'image/webp' => 'webp'];
+    /** One part of a problem, at most, as Klaras Panel has it (ProblemReport::MAX_PART). */
+    private const PART_MAX = 1500;
+
+    /** Where screenshots wait to be sent. Tests point it at a folder of their own. */
+    public static $directory = null;
 
     /** Tests replace the HTTP call: fn(string $url, array $payload): ?array (the decoded answer, null when it failed) */
     public static $transport = null;
@@ -61,34 +76,177 @@ final class Feedback
      *
      * @return array<string,mixed> the piece as list() shows it
      */
-    public static function submit(PDO $db, array $input, int $uid, string $now): array
+    public static function submit(PDO $db, array $input, int $uid, string $now, array $screenshots = []): array
     {
-        return self::unicode($db, static function () use ($db, $input, $uid, $now): array {
-            return self::keep($db, $input, $uid, $now);
+        return self::unicode($db, static function () use ($db, $input, $uid, $now, $screenshots): array {
+            return self::keep($db, $input, $uid, $now, $screenshots);
         });
     }
 
-    /** @return array<string,mixed> */
-    private static function keep(PDO $db, array $input, int $uid, string $now): array
+    /**
+     * @param list<array{bytes:string,name:string}> $screenshots
+     * @return array<string,mixed>
+     */
+    private static function keep(PDO $db, array $input, int $uid, string $now, array $screenshots): array
     {
         $kind = is_scalar($input['kind'] ?? null) ? (string) $input['kind'] : '';
         if (!isset(self::KINDS[$kind])) throw new RuntimeException('Pilih jenis masukan.');
-        $message = trim(str_replace("\r\n", "\n", is_scalar($input['message'] ?? null) ? (string) $input['message'] : ''));
+        // A problem in its three parts; a page loaded before 2.13 may still send one message.
+        $message = $kind === 'bug' && array_key_exists('happened', $input) ? self::problem($input) : self::text($input['message'] ?? null);
         if (mb_strlen($message) < 10) throw new RuntimeException('Tulis masukan Anda, paling sedikit 10 karakter.');
         if (mb_strlen($message) > 5000) throw new RuntimeException('Masukan maksimal 5.000 karakter.');
+        $screenshots = self::screenshots($db, $screenshots);
         $page = is_scalar($input['page'] ?? null) ? mb_substr(preg_replace('/[^A-Za-z0-9_:\/-]/', '', (string) $input['page']), 0, 100) : '';
         $contact = in_array($input['contact'] ?? '', ['1', 1, true, 'true'], true);
 
         $db->prepare('INSERT INTO inventory_feedback (token, kind, message, page, user_id, contact, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
             ->execute([bin2hex(random_bytes(24)), $kind, $message, $page, $uid ?: null, $contact ? 1 : 0, 'pending', $now]);
         $id = (int) $db->lastInsertId();
+        foreach ($screenshots as $screenshot) self::keepScreenshot($db, $id, $screenshot, $now);
         Telemetry::count('feedback', $db);
-        self::send($db, self::row($db, $id), $now);
+        if (self::send($db, self::row($db, $id), $now) && $screenshots) self::sendScreenshots($db, $id);
 
         foreach (self::list($db, $uid) as $piece) {
             if ($piece['id'] === $id) return $piece;
         }
         throw new RuntimeException('Masukan tidak tersimpan.');
+    }
+
+    /**
+     * A problem's three parts as one message, headed as Klaras Panel heads them. The last is optional.
+     */
+    private static function problem(array $input): string
+    {
+        $did = self::text($input['did'] ?? null);
+        $happened = self::text($input['happened'] ?? null);
+        $expected = self::text($input['expected'] ?? null);
+        if (mb_strlen($did) < 3) throw new RuntimeException('Ceritakan apa yang Anda lakukan sebelum masalah muncul.');
+        if (mb_strlen($happened) < 10) throw new RuntimeException('Ceritakan apa yang terjadi, paling sedikit 10 karakter.');
+        foreach ([$did, $happened, $expected] as $part) {
+            if (mb_strlen($part) > self::PART_MAX) throw new RuntimeException('Tiap isian maksimal 1.500 karakter.');
+        }
+        $parts = array_filter(['Yang saya lakukan' => $did, 'Yang terjadi' => $happened, 'Yang seharusnya terjadi' => $expected], static function (string $text): bool { return $text !== ''; });
+        return implode("\n\n", array_map(static function (string $heading, string $text): string { return $heading . ":\n" . $text; }, array_keys($parts), $parts));
+    }
+
+    private static function text($value): string
+    {
+        return trim(str_replace("\r\n", "\n", is_scalar($value) ? (string) $value : ''));
+    }
+
+    /**
+     * The screenshots of an upload, checked to be what they say: a few images, each small enough.
+     *
+     * @param list<array{bytes:string,name:string}> $screenshots
+     * @return list<array{bytes:string,name:string,mime:string,extension:string}>
+     */
+    private static function screenshots(PDO $db, array $screenshots): array
+    {
+        if (!$screenshots) return [];
+        if (!self::attachable($db)) throw new RuntimeException('Jalankan migrasi plugin hingga versi 23 di System → Plugins untuk melampirkan tangkapan layar.');
+        if (count($screenshots) > self::MAX_SCREENSHOTS) throw new RuntimeException('Lampirkan paling banyak ' . self::MAX_SCREENSHOTS . ' tangkapan layar.');
+        $checked = [];
+        foreach ($screenshots as $screenshot) {
+            $bytes = (string) ($screenshot['bytes'] ?? '');
+            if (strlen($bytes) > self::MAX_SCREENSHOT_BYTES) throw new RuntimeException('Tiap tangkapan layar paling besar 5 MB.');
+            $mime = (string) (new \finfo(FILEINFO_MIME_TYPE))->buffer($bytes);
+            if (!isset(self::SCREENSHOT_TYPES[$mime]) || @getimagesizefromstring($bytes) === false) throw new RuntimeException('Lampirkan gambar PNG, JPG, atau WebP.');
+            $name = mb_substr(trim(basename(str_replace('\\', '/', (string) ($screenshot['name'] ?? '')))), 0, 200);
+            $checked[] = ['bytes' => $bytes, 'name' => $name !== '' ? $name : 'tangkapan-layar.' . self::SCREENSHOT_TYPES[$mime], 'mime' => $mime, 'extension' => self::SCREENSHOT_TYPES[$mime]];
+        }
+        return $checked;
+    }
+
+    /**
+     * The screenshots of a form, as submit() takes them: each checked to be an upload of this request.
+     *
+     * @return list<array{bytes:string,name:string}>
+     */
+    public static function uploaded(array $files): array
+    {
+        $names = is_array($files['name'] ?? null) ? $files['name'] : [];
+        $taken = [];
+        foreach (array_keys($names) as $n) {
+            $error = (int) ($files['error'][$n] ?? UPLOAD_ERR_NO_FILE);
+            if ($error === UPLOAD_ERR_NO_FILE) continue;
+            if ($error === UPLOAD_ERR_INI_SIZE || $error === UPLOAD_ERR_FORM_SIZE) throw new RuntimeException('Tiap tangkapan layar paling besar 5 MB.');
+            $path = $files['tmp_name'][$n] ?? null;
+            if ($error !== UPLOAD_ERR_OK || !is_string($path) || !is_uploaded_file($path)) throw new RuntimeException('Tangkapan layar tidak terunggah. Coba lagi.');
+            if ((int) filesize($path) > self::MAX_SCREENSHOT_BYTES) throw new RuntimeException('Tiap tangkapan layar paling besar 5 MB.');
+            $taken[] = ['bytes' => (string) file_get_contents($path), 'name' => (string) $names[$n]];
+        }
+        return $taken;
+    }
+
+    /** @param array{bytes:string,name:string,mime:string,extension:string} $screenshot */
+    private static function keepScreenshot(PDO $db, int $feedbackId, array $screenshot, string $now): void
+    {
+        $directory = self::directory();
+        PhotoStorage::protect($directory);
+        $filename = bin2hex(random_bytes(16)) . '.' . $screenshot['extension'];
+        if (file_put_contents($directory . '/' . $filename, $screenshot['bytes'], LOCK_EX) !== strlen($screenshot['bytes'])) {
+            throw new RuntimeException('Tangkapan layar tidak dapat disimpan.');
+        }
+        $db->prepare('INSERT INTO inventory_feedback_attachments (feedback_id, filename, name, mime, size, state, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+            ->execute([$feedbackId, $filename, $screenshot['name'], $screenshot['mime'], strlen($screenshot['bytes']), 'pending', $now]);
+    }
+
+    /**
+     * Sends the screenshots still waiting, of one piece or of all sent ones, a few at a time.
+     * @return int how many were sent
+     */
+    private static function sendScreenshots(PDO $db, ?int $feedbackId = null): int
+    {
+        if (!self::attachable($db)) return 0;
+        $query = $db->prepare("SELECT a.id, a.filename, a.name, a.mime, f.panel_id, f.token FROM inventory_feedback_attachments a JOIN inventory_feedback f ON f.id = a.feedback_id WHERE a.state = 'pending' AND f.panel_id IS NOT NULL" . ($feedbackId === null ? '' : ' AND f.id = ?') . ' ORDER BY a.id LIMIT ' . (self::MAX_FLUSH * self::MAX_SCREENSHOTS));
+        $query->execute($feedbackId === null ? [] : [$feedbackId]);
+        $sent = 0;
+        foreach ($query->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $result = self::sendScreenshot($db, $row);
+            if ($result === 'sent') $sent++;
+            // Klaras cannot be reached: the rest would wait too.
+            if ($result === 'waiting') break;
+        }
+        return $sent;
+    }
+
+    /** 'sent'; 'refused' when Klaras turned it down or its file is gone; 'waiting' when Klaras could not be reached. */
+    private static function sendScreenshot(PDO $db, array $row): string
+    {
+        $done = static function (string $state, ?int $panelId) use ($db, $row): string {
+            $db->prepare('UPDATE inventory_feedback_attachments SET state = ?, panel_attachment_id = ? WHERE id = ?')->execute([$state, $panelId, (int) $row['id']]);
+            // Klaras has it, or never will: the copy here goes either way.
+            if (preg_match('/\A[a-f0-9]{32}\.(png|jpg|webp)\z/', (string) $row['filename'])) @unlink(self::directory() . '/' . $row['filename']);
+            return $state;
+        };
+        $path = self::directory() . '/' . $row['filename'];
+        if (!preg_match('/\A[a-f0-9]{32}\.(png|jpg|webp)\z/', (string) $row['filename']) || is_link($path) || !is_file($path)) return $done('refused', null);
+
+        $answer = self::postFile(self::endpoint('/attachments'), [
+            'install_id' => Telemetry::state($db)['install_id'],
+            'id' => (string) $row['panel_id'],
+            'token' => (string) $row['token'],
+        ], $path, (string) $row['mime'], (string) $row['name']);
+        if (is_int($answer['data']['id'] ?? null)) return $done('sent', $answer['data']['id']);
+        if (is_array($answer['error'] ?? null)) return $done('refused', null);
+        return 'waiting';
+    }
+
+    /** Whether migration 23 has run: screenshots with feedback. */
+    public static function attachable(PDO $db): bool
+    {
+        try {
+            $db->query('SELECT 1 FROM inventory_feedback_attachments LIMIT 0');
+            return true;
+        } catch (\PDOException $error) {
+            return false;
+        }
+    }
+
+    private static function directory(): string
+    {
+        if (is_string(self::$directory) && self::$directory !== '') return rtrim(self::$directory, '/');
+        return SB . 'images/inventaris-barang/masukan';
     }
 
     /**
@@ -173,11 +331,12 @@ final class Feedback
         }
     }
 
-    /** Feedback, or an answer in a thread, still waiting to be sent. */
+    /** Feedback, an answer in a thread, or a screenshot still waiting to be sent. */
     private static function waiting(PDO $db): bool
     {
         return (bool) $db->query('SELECT 1 FROM inventory_feedback WHERE panel_id IS NULL LIMIT 1')->fetchColumn()
-            || (bool) $db->query("SELECT 1 FROM inventory_feedback_replies WHERE panel_reply_id IS NULL AND kind = 'sender' LIMIT 1")->fetchColumn();
+            || (bool) $db->query("SELECT 1 FROM inventory_feedback_replies WHERE panel_reply_id IS NULL AND kind = 'sender' LIMIT 1")->fetchColumn()
+            || (self::attachable($db) && (bool) $db->query("SELECT 1 FROM inventory_feedback_attachments WHERE state = 'pending' LIMIT 1")->fetchColumn());
     }
 
     /**
@@ -223,6 +382,8 @@ final class Feedback
         foreach ($waiting as $row) {
             if (self::send($db, $row, date('Y-m-d H:i:s'))) $sent++;
         }
+        // Screenshots follow the feedback they belong to, once it has reached Klaras.
+        $sent += self::sendScreenshots($db);
         if (!self::threaded($db)) return $sent;
         // Answers in threads whose feedback has reached Klaras, oldest first, so they arrive in order.
         $answers = $db->query("SELECT r.id, r.message, f.id AS feedback_id, f.panel_id, f.token FROM inventory_feedback_replies r JOIN inventory_feedback f ON f.id = r.feedback_id WHERE r.panel_reply_id IS NULL AND r.kind = 'sender' AND f.panel_id IS NOT NULL ORDER BY r.id LIMIT " . self::MAX_FLUSH)->fetchAll(PDO::FETCH_ASSOC);
@@ -306,8 +467,14 @@ final class Feedback
         $query->execute($ids);
         $replies = [];
         foreach ($query->fetchAll(PDO::FETCH_ASSOC) as $reply) $replies[(int) $reply['feedback_id']][] = $reply;
+        $screenshots = [];
+        if (self::attachable($db)) {
+            $query = $db->prepare('SELECT feedback_id, name, state FROM inventory_feedback_attachments WHERE feedback_id IN (' . implode(',', array_fill(0, count($ids), '?')) . ') ORDER BY id');
+            $query->execute($ids);
+            foreach ($query->fetchAll(PDO::FETCH_ASSOC) as $screenshot) $screenshots[(int) $screenshot['feedback_id']][] = ['name' => (string) $screenshot['name'], 'state' => (string) $screenshot['state']];
+        }
 
-        return array_map(static function (array $row) use ($replies): array {
+        return array_map(static function (array $row) use ($replies, $screenshots): array {
             $own = $replies[(int) $row['id']] ?? [];
             $seen = (string) ($row['seen_at'] ?? '');
             $awaiting = !empty($row['awaiting_reply']) && !in_array($row['status'], ['done', 'declined'], true);
@@ -323,6 +490,8 @@ final class Feedback
                 'can_reply' => $row['panel_id'] !== null && (int) ($row['can_reply'] ?? 0) === 1,
                 'issue_url' => $row['issue_url'] === null ? null : (string) $row['issue_url'],
                 'created_at' => (string) $row['created_at'],
+                // Names and whether Klaras has them; the files themselves are not kept here once sent.
+                'screenshots' => $screenshots[(int) $row['id']] ?? [],
                 'replies' => array_map(static function (array $reply) use ($seen): array {
                     $mine = in_array((string) $reply['kind'], self::OWN, true);
                     return [
@@ -429,6 +598,35 @@ final class Feedback
             CURLOPT_FOLLOWLOCATION => false,
             CURLOPT_HTTPHEADER => ['Content-Type: application/json', 'Accept: application/json', 'User-Agent: klaras-inven/' . UpdateCheck::plugin()['version']],
         ]);
+        return self::answerOf($curl);
+    }
+
+    /**
+     * Sends a file with a few fields, as multipart. Answers as post() does. Tests' transport gets the
+     * fields and, under 'file', where the file is and what it is.
+     *
+     * @return array<string,mixed>|null
+     */
+    private static function postFile(string $url, array $fields, string $path, string $mime, string $name): ?array
+    {
+        if (is_callable(self::$transport)) return call_user_func(self::$transport, $url, $fields + ['file' => ['path' => $path, 'mime' => $mime, 'name' => $name]]);
+        if (!function_exists('curl_init')) return null;
+        $curl = curl_init($url);
+        curl_setopt_array($curl, [
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $fields + ['file' => new \CURLFile($path, $mime, $name)],
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CONNECTTIMEOUT => 3,
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_FOLLOWLOCATION => false,
+            CURLOPT_HTTPHEADER => ['Accept: application/json', 'User-Agent: klaras-inven/' . UpdateCheck::plugin()['version']],
+        ]);
+        return self::answerOf($curl);
+    }
+
+    /** @return array<string,mixed>|null */
+    private static function answerOf($curl): ?array
+    {
         $body = curl_exec($curl);
         $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
         curl_close($curl);

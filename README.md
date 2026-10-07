@@ -201,12 +201,15 @@ Bila Anda ingin data perpustakaan Anda dihapus, tulis ke [privasi@klaras.id](mai
 
 Tombol **Masukan** di bagian atas setiap halaman Klaras Inven mengirim masalah, saran, pertanyaan, atau apresiasi ke tim Klaras. Semua petugas yang dapat membuka plugin boleh mengirimnya, termasuk yang hanya punya hak baca. Fitur ini memerlukan migrasi 20.
 
+Untuk jenis **Masalah**, form meminta tiga isian pendek: apa yang Anda lakukan, apa yang terjadi, dan (opsional) apa yang seharusnya terjadi. Anda juga bisa melampirkan hingga tiga tangkapan layar (PNG, JPG, atau WebP, masing-masing 5 MB), dipilih atau ditempel dengan Ctrl+V. Tangkapan layar disimpan sementara di `images/inventaris-barang/masukan/`, yang tidak bisa dibuka dari browser, lalu dihapus dari SLiMS setelah Klaras menerimanya; riwayat tetap menampilkan namanya. Tutupi data anggota yang tidak perlu terlihat sebelum melampirkan. Lampiran memerlukan migrasi 23.
+
 Yang ikut terkirim bersama pesan:
 
 - Jenis masukan dan halaman tempat masukan ditulis.
 - Nama perpustakaan dan alamat SLiMS.
 - Versi Klaras Inven, SLiMS, dan PHP.
 - Nama dan email petugas, **hanya** bila petugas mencentang **Boleh dihubungi**.
+- Tangkapan layar yang Anda lampirkan.
 
 Masukan disimpan di SLiMS lebih dulu. Bila Klaras tidak dapat dihubungi, masukan menunggu dan dikirim ulang otomatis. Tab **Riwayat** menampilkan masukan yang Anda kirim beserta statusnya; tiap petugas hanya melihat masukannya sendiri (Diterima, Ditinjau, Direncanakan, Selesai, atau Tidak dilanjutkan) dan balasan tim Klaras. Bila masukan ditindaklanjuti sebagai issue di GitHub, tautannya ikut tampil, dan balasan otomatis muncul saat issue itu selesai.
 

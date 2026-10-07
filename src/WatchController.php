@@ -65,7 +65,8 @@ try {
                 $waiting=(bool)array_filter($piece['replies'],static function(array $reply): bool { return $reply['pending']; });
                 echo json_encode(\SLiMS\Plugins\Inventory\WorkspaceRequests::remember('watch',['ok'=>true,'message'=>$waiting?'Balasan tersimpan dan akan dikirim saat Klaras dapat dihubungi.':'Balasan terkirim.','data'=>$piece])); return;
             }
-            $piece=\SLiMS\Plugins\Inventory\Feedback::submit($db,$_POST,(int)($_SESSION['uid']??0),date('Y-m-d H:i:s'));
+            $screenshots=\SLiMS\Plugins\Inventory\Feedback::uploaded(is_array($_FILES['screenshots']??null)?$_FILES['screenshots']:[]);
+            $piece=\SLiMS\Plugins\Inventory\Feedback::submit($db,$_POST,(int)($_SESSION['uid']??0),date('Y-m-d H:i:s'),$screenshots);
             watch_log('Update','Masukan #'.$piece['id'].' untuk Klaras disimpan.');
             $sent=$piece['status']['key']!=='pending';
             echo json_encode(\SLiMS\Plugins\Inventory\WorkspaceRequests::remember('watch',['ok'=>true,'message'=>$sent?'Masukan terkirim. Terima kasih.':'Masukan tersimpan dan akan dikirim saat Klaras dapat dihubungi.','data'=>$piece])); return;

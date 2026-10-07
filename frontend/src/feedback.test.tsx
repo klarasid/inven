@@ -7,7 +7,7 @@ import { WorkspaceContext, type ContextValue } from './context'
 
 const kinds={bug:'Masalah',idea:'Saran',question:'Pertanyaan',praise:'Apresiasi'}
 const answered={id:4,kind:{key:'bug',label:'Masalah'},message:'Tombol cetak KIR tidak merespons.',page:'inventory',author:'Rina Wulandari',contact:false,status:{key:'planned',label:'Direncanakan'},issue_url:'https://github.com/klarasid/inven/issues/57',can_reply:false,created_at:'2026-10-06 09:00:00',replies:[{message:'Kami tindak lanjuti di issue #57.',kind:'issue_linked',replied_at:'2026-10-07 09:00:00',unread:true,from_sender:false,pending:false}]}
-const data=(more:object={})=>({available:true,feedback:[answered],unread:1,kinds,contact:{name:'Rina Wulandari',email:'rina@example.sch.id'},...more})
+const data=(more:object={})=>({available:true,feedback:[answered],unread:1,kinds,contact:{name:'Rina Wulandari',email:'rina@example.sch.id'},screenshots:3,...more})
 const context=(mutate=vi.fn()):ContextValue=>({config:{write:false,api:'http://localhost/api',watch:'http://localhost/watch'} as ContextValue['config'],options:{} as ContextValue['options'],route:{view:'inventory'},go:vi.fn(),back:vi.fn(),dirty:vi.fn(),refresh:vi.fn(),revision:0,mutate})
 const reply=(body:object)=>({ok:true,headers:{get:()=>'application/json'},json:async()=>body})
 function mount(w:ContextValue){return render(<WorkspaceContext.Provider value={w}><FeedbackButton/></WorkspaceContext.Provider>)}
@@ -22,11 +22,11 @@ test('a reader sends feedback of a kind, with the page it was written on, and on
  // What would be sent as the contact is shown before it is allowed.
  expect(within(panel).getByText('Nama dan email Anda ikut terkirim: Rina Wulandari · rina@example.sch.id.')).toBeTruthy()
  const send=within(panel).getByRole('button',{name:'Kirim masukan'}) as HTMLButtonElement
+ fireEvent.click(within(panel).getByRole('radio',{name:'Saran'}))
  const message=within(panel).getByLabelText('Masukan Anda')
  fireEvent.change(message,{target:{value:'Pendek'}})
  expect(within(panel).getByText('Paling sedikit 10 karakter.')).toBeTruthy()
  expect(send.disabled).toBe(true)
- fireEvent.click(within(panel).getByRole('radio',{name:'Saran'}))
  fireEvent.change(message,{target:{value:'Mohon tambahkan ekspor Excel untuk KIR.'}})
  fireEvent.click(send)
  await waitFor(()=>expect(mutate).toHaveBeenCalledTimes(1))
@@ -34,6 +34,7 @@ test('a reader sends feedback of a kind, with the page it was written on, and on
  // What was sent shows in the history at once.
  expect(await within(panel).findByText('Diterima')).toBeTruthy()
  fireEvent.mouseDown(within(panel).getByRole('tab',{name:/Kirim masukan/}))
+ fireEvent.click(within(panel).getByRole('radio',{name:'Saran'}))
  fireEvent.click(within(panel).getByRole('checkbox',{name:'Boleh dihubungi'}))
  fireEvent.change(within(panel).getByLabelText('Masukan Anda'),{target:{value:'Satu lagi, tolong hubungi saya.'}})
  fireEvent.click(within(panel).getByRole('button',{name:'Kirim masukan'}))
@@ -84,4 +85,28 @@ test('a librarian answers Klaras in the same thread when asked for more detail',
  expect(await within(panel).findByText('Di halaman Ruang.')).toBeTruthy()
  expect(within(panel).getByText('Ditinjau')).toBeTruthy()
  expect(within(panel).getByText(/^Anda ·/)).toBeTruthy()
+})
+
+test('a problem is told in three parts, with a screenshot chosen or pasted',async()=>{
+ vi.stubGlobal('fetch',vi.fn().mockResolvedValue(reply({ok:true,data:data({feedback:[],unread:0})})))
+ vi.stubGlobal('URL',Object.assign(URL,{createObjectURL:()=>'blob:layar',revokeObjectURL:()=>{}}))
+ const mutate=vi.fn().mockResolvedValue({ok:true,message:'Masukan terkirim. Terima kasih.',data:{...answered,id:6,status:{key:'new',label:'Diterima'},replies:[],issue_url:null,screenshots:[{name:'layar.png',state:'sent'}]}})
+ mount(context(mutate))
+ fireEvent.click(await screen.findByRole('button',{name:'Masukan'}))
+ const panel=await screen.findByRole('dialog',{name:'Masukan untuk Klaras'})
+ const send=within(panel).getByRole('button',{name:'Kirim masukan'}) as HTMLButtonElement
+ fireEvent.change(within(panel).getByLabelText('Apa yang Anda lakukan?'),{target:{value:'Membuka Ruang Baca'}})
+ expect(send.disabled).toBe(true)
+ fireEvent.change(within(panel).getByLabelText('Apa yang terjadi?'),{target:{value:'Halaman kosong.'}})
+ const screenshot=new File(['png'],'layar.png',{type:'image/png'})
+ fireEvent.change(within(panel).getByLabelText('Pilih tangkapan layar'),{target:{files:[screenshot,new File(['pdf'],'catatan.pdf',{type:'application/pdf'})]}})
+ expect(within(panel).getByText('Lampirkan gambar PNG, JPG, atau WebP, paling besar 5 MB.')).toBeTruthy()
+ expect(within(panel).getByRole('button',{name:'Hapus layar.png'})).toBeTruthy()
+ fireEvent.click(send)
+ await waitFor(()=>expect(mutate).toHaveBeenCalledTimes(1))
+ const [values,files]=mutate.mock.calls[0]
+ expect(values).toMatchObject({watch_action:'feedback_submit',kind:'bug',did:'Membuka Ruang Baca',happened:'Halaman kosong.',expected:''})
+ expect(values.message).toBeUndefined()
+ expect((files as FormData).getAll('screenshots[]')).toHaveLength(1)
+ expect(await within(panel).findByText(/layar\.png · terkirim/)).toBeTruthy()
 })

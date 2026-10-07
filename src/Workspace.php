@@ -165,10 +165,12 @@ final class Workspace
             require_once __DIR__.'/Feedback.php';
             try {
                 if(($g['refresh']??'')==='1')Feedback::refresh($w->pdo(),true);
-                return ['available'=>true,'feedback'=>Feedback::list($w->pdo(),$uid),'unread'=>Feedback::unread($w->pdo(),$uid),'kinds'=>Feedback::KINDS,'contact'=>Feedback::contact($w->pdo(),$uid)];
+                return ['available'=>true,'feedback'=>Feedback::list($w->pdo(),$uid),'unread'=>Feedback::unread($w->pdo(),$uid),'kinds'=>Feedback::KINDS,'contact'=>Feedback::contact($w->pdo(),$uid),
+                    // Screenshots need migration 23.
+                    'screenshots'=>Feedback::attachable($w->pdo())?Feedback::MAX_SCREENSHOTS:0];
             } catch(\PDOException $e) {
                 if((int)($e->errorInfo[1]??0)!==1146)throw $e;
-                return ['available'=>false,'feedback'=>[],'unread'=>0,'kinds'=>Feedback::KINDS,'contact'=>['name'=>'','email'=>'']];
+                return ['available'=>false,'feedback'=>[],'unread'=>0,'kinds'=>Feedback::KINDS,'contact'=>['name'=>'','email'=>''],'screenshots'=>0];
             }
         }
         if($resource==='update') {
