@@ -1,10 +1,10 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ExternalLink, ImagePlus, MessageSquareText, Paperclip, X } from "lucide-react";
+import { ExternalLink, ImagePlus, Info, MessageSquareText, Paperclip, X } from "lucide-react";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
 import { Checkbox } from "./components/ui/checkbox";
-import { Field, FieldContent, FieldDescription, FieldError, FieldGroup, FieldLabel } from "./components/ui/field";
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "./components/ui/field";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "./components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { Textarea } from "./components/ui/textarea";
@@ -251,16 +251,14 @@ function FeedbackForm({ data, onSent }: { data: FeedbackData; onSent: (piece: Pi
         )}
         {data.screenshots > 0 && <ScreenshotPicker files={screenshots} max={data.screenshots} onChange={setScreenshots} />}
         <p className="text-xs text-muted-foreground">Jangan sertakan kata sandi atau data pribadi anggota.</p>
-        <Field orientation="horizontal" className="items-start rounded-xl border p-3">
+        <Field orientation="horizontal" className="items-center gap-2">
           <Checkbox id={contactId} checked={contact} onCheckedChange={(checked) => setContact(checked === true)} />
-          <FieldContent>
-            <FieldLabel htmlFor={contactId}>Boleh dihubungi</FieldLabel>
-            <FieldDescription>
-              {data.contact.email
-                ? `Nama dan email Anda ikut terkirim: ${data.contact.name} · ${data.contact.email}.`
-                : `Nama Anda ikut terkirim: ${data.contact.name || "nama petugas"}. Email Anda belum diisi di SLiMS.`}
-            </FieldDescription>
-          </FieldContent>
+          <FieldLabel htmlFor={contactId}>Boleh dihubungi</FieldLabel>
+          <Hint label="Apa yang ikut terkirim bila boleh dihubungi">
+            {data.contact.email
+              ? `Nama dan email Anda ikut terkirim: ${data.contact.name} · ${data.contact.email}.`
+              : `Nama Anda ikut terkirim: ${data.contact.name || "nama petugas"}. Email Anda belum diisi di SLiMS.`}
+          </Hint>
         </Field>
         <p className="text-xs text-muted-foreground">
           Ikut terkirim: nama dan alamat perpustakaan, halaman yang sedang dibuka, serta versi Klaras Inven, SLiMS, dan PHP. Untuk masalah mendesak, hubungi tim dukungan Klaras secara langsung.
@@ -272,6 +270,28 @@ function FeedbackForm({ data, onSent }: { data: FeedbackData; onSent: (piece: Pi
         </div>
       </FieldGroup>
     </fieldset>
+  );
+}
+
+/**
+ * A small explanation behind an info icon, shown while the pointer rests on it or it has focus.
+ * Plain CSS: a tap shows it too, on phones (sticky hover on iOS, focus on Android).
+ */
+function Hint({ label, children }: { label: string; children: React.ReactNode }) {
+  const id = useId();
+  return (
+    <span className="group relative inline-flex">
+      <button type="button" aria-label={label} aria-describedby={id} className="inline-flex size-5 items-center justify-center rounded-full text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
+        <Info className="size-3.5" />
+      </button>
+      <span
+        id={id}
+        role="tooltip"
+        className="pointer-events-none invisible absolute bottom-full left-1/2 z-50 mb-1.5 w-56 -translate-x-1/2 rounded-lg bg-popover p-2 text-xs text-popover-foreground opacity-0 shadow-md ring-1 ring-foreground/10 transition-opacity group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100"
+      >
+        {children}
+      </span>
+    </span>
   );
 }
 

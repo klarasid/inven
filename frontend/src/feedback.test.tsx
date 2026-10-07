@@ -19,8 +19,11 @@ test('a reader sends feedback of a kind, with the page it was written on, and on
  mount(context(mutate))
  fireEvent.click(await screen.findByRole('button',{name:'Masukan'}))
  const panel=await screen.findByRole('dialog',{name:'Masukan untuk Klaras'})
- // What would be sent as the contact is shown before it is allowed.
- expect(within(panel).getByText('Nama dan email Anda ikut terkirim: Rina Wulandari · rina@example.sch.id.')).toBeTruthy()
+ // What would be sent as the contact is a hint on an info icon beside the box, not text on the form.
+ const hint=within(panel).getByRole('button',{name:'Apa yang ikut terkirim bila boleh dihubungi'})
+ const tip=document.getElementById(hint.getAttribute('aria-describedby')!)!
+ expect(tip.getAttribute('role')).toBe('tooltip')
+ expect(tip.textContent).toBe('Nama dan email Anda ikut terkirim: Rina Wulandari · rina@example.sch.id.')
  const send=within(panel).getByRole('button',{name:'Kirim masukan'}) as HTMLButtonElement
  fireEvent.click(within(panel).getByRole('radio',{name:'Saran'}))
  const message=within(panel).getByLabelText('Masukan Anda')
