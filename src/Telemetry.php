@@ -22,7 +22,7 @@ use PDO;
  * off while there was a page for it stays off (setEnabled). Sent at most once a day, after the
  * page has been delivered, so it never slows a page and a failure is never seen.
  *
- * Runs on PHP 7.4 like the rest of the plugin.
+ * Needs PHP 8.1 and SLiMS 9.8, like the rest of the plugin.
  */
 final class Telemetry
 {

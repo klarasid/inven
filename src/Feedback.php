@@ -24,7 +24,7 @@ require_once __DIR__ . '/UpdateCheck.php';
  * "????". Everything here that reads or writes the feedback tables does so as utf8mb4 (unicode())
  * and gives the connection back as it found it.
  *
- * Runs on PHP 7.4 like the rest of the plugin.
+ * Needs PHP 8.1 and SLiMS 9.8, like the rest of the plugin.
  */
 final class Feedback
 {

@@ -4,11 +4,11 @@
 
 <p align="center">
   <a href="https://github.com/klarasid/inven/releases/latest"><img src="https://img.shields.io/github/v/release/klarasid/inven?label=rilis&color=006B60" alt="Rilis terbaru"></a>
-  <img src="https://img.shields.io/badge/SLiMS-9-006B60" alt="SLiMS 9">
-  <img src="https://img.shields.io/badge/PHP-7.4%2B-006B60" alt="PHP 7.4 atau lebih baru">
+  <img src="https://img.shields.io/badge/SLiMS-9.8%2B-006B60" alt="SLiMS 9.8 atau lebih baru">
+  <img src="https://img.shields.io/badge/PHP-8.1%2B-006B60" alt="PHP 8.1 atau lebih baru">
 </p>
 
-Klaras Inven adalah plugin SLiMS 9 untuk mengelola sarana prasarana perpustakaan. Dengan plugin ini, Anda dapat:
+Klaras Inven adalah plugin SLiMS 9.8 untuk mengelola sarana prasarana perpustakaan. Dengan plugin ini, Anda dapat:
 
 - Mencatat barang per ruangan, lengkap dengan foto, dan mencetak Kartu Inventaris Ruangan (KIR).
 - Menjadwalkan pemeriksaan ruangan berdasarkan checklist, lalu menindaklanjuti temuannya hingga diverifikasi.
@@ -20,7 +20,7 @@ Klaras Inven adalah plugin SLiMS 9 untuk mengelola sarana prasarana perpustakaan
 
 Pastikan server Anda memenuhi syarat berikut:
 
-- SLiMS 9 dan PHP 7.4 atau lebih baru.
+- SLiMS 9.8 (Bulian) dan PHP 8.1 atau lebih baru.
 - Ekstensi PHP `gd`, `mbstring`, `fileinfo`, `curl`, `zip`, dan `SimpleXML`.
 - Folder cache SLiMS (`files/cache`) dan folder `images` dapat ditulis oleh PHP.
 
@@ -163,7 +163,7 @@ Klaras InvenSync adalah aplikasi HP untuk petugas. Dengan aplikasi ini, petugas 
 Untuk mengaktifkan aplikasi:
 
 1. Daftarkan perpustakaan Anda di Klaras Panel dan buat API key.
-2. Pasang plugin **SLiMS Connect** (memerlukan PHP 8.1 atau lebih baru), lalu isi API key di **System → SLiMS Connect**. SLiMS harus dapat dibuka melalui HTTPS.
+2. Pasang plugin **SLiMS Connect**, lalu isi API key di **System → SLiMS Connect**. SLiMS harus dapat dibuka melalui HTTPS.
 3. Buka **Stock Take → Aplikasi InvenSync**, lalu klik **Izinkan aplikasi**. Langkah ini memerlukan hak tulis System.
 
 Petugas masuk dengan akun SLiMS yang memiliki hak **Stock Take**. Anda dapat mencabut sesi satu perangkat atau mematikan aplikasi sepenuhnya dari halaman yang sama.

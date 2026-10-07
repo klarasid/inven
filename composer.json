@@ -1,10 +1,10 @@
 {
     "name": "klarasid/inven",
-    "description": "SLiMS plugin for managing library room inventory and printing inventory cards as PDF.",
+    "description": "SLiMS 9.8 plugin for managing library room inventory and printing inventory cards as PDF.",
     "type": "slims-plugin",
     "license": "GPL-3.0-or-later",
     "require": {
-        "php": ">=7.4",
+        "php": ">=8.1",
         "ext-gd": "*",
         "ext-mbstring": "*",
         "mpdf/mpdf": "^8.3.1",
