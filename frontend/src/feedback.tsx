@@ -22,8 +22,19 @@ type Piece = {
   contact: boolean;
   status: { key: string; label: string };
   issue_url: string | null;
+  /** Sent, and the thread still takes answers (migration 22). */
+  can_reply: boolean;
   created_at: string;
-  replies: { message: string; kind: string; replied_at: string; unread: boolean }[];
+  replies: {
+    message: string;
+    kind: string;
+    replied_at: string;
+    unread: boolean;
+    /** Written by this librarian, not by Klaras. */
+    from_sender: boolean;
+    /** Their answer, not sent yet. */
+    pending: boolean;
+  }[];
 };
 type FeedbackData = {
   /** False until the plugin's migration 20 has run. */
@@ -39,6 +50,7 @@ const statusTone: Record<string, "outline" | "info" | "success" | "warning" | "s
   pending: "warning",
   new: "outline",
   reviewing: "info",
+  awaiting: "warning",
   planned: "info",
   done: "success",
   declined: "secondary",
@@ -123,7 +135,7 @@ export function FeedbackButton() {
                   )}
                 </TabsContent>
                 <TabsContent value="history" className="pt-4">
-                  {data && <FeedbackHistory pieces={data.feedback} />}
+                  {data && <FeedbackHistory pieces={data.feedback} onAnswered={(piece) => setData({ ...data, feedback: data.feedback.map((other) => (other.id === piece.id ? piece : other)) })} />}
                 </TabsContent>
               </Tabs>
             )}
@@ -218,7 +230,9 @@ function FeedbackForm({ data, onSent }: { data: FeedbackData; onSent: (piece: Pi
   );
 }
 
-function FeedbackHistory({ pieces }: { pieces: Piece[] }) {
+function FeedbackHistory({ pieces, onAnswered }: { pieces: Piece[]; onAnswered: (piece: Piece) => void }) {
+  // One answer box open at a time.
+  const [answering, setAnswering] = useState<number | null>(null);
   if (pieces.length === 0) return <p className="text-sm text-muted-foreground">Anda belum mengirim masukan.</p>;
   return (
     <ul className="flex flex-col gap-3">
@@ -241,16 +255,75 @@ function FeedbackHistory({ pieces }: { pieces: Piece[] }) {
               {piece.replies.map((reply, n) => (
                 <li key={n} className="text-sm">
                   <p className="text-xs text-muted-foreground">
-                    Klaras · {dateLabel(reply.replied_at)}
+                    {reply.from_sender ? "Anda" : "Klaras"} · {dateLabel(reply.replied_at)}
                     {reply.unread && <Badge className="ml-1.5">Baru</Badge>}
+                    {reply.pending && <Badge variant="warning" className="ml-1.5">Menunggu terkirim</Badge>}
+                    {reply.kind === "refused" && <Badge variant="secondary" className="ml-1.5">Tidak terkirim: percakapan sudah ditutup</Badge>}
                   </p>
                   <p className="whitespace-pre-wrap">{reply.message}</p>
                 </li>
               ))}
             </ol>
           )}
+          {piece.can_reply &&
+            (answering === piece.id ? (
+              <AnswerForm
+                piece={piece}
+                onDone={(updated) => {
+                  setAnswering(null);
+                  if (updated) onAnswered(updated);
+                }}
+              />
+            ) : (
+              <div>
+                <Button size="sm" variant={piece.status.key === "awaiting" ? "default" : "outline"} onClick={() => setAnswering(piece.id)}>
+                  Balas
+                </Button>
+              </div>
+            ))}
         </li>
       ))}
     </ul>
+  );
+}
+
+/** The librarian's answer in a thread: usually the detail Klaras asked for. */
+function AnswerForm({ piece, onDone }: { piece: Piece; onDone: (updated?: Piece) => void }) {
+  const w = useWorkspace();
+  const id = useId();
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function send() {
+    setBusy(true);
+    setError("");
+    try {
+      const reply = (await w.mutate({ watch_action: "feedback_reply", feedback_id: String(piece.id), message })) as { message?: string; data?: Piece };
+      toast.success(reply.message || "Balasan terkirim.");
+      onDone(reply.data);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <fieldset disabled={busy} className="flex min-w-0 flex-col gap-2">
+      <ErrorBox message={error} />
+      <label htmlFor={id} className="sr-only">
+        Balasan Anda
+      </label>
+      <Textarea id={id} rows={3} maxLength={MAX} value={message} placeholder="Tulis balasan Anda" onChange={(e) => setMessage(e.target.value)} autoFocus />
+      <div className="flex gap-2">
+        <Button size="sm" onClick={send} disabled={busy || message.trim().length < 2}>
+          {busy ? "Mengirim…" : "Kirim balasan"}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => onDone()}>
+          Batal
+        </Button>
+      </div>
+    </fieldset>
   );
 }

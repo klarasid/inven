@@ -88,9 +88,15 @@ try {
     $db->exec('CREATE TABLE item (item_id INT PRIMARY KEY, item_code VARCHAR(20), item_status_id CHAR(3) NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     $db->exec('CREATE TABLE slims_connect_rate_limits (rate_key CHAR(64) PRIMARY KEY, attempts INT, window_started_at DATETIME, blocked_until DATETIME NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     $db->exec('CREATE TABLE slims_connect_settings (name VARCHAR(64) PRIMARY KEY, value TEXT, updated_at DATETIME) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
-    foreach (['CreateInventoryTables', 'AddSlimsLocationToInventoryLocations', 'CreateInventoryItemPhotos', 'MoveInventoryPhotosToFiles', 'AllowSharedInventoryLocationCodes', 'CreateInventoryItemCodes', 'CreateInventorySupervision', 'CreateInvensyncApi', 'AddFacilityProfileData', 'AllowSeveralItemCategories', 'CreateRoomAreasAndPlans', 'AllowAgentConnections', 'MapMembersToLocations', 'CreateNetworkDocuments', 'CreateSoftwareFiles', 'RenameNetworkDocumentsToSupportDocuments', 'MoveBandwidthEvidenceToSupportDocuments', 'CreateAreaPhotos', 'CreateFeedback', 'MoveSupervisionPhotosFromItemFolder'] as $migration) (new $migration())->up();
+    foreach (['CreateInventoryTables', 'AddSlimsLocationToInventoryLocations', 'CreateInventoryItemPhotos', 'MoveInventoryPhotosToFiles', 'AllowSharedInventoryLocationCodes', 'CreateInventoryItemCodes', 'CreateInventorySupervision', 'CreateInvensyncApi', 'AddFacilityProfileData', 'AllowSeveralItemCategories', 'CreateRoomAreasAndPlans', 'AllowAgentConnections', 'MapMembersToLocations', 'CreateNetworkDocuments', 'CreateSoftwareFiles', 'RenameNetworkDocumentsToSupportDocuments', 'MoveBandwidthEvidenceToSupportDocuments', 'CreateAreaPhotos', 'CreateFeedback', 'MoveSupervisionPhotosFromItemFolder', 'AddFeedbackThreads'] as $migration) (new $migration())->up();
     (new CreateInvensyncApi())->up();
     check(true, 'migration 8 is repeatable');
+    (new AddFeedbackThreads())->up();
+    $db->exec("INSERT INTO inventory_feedback (token, kind, message, created_at) VALUES ('t', 'bug', 'Tombol cetak tidak merespons.', NOW())");
+    $db->exec("INSERT INTO inventory_feedback_replies (feedback_id, panel_reply_id, kind, message, replied_at, received_at) VALUES (LAST_INSERT_ID(), NULL, 'sender', 'Di Chrome.', NOW(), NOW())");
+    check((int) $db->query('SELECT can_reply FROM inventory_feedback')->fetchColumn() === 1, 'migration 22 is repeatable, opens threads to answers, and keeps answers not sent yet');
+    $db->exec('DELETE FROM inventory_feedback_replies');
+    $db->exec('DELETE FROM inventory_feedback');
 
     // Bound, not inline: the test connection renames table names that appear in SQL text.
     $db->prepare('INSERT INTO mst_module VALUES (1, ?), (2, ?)')->execute(['stock_take', 'system']);

@@ -210,6 +210,8 @@ Yang ikut terkirim bersama pesan:
 
 Masukan disimpan di SLiMS lebih dulu. Bila Klaras tidak dapat dihubungi, masukan menunggu dan dikirim ulang otomatis. Tab **Riwayat** menampilkan masukan yang Anda kirim beserta statusnya; tiap petugas hanya melihat masukannya sendiri (Diterima, Ditinjau, Direncanakan, Selesai, atau Tidak dilanjutkan) dan balasan tim Klaras. Bila masukan ditindaklanjuti sebagai issue di GitHub, tautannya ikut tampil, dan balasan otomatis muncul saat issue itu selesai.
 
+Masukan adalah percakapan dua arah. Tekan **Balas** pada masukan di Riwayat untuk menambah detail atau menjawab pertanyaan tim Klaras. Bila tim Klaras meminta info tambahan, status masukan menjadi **Perlu jawaban Anda**. Seperti masukan, balasan yang belum terkirim menunggu dan dikirim ulang otomatis. Masukan yang sudah selesai masih bisa dibalas selama 30 hari; setelah itu, kirim masukan baru. Membalas memerlukan migrasi 22.
+
 Masukan bukan saluran untuk masalah mendesak; untuk itu, hubungi tim dukungan Klaras secara langsung.
 
 ## Pemecahan masalah

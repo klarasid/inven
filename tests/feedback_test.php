@@ -86,4 +86,59 @@ Feedback::markSeen($db, 7, '2026-10-08 00:00:00');
 check(Feedback::unread($db, 8) === 1, 'petugas lain membuka riwayatnya tidak menandai balasan ini dibaca');
 Feedback::markSeen($db, 8, '2026-10-08 00:00:00');
 check(Feedback::unread($db, 8) === 0 && !Feedback::list($db, 8)[0]['replies'][0]['unread'], 'setelah pengirimnya membuka riwayat, balasan tidak lagi dihitung baru');
+
+// Threads: the librarian answers in their own thread.
+$piece = Feedback::list($db, 8)[0];
+check(!$piece['can_reply'], 'sebelum migrasi 22, masukan belum bisa dibalas');
+rejects(static function () use ($db, $piece): void { Feedback::answer($db, ['feedback_id' => $piece['id'], 'message' => 'Di Chrome.'], 8, '2026-10-07 10:00:00'); }, 'membalas sebelum migrasi 22 diminta menjalankan migrasinya', 'versi 22');
+$db->exec('ALTER TABLE inventory_feedback ADD COLUMN awaiting_reply INTEGER NOT NULL DEFAULT 0');
+$db->exec('ALTER TABLE inventory_feedback ADD COLUMN can_reply INTEGER NOT NULL DEFAULT 1');
+
+$answers = [];
+$closed = false;
+$asking = [['id' => 4, 'kind' => 'manual', 'message' => 'Di halaman mana tombolnya tidak merespons?', 'created_at' => '2026-10-07T09:30:00+07:00']];
+Feedback::$transport = static function (string $url, array $payload) use (&$answers, &$panel, &$closed, &$asking): ?array {
+    if ($panel !== 'up') return null;
+    if (str_ends_with($url, '/status')) {
+        return ['data' => [['id' => $payload['items'][0]['id'], 'status' => 'reviewing', 'awaiting_reply' => true, 'can_reply' => true, 'issue_url' => null, 'replies' => $asking]]];
+    }
+    if (str_ends_with($url, '/replies')) {
+        if ($closed) return ['error' => ['code' => 'feedback_closed', 'message' => 'Percakapan ini sudah ditutup.']];
+        $answers[] = $payload;
+        return ['data' => ['id' => 100 + count($answers), 'kind' => 'sender', 'status' => 'reviewing', 'created_at' => '2026-10-07T10:00:00+07:00']];
+    }
+    return null;
+};
+$db->prepare('UPDATE setting SET setting_value = ? WHERE setting_name = ?')->execute([serialize('0'), Feedback::CHECKED]);
+Feedback::refresh($db);
+$piece = Feedback::list($db, 8)[0];
+check($piece['status']['key'] === 'awaiting' && $piece['status']['label'] === 'Perlu jawaban Anda' && $piece['can_reply'], 'saat Klaras meminta info tambahan, masukan menunggu jawaban pengirimnya');
+
+rejects(static function () use ($db, $piece): void { Feedback::answer($db, ['feedback_id' => $piece['id'], 'message' => 'Di Chrome.'], 7, '2026-10-07 10:00:00'); }, 'petugas lain tidak bisa membalas masukan yang bukan miliknya', 'tidak ditemukan');
+rejects(static function () use ($db, $piece): void { Feedback::answer($db, ['feedback_id' => $piece['id'], 'message' => ' '], 8, '2026-10-07 10:00:00'); }, 'balasan kosong ditolak', 'Tulis balasan');
+
+$answered = Feedback::answer($db, ['feedback_id' => $piece['id'], 'message' => "Di halaman Ruang 🙂,\r\ntombol Cetak KIR."], 8, '2026-10-07 10:00:00');
+$mine = end($answered['replies']);
+check(count($answers) === 1, 'balasan langsung dikirim ke Klaras');
+check($answers[0]['message'] === "Di halaman Ruang 🙂,\ntombol Cetak KIR." && strlen($answers[0]['token']) === 48 && $answers[0]['install_id'] === $install, 'balasan dikirim dengan token masukannya');
+check($mine['from_sender'] && !$mine['pending'] && !$mine['unread'] && $answered['status']['key'] === 'reviewing', 'balasan sendiri tampil sebagai "Anda", tidak dihitung baru, dan masukan kembali ditinjau');
+$db->exec('UPDATE inventory_feedback SET seen_at = NULL WHERE user_id = 8');
+check(Feedback::unread($db, 8) === 2, 'hanya balasan Klaras yang dihitung belum dibaca, bukan balasan pengirimnya');
+
+$db->prepare('UPDATE setting SET setting_value = ? WHERE setting_name = ?')->execute([serialize('0'), Feedback::CHECKED]);
+$asking[] = ['id' => 101, 'kind' => 'sender', 'message' => "Di halaman Ruang 🙂,\ntombol Cetak KIR.", 'created_at' => '2026-10-07T10:00:00+07:00'];
+Feedback::refresh($db);
+check(count(Feedback::list($db, 8)[0]['replies']) === 3, 'balasan sendiri yang dikembalikan Klaras tidak tersimpan dua kali');
+
+$panel = 'down';
+$waiting = Feedback::answer($db, ['feedback_id' => $piece['id'], 'message' => 'Juga terjadi di Firefox.'], 8, '2026-10-07 11:00:00');
+check(end($waiting['replies'])['pending'] && Feedback::due($db), 'saat Klaras tak terjangkau, balasan menunggu dan akan dikirim ulang');
+$panel = 'up';
+check(Feedback::flush($db) === 1 && !end(Feedback::list($db, 8)[0]['replies'])['pending'] && count($answers) === 2, 'begitu Klaras terjangkau, balasan yang menunggu terkirim');
+
+$closed = true;
+rejects(static function () use ($db, $piece): void { Feedback::answer($db, ['feedback_id' => $piece['id'], 'message' => 'Masih terjadi.'], 8, '2026-10-07 12:00:00'); }, 'percakapan yang sudah ditutup Klaras menolak balasan', 'sudah ditutup');
+$piece = Feedback::list($db, 8)[0];
+check(!$piece['can_reply'] && count($piece['replies']) === 4, 'balasan yang ditolak tidak tersimpan, dan masukan tidak bisa dibalas lagi');
+
 echo "ok   done\n";

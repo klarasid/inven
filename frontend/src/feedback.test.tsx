@@ -6,7 +6,7 @@ import { FeedbackButton } from './feedback'
 import { WorkspaceContext, type ContextValue } from './context'
 
 const kinds={bug:'Masalah',idea:'Saran',question:'Pertanyaan',praise:'Apresiasi'}
-const answered={id:4,kind:{key:'bug',label:'Masalah'},message:'Tombol cetak KIR tidak merespons.',page:'inventory',author:'Rina Wulandari',contact:false,status:{key:'planned',label:'Direncanakan'},issue_url:'https://github.com/klarasid/inven/issues/57',created_at:'2026-10-06 09:00:00',replies:[{message:'Kami tindak lanjuti di issue #57.',kind:'issue_linked',replied_at:'2026-10-07 09:00:00',unread:true}]}
+const answered={id:4,kind:{key:'bug',label:'Masalah'},message:'Tombol cetak KIR tidak merespons.',page:'inventory',author:'Rina Wulandari',contact:false,status:{key:'planned',label:'Direncanakan'},issue_url:'https://github.com/klarasid/inven/issues/57',can_reply:false,created_at:'2026-10-06 09:00:00',replies:[{message:'Kami tindak lanjuti di issue #57.',kind:'issue_linked',replied_at:'2026-10-07 09:00:00',unread:true,from_sender:false,pending:false}]}
 const data=(more:object={})=>({available:true,feedback:[answered],unread:1,kinds,contact:{name:'Rina Wulandari',email:'rina@example.sch.id'},...more})
 const context=(mutate=vi.fn()):ContextValue=>({config:{write:false,api:'http://localhost/api',watch:'http://localhost/watch'} as ContextValue['config'],options:{} as ContextValue['options'],route:{view:'inventory'},go:vi.fn(),back:vi.fn(),dirty:vi.fn(),refresh:vi.fn(),revision:0,mutate})
 const reply=(body:object)=>({ok:true,headers:{get:()=>'application/json'},json:async()=>body})
@@ -64,4 +64,24 @@ test('before the migration the panel says what to run instead of offering a form
  fireEvent.click(await screen.findByRole('button',{name:'Masukan'}))
  expect(await screen.findByText(/Jalankan migrasi plugin hingga versi 20/)).toBeTruthy()
  expect(screen.queryByRole('button',{name:'Kirim masukan'})).toBeNull()
+})
+
+test('a librarian answers Klaras in the same thread when asked for more detail',async()=>{
+ const asked={...answered,status:{key:'awaiting',label:'Perlu jawaban Anda'},issue_url:null,can_reply:true,replies:[{message:'Di halaman mana tombolnya tidak merespons?',kind:'manual',replied_at:'2026-10-07 09:00:00',unread:false,from_sender:false,pending:false}]}
+ vi.stubGlobal('fetch',vi.fn().mockResolvedValue(reply({ok:true,data:data({feedback:[asked,{...answered,id:3}],unread:0})})))
+ const mutate=vi.fn().mockResolvedValue({ok:true,message:'Balasan terkirim.',data:{...asked,status:{key:'reviewing',label:'Ditinjau'},replies:[...asked.replies,{message:'Di halaman Ruang.',kind:'sender',replied_at:'2026-10-07 10:00:00',unread:false,from_sender:true,pending:false}]}})
+ mount(context(mutate))
+ fireEvent.click(await screen.findByRole('button',{name:'Masukan'}))
+ const panel=await screen.findByRole('dialog',{name:'Masukan untuk Klaras'})
+ fireEvent.mouseDown(within(panel).getByRole('tab',{name:/Riwayat/}))
+ expect(await within(panel).findByText('Perlu jawaban Anda')).toBeTruthy()
+ // Only the thread that still takes answers offers to answer.
+ expect(within(panel).getAllByRole('button',{name:'Balas'})).toHaveLength(1)
+ fireEvent.click(within(panel).getByRole('button',{name:'Balas'}))
+ fireEvent.change(within(panel).getByLabelText('Balasan Anda'),{target:{value:'Di halaman Ruang.'}})
+ fireEvent.click(within(panel).getByRole('button',{name:'Kirim balasan'}))
+ await waitFor(()=>expect(mutate).toHaveBeenCalledWith({watch_action:'feedback_reply',feedback_id:'4',message:'Di halaman Ruang.'}))
+ expect(await within(panel).findByText('Di halaman Ruang.')).toBeTruthy()
+ expect(within(panel).getByText('Ditinjau')).toBeTruthy()
+ expect(within(panel).getByText(/^Anda ·/)).toBeTruthy()
 })

@@ -12,6 +12,11 @@ require_once __DIR__ . '/UpdateCheck.php';
  * Feedback librarians send to Klaras from the Masukan button, and what Klaras answers. Each staff
  * member sees, and is told of replies to, only what they sent.
  *
+ * A thread goes both ways (migration 22): the librarian may answer in it, usually with the detail
+ * Klaras asked for (awaiting_reply). An answer is kept as a reply of kind "sender" and, like
+ * the feedback itself, waits when Klaras cannot be reached. Klaras closes a thread to answers 30
+ * days after it is settled (can_reply).
+ *
  * A piece is kept here first and sent at once; when Klaras cannot be reached it waits and is sent
  * again with the daily usage report (Telemetry::sendIfDue). Each piece carries a token made here,
  * which is what lets this SLiMS, and only this one, read its status and replies back.
@@ -31,6 +36,10 @@ final class Feedback
     public const KINDS = ['bug' => 'Masalah', 'idea' => 'Saran', 'question' => 'Pertanyaan', 'praise' => 'Apresiasi'];
     /** 'pending' is ours: not sent yet. The others are Klaras's. */
     public const STATUSES = ['pending' => 'Menunggu terkirim', 'new' => 'Diterima', 'reviewing' => 'Ditinjau', 'planned' => 'Direncanakan', 'done' => 'Selesai', 'declined' => 'Tidak dilanjutkan'];
+    /** Shown instead of the status while Klaras waits on the librarian; Klaras itself reports "reviewing". */
+    public const AWAITING = 'Perlu jawaban Anda';
+    /** Replies the librarian wrote: sent or waiting ("sender"), or refused because the thread had closed. */
+    private const OWN = ['sender', 'refused'];
     public const CHECKED = 'inventory_feedback_checked';
     public const TRIED = 'inventory_feedback_tried';
     private const RETRY = 3600;
@@ -83,14 +92,103 @@ final class Feedback
     }
 
     /**
-     * Whether there is anything to do after a page: feedback waiting to be sent (tried at most
-     * hourly while Klaras cannot be reached) or replies to ask for (every six hours). Cheap: two
-     * small queries, and never an error before the migration has run.
+     * The librarian answering in their own thread. Kept here and sent at once; it waits, like the
+     * feedback, when Klaras cannot be reached. A thread Klaras has closed refuses the answer.
+     *
+     * @return array<string,mixed> the piece as list() shows it
+     */
+    public static function answer(PDO $db, array $input, int $uid, string $now): array
+    {
+        return self::unicode($db, static function () use ($db, $input, $uid, $now): array {
+            return self::answerNow($db, $input, $uid, $now);
+        });
+    }
+
+    /** @return array<string,mixed> */
+    private static function answerNow(PDO $db, array $input, int $uid, string $now): array
+    {
+        if (!self::threaded($db)) throw new RuntimeException('Jalankan migrasi plugin hingga versi 22 di System → Plugins untuk membalas.');
+        $id = is_scalar($input['feedback_id'] ?? null) ? (int) $input['feedback_id'] : 0;
+        $message = trim(str_replace("\r\n", "\n", is_scalar($input['message'] ?? null) ? (string) $input['message'] : ''));
+        if (mb_strlen($message) < 2) throw new RuntimeException('Tulis balasan Anda.');
+        if (mb_strlen($message) > 5000) throw new RuntimeException('Balasan maksimal 5.000 karakter.');
+        $query = $db->prepare('SELECT * FROM inventory_feedback WHERE id = ? AND user_id = ?');
+        $query->execute([$id, $uid]);
+        $feedback = $query->fetch(PDO::FETCH_ASSOC);
+        if (!$feedback) throw new RuntimeException('Masukan tidak ditemukan.');
+        if ($feedback['panel_id'] === null) throw new RuntimeException('Masukan ini belum terkirim ke Klaras. Balas setelah terkirim.');
+        if ((int) $feedback['can_reply'] !== 1) throw new RuntimeException('Percakapan ini sudah ditutup. Kirim masukan baru bila masih ada kendala.');
+
+        $db->prepare('INSERT INTO inventory_feedback_replies (feedback_id, panel_reply_id, kind, message, replied_at, received_at) VALUES (?, NULL, ?, ?, ?, ?)')
+            ->execute([$id, 'sender', $message, $now, $now]);
+        $reply = ['id' => (int) $db->lastInsertId(), 'message' => $message, 'feedback_id' => $id, 'panel_id' => $feedback['panel_id'], 'token' => $feedback['token']];
+        if (self::sendAnswer($db, $reply, false) === 'closed') {
+            throw new RuntimeException('Percakapan ini sudah ditutup. Kirim masukan baru bila masih ada kendala.');
+        }
+
+        foreach (self::listNow($db, $uid, 50) as $piece) {
+            if ($piece['id'] === $id) return $piece;
+        }
+        throw new RuntimeException('Masukan tidak ditemukan.');
+    }
+
+    /**
+     * Sends one answer. 'sent', 'waiting' when Klaras could not be reached, or 'closed' when Klaras
+     * refused it because the thread has closed: then an answer just written is taken back (the
+     * librarian still has it on screen), and one that had been waiting is kept, marked refused.
+     *
+     * @param array{id:int,message:string,feedback_id:int,panel_id:string,token:string} $reply
+     */
+    private static function sendAnswer(PDO $db, array $reply, bool $waited): string
+    {
+        $answer = self::post(self::endpoint('/replies'), [
+            'install_id' => Telemetry::state($db)['install_id'],
+            'id' => (string) $reply['panel_id'],
+            'token' => (string) $reply['token'],
+            'message' => (string) $reply['message'],
+        ]);
+        if (is_int($answer['data']['id'] ?? null)) {
+            $db->prepare('UPDATE inventory_feedback_replies SET panel_reply_id = ? WHERE id = ?')->execute([$answer['data']['id'], $reply['id']]);
+            $status = (string) ($answer['data']['status'] ?? '');
+            $db->prepare('UPDATE inventory_feedback SET awaiting_reply = 0, status = ? WHERE id = ?')
+                ->execute([isset(self::STATUSES[$status]) && $status !== 'pending' ? $status : 'reviewing', $reply['feedback_id']]);
+            return 'sent';
+        }
+        if (($answer['error']['code'] ?? '') === 'feedback_closed') {
+            $db->prepare('UPDATE inventory_feedback SET can_reply = 0, awaiting_reply = 0 WHERE id = ?')->execute([$reply['feedback_id']]);
+            $db->prepare($waited ? "UPDATE inventory_feedback_replies SET kind = 'refused' WHERE id = ?" : 'DELETE FROM inventory_feedback_replies WHERE id = ?')->execute([$reply['id']]);
+            return 'closed';
+        }
+        return 'waiting';
+    }
+
+    /** Whether migration 22 has run: threads, with answers from the librarian. */
+    private static function threaded(PDO $db): bool
+    {
+        try {
+            $db->query('SELECT can_reply, awaiting_reply FROM inventory_feedback LIMIT 0');
+            return true;
+        } catch (\PDOException $error) {
+            return false;
+        }
+    }
+
+    /** Feedback, or an answer in a thread, still waiting to be sent. */
+    private static function waiting(PDO $db): bool
+    {
+        return (bool) $db->query('SELECT 1 FROM inventory_feedback WHERE panel_id IS NULL LIMIT 1')->fetchColumn()
+            || (bool) $db->query("SELECT 1 FROM inventory_feedback_replies WHERE panel_reply_id IS NULL AND kind = 'sender' LIMIT 1")->fetchColumn();
+    }
+
+    /**
+     * Whether there is anything to do after a page: feedback or answers waiting to be sent (tried
+     * at most hourly while Klaras cannot be reached) or replies to ask for (every six hours). Cheap:
+     * a few small queries, and never an error before the migration has run.
      */
     public static function due(PDO $db): bool
     {
         try {
-            $waiting = (bool) $db->query('SELECT 1 FROM inventory_feedback WHERE panel_id IS NULL LIMIT 1')->fetchColumn();
+            $waiting = self::waiting($db);
             if ($waiting && time() - (int) self::setting($db, self::TRIED) >= self::RETRY) return true;
             $sent = (bool) $db->query('SELECT 1 FROM inventory_feedback WHERE panel_id IS NOT NULL LIMIT 1')->fetchColumn();
             return $sent && time() - (int) self::setting($db, self::CHECKED) >= self::REFRESH;
@@ -103,7 +201,7 @@ final class Feedback
     public static function background(PDO $db): void
     {
         try {
-            if ((bool) $db->query('SELECT 1 FROM inventory_feedback WHERE panel_id IS NULL LIMIT 1')->fetchColumn() && time() - (int) self::setting($db, self::TRIED) >= self::RETRY) {
+            if (self::waiting($db) && time() - (int) self::setting($db, self::TRIED) >= self::RETRY) {
                 self::store($db, self::TRIED, (string) time());
                 self::flush($db);
             }
@@ -112,7 +210,7 @@ final class Feedback
         }
     }
 
-    /** Sends what is still waiting, a few at a time. @return int how many were sent */
+    /** Sends what is still waiting, feedback and then answers, a few at a time. @return int how many were sent */
     public static function flush(PDO $db): int
     {
         return self::unicode($db, static function () use ($db): int { return self::flushNow($db); });
@@ -124,6 +222,15 @@ final class Feedback
         $waiting = $db->query("SELECT * FROM inventory_feedback WHERE panel_id IS NULL ORDER BY id LIMIT " . self::MAX_FLUSH)->fetchAll(PDO::FETCH_ASSOC);
         foreach ($waiting as $row) {
             if (self::send($db, $row, date('Y-m-d H:i:s'))) $sent++;
+        }
+        if (!self::threaded($db)) return $sent;
+        // Answers in threads whose feedback has reached Klaras, oldest first, so they arrive in order.
+        $answers = $db->query("SELECT r.id, r.message, f.id AS feedback_id, f.panel_id, f.token FROM inventory_feedback_replies r JOIN inventory_feedback f ON f.id = r.feedback_id WHERE r.panel_reply_id IS NULL AND r.kind = 'sender' AND f.panel_id IS NOT NULL ORDER BY r.id LIMIT " . self::MAX_FLUSH)->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($answers as $answer) {
+            $result = self::sendAnswer($db, ['id' => (int) $answer['id'], 'message' => (string) $answer['message'], 'feedback_id' => (int) $answer['feedback_id'], 'panel_id' => (string) $answer['panel_id'], 'token' => (string) $answer['token']], true);
+            if ($result === 'sent') $sent++;
+            // Klaras still cannot be reached: the rest would wait too.
+            if ($result === 'waiting') break;
         }
         return $sent;
     }
@@ -153,7 +260,10 @@ final class Feedback
 
         $ids = array_column($rows, 'id', 'panel_id');
         $now = date('Y-m-d H:i:s');
-        $status = $db->prepare('UPDATE inventory_feedback SET status = ?, issue_url = ? WHERE id = ?');
+        $threaded = self::threaded($db);
+        $status = $db->prepare($threaded
+            ? 'UPDATE inventory_feedback SET status = ?, issue_url = ?, awaiting_reply = ?, can_reply = ? WHERE id = ?'
+            : 'UPDATE inventory_feedback SET status = ?, issue_url = ? WHERE id = ?');
         // Checked, then added: a reply is kept once, and the SQL stays plain enough for the tests' SQLite.
         $known = $db->prepare('SELECT 1 FROM inventory_feedback_replies WHERE feedback_id = ? AND panel_reply_id = ?');
         $reply = $db->prepare('INSERT INTO inventory_feedback_replies (feedback_id, panel_reply_id, kind, message, replied_at, received_at) VALUES (?, ?, ?, ?, ?, ?)');
@@ -161,7 +271,9 @@ final class Feedback
             $id = $ids[(string) ($piece['id'] ?? '')] ?? null;
             if ($id === null || !isset(self::STATUSES[(string) ($piece['status'] ?? '')])) continue;
             $url = is_string($piece['issue_url'] ?? null) && preg_match('#\Ahttps://github\.com/[\w.-]+/[\w.-]+/issues/\d+\z#', $piece['issue_url']) ? $piece['issue_url'] : null;
-            $status->execute([(string) $piece['status'], $url, $id]);
+            $status->execute($threaded
+                ? [(string) $piece['status'], $url, empty($piece['awaiting_reply']) ? 0 : 1, ($piece['can_reply'] ?? true) === false ? 0 : 1, $id]
+                : [(string) $piece['status'], $url, $id]);
             foreach (is_array($piece['replies'] ?? null) ? $piece['replies'] : [] as $answered) {
                 if (!is_array($answered) || !is_int($answered['id'] ?? null) || !is_string($answered['message'] ?? null)) continue;
                 $known->execute([$id, $answered['id']]);
@@ -198,6 +310,7 @@ final class Feedback
         return array_map(static function (array $row) use ($replies): array {
             $own = $replies[(int) $row['id']] ?? [];
             $seen = (string) ($row['seen_at'] ?? '');
+            $awaiting = !empty($row['awaiting_reply']) && !in_array($row['status'], ['done', 'declined'], true);
             return [
                 'id' => (int) $row['id'],
                 'kind' => ['key' => (string) $row['kind'], 'label' => self::KINDS[$row['kind']] ?? (string) $row['kind']],
@@ -205,20 +318,30 @@ final class Feedback
                 'page' => (string) $row['page'],
                 'author' => (string) ($row['realname'] ?? ''),
                 'contact' => (bool) $row['contact'],
-                'status' => ['key' => (string) $row['status'], 'label' => self::STATUSES[$row['status']] ?? (string) $row['status']],
+                'status' => $awaiting ? ['key' => 'awaiting', 'label' => self::AWAITING] : ['key' => (string) $row['status'], 'label' => self::STATUSES[$row['status']] ?? (string) $row['status']],
+                // Before migration 22 there is no can_reply column, and so no answering.
+                'can_reply' => $row['panel_id'] !== null && (int) ($row['can_reply'] ?? 0) === 1,
                 'issue_url' => $row['issue_url'] === null ? null : (string) $row['issue_url'],
                 'created_at' => (string) $row['created_at'],
                 'replies' => array_map(static function (array $reply) use ($seen): array {
-                    return ['message' => (string) $reply['message'], 'kind' => (string) $reply['kind'], 'replied_at' => (string) $reply['replied_at'], 'unread' => $seen === '' || (string) $reply['received_at'] > $seen];
+                    $mine = in_array((string) $reply['kind'], self::OWN, true);
+                    return [
+                        'message' => (string) $reply['message'],
+                        'kind' => (string) $reply['kind'],
+                        'replied_at' => (string) $reply['replied_at'],
+                        'from_sender' => $mine,
+                        'pending' => $reply['kind'] === 'sender' && $reply['panel_reply_id'] === null,
+                        'unread' => !$mine && ($seen === '' || (string) $reply['received_at'] > $seen),
+                    ];
                 }, $own),
             ];
         }, $rows);
     }
 
-    /** Replies to what the staff member $uid sent that they have not opened their history to read. */
+    /** Klaras's replies to what the staff member $uid sent that they have not opened their history to read. */
     public static function unread(PDO $db, int $uid): int
     {
-        $query = $db->prepare('SELECT COUNT(*) FROM inventory_feedback_replies r JOIN inventory_feedback f ON f.id = r.feedback_id WHERE f.user_id = ? AND (f.seen_at IS NULL OR r.received_at > f.seen_at)');
+        $query = $db->prepare("SELECT COUNT(*) FROM inventory_feedback_replies r JOIN inventory_feedback f ON f.id = r.feedback_id WHERE f.user_id = ? AND r.kind NOT IN ('sender', 'refused') AND (f.seen_at IS NULL OR r.received_at > f.seen_at)");
         $query->execute([$uid]);
         return (int) $query->fetchColumn();
     }
@@ -288,7 +411,10 @@ final class Feedback
         return $query->fetch(PDO::FETCH_ASSOC) ?: [];
     }
 
-    /** @return array<string,mixed>|null the decoded answer of a 2xx, null otherwise */
+    /**
+     * @return array<string,mixed>|null the decoded answer of a 2xx, or of a 4xx refusal Klaras explains
+     *                                  ({"error": {"code", "message"}}); null when Klaras could not be reached
+     */
     private static function post(string $url, array $payload): ?array
     {
         if (is_callable(self::$transport)) return call_user_func(self::$transport, $url, $payload);
@@ -306,9 +432,10 @@ final class Feedback
         $body = curl_exec($curl);
         $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
         curl_close($curl);
-        if ($status < 200 || $status >= 300 || !is_string($body)) return null;
-        $decoded = json_decode($body, true);
-        return is_array($decoded) ? $decoded : null;
+        $decoded = is_string($body) ? json_decode($body, true) : null;
+        if (!is_array($decoded)) return null;
+        if ($status >= 200 && $status < 300) return $decoded;
+        return $status >= 400 && $status < 500 && is_array($decoded['error'] ?? null) ? $decoded : null;
     }
 
     /**

@@ -29,7 +29,7 @@ function watch_log(string $action,string $message): void {
 }
 $isPost=$_SERVER['REQUEST_METHOD']==='POST';
 // Feedback to Klaras is open to every staff member who can open the plugin, readers too; it changes no inventory data.
-$isFeedback=$isPost && in_array((string)($_POST['watch_action']??''),['feedback_submit','feedback_seen'],true);
+$isFeedback=$isPost && in_array((string)($_POST['watch_action']??''),['feedback_submit','feedback_reply','feedback_seen'],true);
 if (!$canRead || ($isPost && !$canWrite && !$isFeedback)) {
     http_response_code(403); watch_log('Denied','Akses pengawasan ditolak.');
     if ($isPost) { header('Content-Type: application/json; charset=utf-8'); header('X-Content-Type-Options: nosniff'); echo json_encode(['ok'=>false,'message'=>'Anda tidak memiliki hak akses pengawasan.']); }
@@ -58,6 +58,12 @@ try {
             if ($action==='feedback_seen') {
                 \SLiMS\Plugins\Inventory\Feedback::markSeen($db,(int)($_SESSION['uid']??0),date('Y-m-d H:i:s'));
                 echo json_encode(['ok'=>true]); return;
+            }
+            if ($action==='feedback_reply') {
+                $piece=\SLiMS\Plugins\Inventory\Feedback::answer($db,$_POST,(int)($_SESSION['uid']??0),date('Y-m-d H:i:s'));
+                watch_log('Update','Balasan pada masukan #'.$piece['id'].' untuk Klaras disimpan.');
+                $waiting=(bool)array_filter($piece['replies'],static function(array $reply): bool { return $reply['pending']; });
+                echo json_encode(\SLiMS\Plugins\Inventory\WorkspaceRequests::remember('watch',['ok'=>true,'message'=>$waiting?'Balasan tersimpan dan akan dikirim saat Klaras dapat dihubungi.':'Balasan terkirim.','data'=>$piece])); return;
             }
             $piece=\SLiMS\Plugins\Inventory\Feedback::submit($db,$_POST,(int)($_SESSION['uid']??0),date('Y-m-d H:i:s'));
             watch_log('Update','Masukan #'.$piece['id'].' untuk Klaras disimpan.');
