@@ -103,8 +103,8 @@ test('a problem is told in three parts, with a screenshot chosen or pasted',asyn
  fireEvent.change(within(panel).getByLabelText('Apa yang terjadi?'),{target:{value:'Halaman kosong.'}})
  const screenshot=new File(['png'],'layar.png',{type:'image/png'})
  fireEvent.change(within(panel).getByLabelText('Pilih tangkapan layar'),{target:{files:[screenshot,new File(['pdf'],'catatan.pdf',{type:'application/pdf'})]}})
- expect(within(panel).getByText('Lampirkan gambar PNG, JPG, atau WebP, paling besar 5 MB.')).toBeTruthy()
- expect(within(panel).getByRole('button',{name:'Hapus layar.png'})).toBeTruthy()
+ expect(await within(panel).findByText('Lampirkan gambar PNG, JPG, atau WebP.')).toBeTruthy()
+ expect(await within(panel).findByRole('button',{name:'Hapus layar.png'})).toBeTruthy()
  fireEvent.click(send)
  await waitFor(()=>expect(mutate).toHaveBeenCalledTimes(1))
  const [values,files]=mutate.mock.calls[0]

@@ -54,7 +54,8 @@ final class Feedback
     private const MAX_FLUSH = 5;
     private const MAX_STATUS = 50;
     public const MAX_SCREENSHOTS = 3;
-    public const MAX_SCREENSHOT_BYTES = 5242880;
+    /** The browser shrinks screenshots to this before sending them (frontend/src/screenshot.ts). */
+    public const MAX_SCREENSHOT_BYTES = 512000;
     /** What a screenshot may be, by its contents, and the extension it is kept under. */
     private const SCREENSHOT_TYPES = ['image/png' => 'png', 'image/jpeg' => 'jpg', 'image/webp' => 'webp'];
     /** One part of a problem, at most, as Klaras Panel has it (ProblemReport::MAX_PART). */
@@ -148,7 +149,7 @@ final class Feedback
         $checked = [];
         foreach ($screenshots as $screenshot) {
             $bytes = (string) ($screenshot['bytes'] ?? '');
-            if (strlen($bytes) > self::MAX_SCREENSHOT_BYTES) throw new RuntimeException('Tiap tangkapan layar paling besar 5 MB.');
+            if (strlen($bytes) > self::MAX_SCREENSHOT_BYTES) throw new RuntimeException('Tiap tangkapan layar paling besar 500 KB.');
             $mime = (string) (new \finfo(FILEINFO_MIME_TYPE))->buffer($bytes);
             if (!isset(self::SCREENSHOT_TYPES[$mime]) || @getimagesizefromstring($bytes) === false) throw new RuntimeException('Lampirkan gambar PNG, JPG, atau WebP.');
             $name = mb_substr(trim(basename(str_replace('\\', '/', (string) ($screenshot['name'] ?? '')))), 0, 200);
@@ -169,10 +170,10 @@ final class Feedback
         foreach (array_keys($names) as $n) {
             $error = (int) ($files['error'][$n] ?? UPLOAD_ERR_NO_FILE);
             if ($error === UPLOAD_ERR_NO_FILE) continue;
-            if ($error === UPLOAD_ERR_INI_SIZE || $error === UPLOAD_ERR_FORM_SIZE) throw new RuntimeException('Tiap tangkapan layar paling besar 5 MB.');
+            if ($error === UPLOAD_ERR_INI_SIZE || $error === UPLOAD_ERR_FORM_SIZE) throw new RuntimeException('Tiap tangkapan layar paling besar 500 KB.');
             $path = $files['tmp_name'][$n] ?? null;
             if ($error !== UPLOAD_ERR_OK || !is_string($path) || !is_uploaded_file($path)) throw new RuntimeException('Tangkapan layar tidak terunggah. Coba lagi.');
-            if ((int) filesize($path) > self::MAX_SCREENSHOT_BYTES) throw new RuntimeException('Tiap tangkapan layar paling besar 5 MB.');
+            if ((int) filesize($path) > self::MAX_SCREENSHOT_BYTES) throw new RuntimeException('Tiap tangkapan layar paling besar 500 KB.');
             $taken[] = ['bytes' => (string) file_get_contents($path), 'name' => (string) $names[$n]];
         }
         return $taken;

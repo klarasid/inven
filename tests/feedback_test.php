@@ -168,6 +168,8 @@ $db->exec("CREATE TABLE inventory_feedback_attachments (id INTEGER PRIMARY KEY, 
 $count = (int) $db->query('SELECT COUNT(*) FROM inventory_feedback')->fetchColumn();
 rejects(static function () use ($db): void { Feedback::submit($db, ['kind' => 'question', 'message' => 'Kenapa tombol ini abu-abu?'], 7, '2026-10-07 13:00:00', [['bytes' => '%PDF-1.4 bukan gambar', 'name' => 'catatan.pdf']]); }, 'berkas yang bukan gambar ditolak', 'PNG, JPG, atau WebP');
 rejects(static function () use ($db, $png): void { Feedback::submit($db, ['kind' => 'question', 'message' => 'Kenapa tombol ini abu-abu?'], 7, '2026-10-07 13:00:00', array_fill(0, 4, ['bytes' => $png(), 'name' => 'layar.png'])); }, 'lebih dari tiga tangkapan layar ditolak', 'paling banyak 3');
+$noise = static function (): string { $image = imagecreatetruecolor(600, 400); for ($y = 0; $y < 400; $y++) for ($x = 0; $x < 600; $x++) imagesetpixel($image, $x, $y, random_int(0, 0xFFFFFF)); ob_start(); imagepng($image); return (string) ob_get_clean(); };
+rejects(static function () use ($db, $noise): void { Feedback::submit($db, ['kind' => 'question', 'message' => 'Kenapa tombol ini abu-abu?'], 7, '2026-10-07 13:00:00', [['bytes' => $noise(), 'name' => 'besar.png']]); }, 'tangkapan layar di atas 500 KB ditolak; browser mengecilkannya lebih dulu', '500 KB');
 check((int) $db->query('SELECT COUNT(*) FROM inventory_feedback')->fetchColumn() === $count, 'masukan dengan lampiran yang ditolak tidak tersimpan');
 
 $withScreenshot = Feedback::submit($db, ['kind' => 'question', 'message' => 'Kenapa tombol ini abu-abu?'], 7, '2026-10-07 13:00:00', [['bytes' => $png(), 'name' => '../layar.png']]);

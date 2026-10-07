@@ -4,7 +4,7 @@ import { ExternalLink, ImagePlus, Info, MessageSquareText, Paperclip, X } from "
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
 import { Checkbox } from "./components/ui/checkbox";
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "./components/ui/field";
+import { Field, FieldError, FieldGroup, FieldLabel } from "./components/ui/field";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "./components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { Textarea } from "./components/ui/textarea";
@@ -12,6 +12,7 @@ import { ToggleGroup, ToggleGroupItem } from "./components/ui/toggle-group";
 import { useWorkspace } from "./context";
 import { dateLabel, read } from "./api";
 import { ErrorBox } from "./shared";
+import { SCREENSHOT_MAX_INPUT_BYTES, SCREENSHOT_TARGET_BYTES, SCREENSHOT_TYPES, shrinkScreenshot } from "./screenshot";
 
 type Piece = {
   id: number;
@@ -63,8 +64,6 @@ const MIN = 10;
 const MAX = 5000;
 /** One part of a problem report, as Klaras Panel takes it. */
 const PART_MAX = 1500;
-const SCREENSHOT_MAX_BYTES = 5 * 1024 * 1024;
-const SCREENSHOT_TYPES = ["image/png", "image/jpeg", "image/webp"];
 const SCREENSHOT_STATES: Record<string, string> = { pending: "menunggu terkirim", sent: "terkirim", refused: "tidak terkirim" };
 
 /**
@@ -163,7 +162,7 @@ function FeedbackForm({ data, onSent }: { data: FeedbackData; onSent: (piece: Pi
   const [message, setMessage] = useState("");
   // A problem in three parts: what was done, what happened, what should have happened.
   const [parts, setParts] = useState({ did: "", happened: "", expected: "" });
-  const [screenshots, setScreenshots] = useState<File[]>([]);
+  const screenshots = useScreenshots(data.screenshots);
   const [contact, setContact] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -181,13 +180,13 @@ function FeedbackForm({ data, onSent }: { data: FeedbackData; onSent: (piece: Pi
     setError("");
     try {
       const files = new FormData();
-      screenshots.forEach((file) => files.append("screenshots[]", file, file.name));
+      screenshots.files.forEach((file) => files.append("screenshots[]", file, file.name));
       const text = problem ? parts : { message };
-      const reply = (await w.mutate({ watch_action: "feedback_submit", kind, ...text, page: w.route.view, contact: contact ? "1" : "" }, screenshots.length ? files : undefined)) as { message?: string; data?: Piece };
+      const reply = (await w.mutate({ watch_action: "feedback_submit", kind, ...text, page: w.route.view, contact: contact ? "1" : "" }, screenshots.files.length ? files : undefined)) as { message?: string; data?: Piece };
       toast.success(reply.message || "Masukan terkirim. Terima kasih.");
       setMessage("");
       setParts({ did: "", happened: "", expected: "" });
-      setScreenshots([]);
+      screenshots.clear();
       if (reply.data) onSent(reply.data);
     } catch (e) {
       setError((e as Error).message);
@@ -210,7 +209,7 @@ function FeedbackForm({ data, onSent }: { data: FeedbackData; onSent: (piece: Pi
         const pasted = Array.from(e.clipboardData.files).filter((file) => SCREENSHOT_TYPES.includes(file.type));
         if (data.screenshots > 0 && pasted.length > 0) {
           e.preventDefault();
-          setScreenshots((current) => [...current, ...pasted].slice(0, data.screenshots));
+          void screenshots.add(pasted);
         }
       }}
     >
@@ -249,8 +248,7 @@ function FeedbackForm({ data, onSent }: { data: FeedbackData; onSent: (piece: Pi
             {tooShort && <FieldError>Paling sedikit {MIN} karakter.</FieldError>}
           </Field>
         )}
-        {data.screenshots > 0 && <ScreenshotPicker files={screenshots} max={data.screenshots} onChange={setScreenshots} />}
-        <p className="text-xs text-muted-foreground">Jangan sertakan kata sandi atau data pribadi anggota.</p>
+        {data.screenshots > 0 && <ScreenshotPicker screenshots={screenshots} />}
         {/* relative: the hint spans this row, so it never reaches past the panel's edge. */}
         <Field orientation="horizontal" className="relative items-center gap-2">
           <Checkbox id={contactId} checked={contact} onCheckedChange={(checked) => setContact(checked === true)} />
@@ -263,13 +261,13 @@ function FeedbackForm({ data, onSent }: { data: FeedbackData; onSent: (piece: Pi
               : `Nama Anda ikut terkirim: ${data.contact.name || "nama petugas"}. Email Anda belum diisi di SLiMS.`}
           </Hint>
         </Field>
-        <p className="text-xs text-muted-foreground">
-          Ikut terkirim: nama dan alamat perpustakaan, halaman yang sedang dibuka, serta versi Klaras Inven, SLiMS, dan PHP. Untuk masalah mendesak, hubungi tim dukungan Klaras secara langsung.
-        </p>
-        <div>
-          <Button onClick={send} disabled={busy || !ready}>
+        <div className="relative flex items-center gap-2">
+          <Button onClick={send} disabled={busy || !ready || screenshots.shrinking}>
             {busy ? "Mengirim…" : "Kirim masukan"}
           </Button>
+          <Hint label="Apa yang ikut terkirim">
+            Ikut terkirim: nama dan alamat perpustakaan, halaman yang sedang dibuka, serta versi Klaras Inven, SLiMS, dan PHP. Jangan sertakan kata sandi atau data pribadi anggota. Untuk masalah mendesak, hubungi tim dukungan Klaras secara langsung.
+          </Hint>
         </div>
       </FieldGroup>
     </fieldset>
@@ -311,30 +309,68 @@ function PartField({ label, placeholder, value, onChange }: { label: string; pla
   );
 }
 
-/** A few screenshots, chosen or pasted, previewed before they are sent and each removable. */
-function ScreenshotPicker({ files, max, onChange }: { files: File[]; max: number; onChange: (files: File[]) => void }) {
-  const input = useRef<HTMLInputElement>(null);
+/**
+ * Up to $max screenshots, chosen or pasted: each shrunk to at most 500 KB before it is kept
+ * (shrinkScreenshot), and any that cannot be refused with the reason.
+ */
+function useScreenshots(max: number) {
+  const [files, setFiles] = useState<File[]>([]);
   const [refusal, setRefusal] = useState("");
+  const [shrinking, setShrinking] = useState(false);
+
+  async function add(chosen: File[]) {
+    const images = chosen.filter((file) => SCREENSHOT_TYPES.includes(file.type) && file.size <= SCREENSHOT_MAX_INPUT_BYTES);
+    setShrinking(true);
+    const shrunk = await Promise.all(images.map(shrinkScreenshot));
+    setShrinking(false);
+    const fitting = shrunk.filter((file) => file.size <= SCREENSHOT_TARGET_BYTES);
+    setRefusal(
+      images.length < chosen.length
+        ? "Lampirkan gambar PNG, JPG, atau WebP."
+        : fitting.length < images.length
+          ? "Gambar ini tidak dapat dikecilkan hingga 500 KB. Potong bagian yang perlu saja."
+          : files.length + fitting.length > max
+            ? `Lampirkan paling banyak ${max} tangkapan layar.`
+            : "",
+    );
+    setFiles((current) => [...current, ...fitting].slice(0, max));
+  }
+
+  return {
+    files,
+    refusal,
+    shrinking,
+    max,
+    add,
+    remove: (index: number) => setFiles((current) => current.filter((_, n) => n !== index)),
+    clear: () => {
+      setFiles([]);
+      setRefusal("");
+    },
+  };
+}
+
+/** The screenshots of a piece, previewed before they are sent and each removable. */
+function ScreenshotPicker({ screenshots }: { screenshots: ReturnType<typeof useScreenshots> }) {
+  const { files, max } = screenshots;
+  const input = useRef<HTMLInputElement>(null);
   const previews = useMemo(() => files.map((file) => URL.createObjectURL(file)), [files]);
   useEffect(() => () => previews.forEach((url) => URL.revokeObjectURL(url)), [previews]);
 
-  function add(chosen: File[]) {
-    const fitting = chosen.filter((file) => SCREENSHOT_TYPES.includes(file.type) && file.size <= SCREENSHOT_MAX_BYTES);
-    setRefusal(
-      fitting.length < chosen.length ? "Lampirkan gambar PNG, JPG, atau WebP, paling besar 5 MB." : files.length + fitting.length > max ? `Lampirkan paling banyak ${max} tangkapan layar.` : "",
-    );
-    onChange([...files, ...fitting].slice(0, max));
-  }
-
   return (
     <Field>
-      <FieldLabel>Tangkapan layar (opsional)</FieldLabel>
+      <div className="relative flex items-center gap-1">
+        <FieldLabel>Tangkapan layar (opsional)</FieldLabel>
+        <Hint label="Tentang tangkapan layar">
+          Paling banyak {max} gambar. Gambar besar dikecilkan otomatis hingga 500 KB. Anda juga bisa menempelkannya (Ctrl+V). Tutupi data anggota yang tidak perlu terlihat.
+        </Hint>
+      </div>
       {files.length > 0 && (
         <ul className="grid grid-cols-3 gap-2">
           {files.map((file, n) => (
             <li key={previews[n]} className="relative overflow-hidden rounded-lg border">
               <img src={previews[n]} alt={file.name} className="aspect-video w-full object-cover" />
-              <Button type="button" size="icon" variant="secondary" className="absolute top-1 right-1 size-6" aria-label={`Hapus ${file.name}`} onClick={() => onChange(files.filter((_, other) => other !== n))}>
+              <Button type="button" size="icon" variant="secondary" className="absolute top-1 right-1 size-6" aria-label={`Hapus ${file.name}`} onClick={() => screenshots.remove(n)}>
                 <X className="size-3.5" />
               </Button>
             </li>
@@ -349,23 +385,19 @@ function ScreenshotPicker({ files, max, onChange }: { files: File[]; max: number
         hidden
         aria-label="Pilih tangkapan layar"
         onChange={(e) => {
-          add(Array.from(e.target.files ?? []));
+          void screenshots.add(Array.from(e.target.files ?? []));
           e.target.value = "";
         }}
       />
       {files.length < max && (
         <div>
-          <Button type="button" size="sm" variant="outline" onClick={() => input.current?.click()}>
+          <Button type="button" size="sm" variant="outline" disabled={screenshots.shrinking} onClick={() => input.current?.click()}>
             <ImagePlus data-icon="inline-start" />
-            Tambah tangkapan layar
+            {screenshots.shrinking ? "Mengecilkan gambar…" : "Tambah tangkapan layar"}
           </Button>
         </div>
       )}
-      {refusal ? (
-        <FieldError>{refusal}</FieldError>
-      ) : (
-        <FieldDescription>Paling banyak {max} gambar, masing-masing 5 MB. Anda juga bisa menempelkannya (Ctrl+V). Tutupi data anggota yang tidak perlu terlihat.</FieldDescription>
-      )}
+      {screenshots.refusal && <FieldError>{screenshots.refusal}</FieldError>}
     </Field>
   );
 }
