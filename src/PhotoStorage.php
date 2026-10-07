@@ -12,6 +12,12 @@ final class PhotoStorage
         $this->directory = $directory ?? SB . 'images/inventaris-barang';
     }
 
+    /** The folder of that name inside this one, as the supervision photos are in pengawasan/. */
+    public function folder(string $name): self
+    {
+        return new self($this->directory . '/' . $name);
+    }
+
     /**
      * Makes a folder of uploads private: created for the web-server user alone, with rules that
      * deny browsers. Folders under the photo folder call this too, rather than count on the photo

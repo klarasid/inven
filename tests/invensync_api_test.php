@@ -88,7 +88,7 @@ try {
     $db->exec('CREATE TABLE item (item_id INT PRIMARY KEY, item_code VARCHAR(20), item_status_id CHAR(3) NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     $db->exec('CREATE TABLE slims_connect_rate_limits (rate_key CHAR(64) PRIMARY KEY, attempts INT, window_started_at DATETIME, blocked_until DATETIME NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     $db->exec('CREATE TABLE slims_connect_settings (name VARCHAR(64) PRIMARY KEY, value TEXT, updated_at DATETIME) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
-    foreach (['CreateInventoryTables', 'AddSlimsLocationToInventoryLocations', 'CreateInventoryItemPhotos', 'MoveInventoryPhotosToFiles', 'AllowSharedInventoryLocationCodes', 'CreateInventoryItemCodes', 'CreateInventorySupervision', 'CreateInvensyncApi', 'AddFacilityProfileData', 'AllowSeveralItemCategories', 'CreateRoomAreasAndPlans', 'AllowAgentConnections', 'MapMembersToLocations', 'CreateNetworkDocuments', 'CreateSoftwareFiles', 'RenameNetworkDocumentsToSupportDocuments', 'MoveBandwidthEvidenceToSupportDocuments', 'CreateAreaPhotos', 'CreateFeedback'] as $migration) (new $migration())->up();
+    foreach (['CreateInventoryTables', 'AddSlimsLocationToInventoryLocations', 'CreateInventoryItemPhotos', 'MoveInventoryPhotosToFiles', 'AllowSharedInventoryLocationCodes', 'CreateInventoryItemCodes', 'CreateInventorySupervision', 'CreateInvensyncApi', 'AddFacilityProfileData', 'AllowSeveralItemCategories', 'CreateRoomAreasAndPlans', 'AllowAgentConnections', 'MapMembersToLocations', 'CreateNetworkDocuments', 'CreateSoftwareFiles', 'RenameNetworkDocumentsToSupportDocuments', 'MoveBandwidthEvidenceToSupportDocuments', 'CreateAreaPhotos', 'CreateFeedback', 'MoveSupervisionPhotosFromItemFolder'] as $migration) (new $migration())->up();
     (new CreateInvensyncApi())->up();
     check(true, 'migration 8 is repeatable');
 
@@ -238,6 +238,21 @@ try {
     check(($history[0]['title'] ?? '') === 'Pemeriksaan rutin • Perlu tindakan', 'the item shows the check in its history');
 
     $findingId = $saved['body']['data']['results'][0]['finding']['id'];
+    // A photo taken on the supervision pages, where they keep theirs.
+    $webPhoto = (new PhotoStorage($photos . '/pengawasan'))->write("\xFF\xD8 bukti");
+    $db->prepare('INSERT INTO inventory_watch_photos (inspection_id, result_id, filename, created_at) VALUES (?, ?, ?, NOW())')->execute([$id, $first, $webPhoto]);
+    $evidence = call('GET', 'TaskController@inspection', params: ['id' => $id], headers: bearer($token))['body']['data']['results'][0]['photo_ids'];
+    $shown = call('GET', 'TaskController@inspectionPhoto', params: ['id' => $id, 'photo' => $evidence[0] ?? 0], headers: bearer($token))['body'];
+    check($shown instanceof \SLiMS\Plugins\Inventory\Api\BytesResponse && $shown->bytes === "\xFF\xD8 bukti", 'a finding photo taken on the supervision pages opens in the app');
+    // One the app stored with the item photos before the supervision folder was used.
+    $itemFolder = new PhotoStorage(SB . 'images/inventaris-barang');
+    $strayPhoto = $itemFolder->write("\xFF\xD8 dari aplikasi");
+    $db->prepare('INSERT INTO inventory_watch_photos (inspection_id, result_id, filename, created_at) VALUES (?, ?, ?, NOW())')->execute([$id, $first, $strayPhoto]);
+    (new MoveSupervisionPhotosFromItemFolder())->up();
+    check($itemFolder->read($strayPhoto) === null && $itemFolder->folder('pengawasan')->read($strayPhoto) === "\xFF\xD8 dari aplikasi", 'a photo the app put with the items moves to the supervision folder');
+    (new MoveSupervisionPhotosFromItemFolder())->up();
+    check($itemFolder->folder('pengawasan')->read($strayPhoto) === "\xFF\xD8 dari aplikasi", 'and moving again changes nothing');
+    $db->prepare('DELETE FROM inventory_watch_photos WHERE filename IN (?, ?)')->execute([$webPhoto, $strayPhoto]);
     $draft = call('POST', 'TaskController@finding', ['version' => 1, 'mode' => 'draft', 'kind' => 'repair', 'description' => 'Power supply diganti'], ['id' => $findingId], bearer($dimas ?? login('dimas', 'rahasia')['body']['data']['access_token']));
     $work = $draft['body']['data']['inspection']['results'][0]['finding']['work'] ?? null;
     check(($work['description'] ?? '') === 'Power supply diganti' && $work['submitted'] === false, 'a saved draft of the work comes back with the finding');

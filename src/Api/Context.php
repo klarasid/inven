@@ -38,7 +38,8 @@ final class Context
 
     public function watch(): Supervision
     {
-        return $this->watch ??= new Supervision($this->db, $this->storage);
+        // Where the supervision pages keep inspection and finding photos, not with the items'.
+        return $this->watch ??= new Supervision($this->db, $this->storage->folder('pengawasan'));
     }
 
     public function documents(): Documents
