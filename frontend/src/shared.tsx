@@ -926,7 +926,7 @@ export function StatCard({
       type="button"
       aria-pressed={active}
       onClick={onClick}
-      className={cn(base, "cursor-pointer transition-colors hover:bg-muted/50", active && "ring-2 ring-ring")}
+      className={cn(base, "cursor-pointer transition-colors hover:bg-muted/50", active && "border-primary ring-2 ring-primary")}
     >
       {body}
     </button>

@@ -69,11 +69,14 @@ import type { Document, Result, Page, TaskRow, Photo, Options, Counts, Route } f
 
 const tasksCrumb = { label: "Tugas", route: { view: "tasks" } as Route };
 
+// Solid, so the choice shows on any screen; a pale tint could not be told from the rest. The text
+// is whichever of white or near-black reads on the colour, in each mode. "Tidak berlaku" keeps the
+// toggle's own selected look.
 const outcomeTone: Record<string, string> = {
-  good: "data-[state=on]:bg-success/15 data-[state=on]:text-success data-[state=on]:border-success/40",
-  action: "data-[state=on]:bg-destructive/10 data-[state=on]:text-destructive data-[state=on]:border-destructive/40",
-  unchecked: "data-[state=on]:bg-warning/15 data-[state=on]:text-warning data-[state=on]:border-warning/40",
-  na: "data-[state=on]:bg-muted data-[state=on]:text-foreground",
+  good: "data-[state=on]:bg-success data-[state=on]:text-white data-[state=on]:border-success data-[state=on]:hover:bg-success/90 data-[state=on]:hover:text-white dark:data-[state=on]:text-neutral-950 dark:data-[state=on]:hover:text-neutral-950",
+  action: "data-[state=on]:bg-destructive data-[state=on]:text-white data-[state=on]:border-destructive data-[state=on]:hover:bg-destructive/90 data-[state=on]:hover:text-white dark:data-[state=on]:text-neutral-950 dark:data-[state=on]:hover:text-neutral-950",
+  unchecked: "data-[state=on]:bg-warning data-[state=on]:text-neutral-950 data-[state=on]:border-warning data-[state=on]:hover:bg-warning/90 data-[state=on]:hover:text-neutral-950",
+  na: "",
 };
 const outcomeBadge: Record<string, "success" | "destructive" | "warning" | "secondary"> = {
   good: "success",
