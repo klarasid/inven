@@ -213,6 +213,12 @@ try {
     check($stale['code'] === 'stale_version' && $stale['details']['item']['condition'] === 'KB', 'an edit made on an old copy is refused with the current one');
     $updated = call('PATCH', 'ItemController@update', ['condition' => 'RB', 'updated_at' => '2026-09-01 10:00:00'], ['id' => 17], bearer($token));
     check($updated['body']['data']['item']['condition'] === 'RB' && $updated['body']['data']['item']['brand'] === 'Lenovo M70', 'an edit changes only the fields sent');
+    $categorised = call('PATCH', 'ItemController@update', ['categories' => ['multimedia', 'komputer'], 'type' => 'Kiosk OPAC'], ['id' => 17], bearer($token))['body']['data']['item'];
+    check(array_column($categorised['categories'], 'code') === ['komputer', 'multimedia'] && $categorised['type'] === 'Kiosk OPAC' && $categorised['condition'] === 'RB', 'an item takes several categories and a type, and keeps the rest');
+    $echoed = call('PATCH', 'ItemController@update', ['categories' => $categorised['categories'], 'notes' => 'Dicek'], ['id' => 17], bearer($token))['body']['data']['item'];
+    check(array_column($echoed['categories'], 'code') === ['komputer', 'multimedia'], 'categories sent back as they were presented are kept');
+    check(call('PATCH', 'ItemController@update', ['categories' => ['mebel']], ['id' => 17], bearer($token))['code'] === 'rejected', 'an unknown category is refused');
+    check(call('PATCH', 'ItemController@update', ['categories' => []], ['id' => 17], bearer($token))['body']['data']['item']['categories'] === [], 'an empty list leaves the item uncategorised');
 
     $link = 'https://perpus.example.id/index.php?' . \SLiMS\Plugins\Inventory\PublicLink::query($db, 18);
     check(call('GET', 'ItemController@lookup', headers: bearer($token), query: ['qr' => $link])['body']['data']['item']['id'] === 18, 'a scanned label finds its item');

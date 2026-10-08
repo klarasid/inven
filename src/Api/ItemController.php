@@ -18,6 +18,7 @@ final class ItemController
         'room_id' => 'location_id', 'name' => 'item_name', 'brand' => 'brand_model', 'serial' => 'serial_number',
         'size' => 'item_size', 'material' => 'material', 'year' => 'acquisition_year', 'code' => 'item_code',
         'quantity' => 'quantity_register', 'price' => 'acquisition_price', 'condition' => 'item_condition', 'notes' => 'notes',
+        'categories' => 'category', 'type' => 'item_type',
     ];
 
     /** @return array<string, mixed> */
@@ -154,6 +155,10 @@ final class ItemController
         foreach (self::FIELDS as $field => $column) {
             if ($input->has($field)) {
                 $value = $input->get($field);
+                // Categories come as codes, or as the item was presented: an entry per category with its code.
+                if ($field === 'categories' && is_array($value)) {
+                    $value = array_map(static fn (mixed $entry): mixed => is_array($entry) ? ($entry['code'] ?? '?') : $entry, $value);
+                }
                 $values[$column] = $value === null ? '' : $value;
             }
         }
@@ -179,7 +184,8 @@ final class ItemController
     }
 
     /**
-     * Changes the fields sent and keeps the rest. With updated_at, refuses a change made on a
+     * Changes the fields sent and keeps the rest. An item may have several categories: `categories`
+     * replaces them all with the codes sent, and an empty list leaves the item uncategorised. With updated_at, refuses a change made on a
      * copy older than what SLiMS holds now, so an offline edit never silently undoes another.
      */
     public function update(Context $context, int $id): JsonResponse
