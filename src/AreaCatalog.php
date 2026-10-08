@@ -100,9 +100,11 @@ final class AreaCatalog
      * @param  callable(string): ?string  $readAreaPhoto  the bytes of an area's stored photo, by its filename
      * @param  callable(string): ?string  $readItemPhoto  the same for an item's photo
      * @param  array{library_name?:string,printed_by?:string,documents?:array}  $context
+     * @param  (callable(string): string)|null  $embed  as in InventoryCatalog::html
      */
-    public static function html(array $catalog, callable $readAreaPhoto, callable $readItemPhoto, array $context = [], string $style = 'latex'): string
+    public static function html(array $catalog, callable $readAreaPhoto, callable $readItemPhoto, array $context = [], string $style = 'latex', ?callable $embed = null): string
     {
+        $embed ??= static fn(string $jpeg): string => 'data:image/jpeg;base64,' . base64_encode($jpeg);
         require_once __DIR__ . '/WatchPdf.php';
         $t = WatchPdf::STYLES[$style] ?? PdfLatex::class;
         $e = static fn($value): string => PdfLayout::e($value);
@@ -123,16 +125,16 @@ final class AreaCatalog
                 'Tanggal' => PdfLayout::date($today),
             ]);
         if (!$catalog['groups']) $h .= $t::paragraph('Belum ada area yang dicatat.');
-        $images = static function (array $filenames, callable $read) use ($muted): string {
+        $images = static function (array $filenames, callable $read) use ($muted, $embed): string {
             $tags = [];
             foreach ($filenames as $filename) {
-                $thumbnail = InventoryCatalog::thumbnail($read((string) $filename));
-                if ($thumbnail !== null) $tags[] = '<img style="width:19mm;border:0.2mm solid #d1d5db;" src="' . $thumbnail . '">';
+                $jpeg = InventoryCatalog::thumbnailBytes($read((string) $filename));
+                if ($jpeg !== null) $tags[] = '<img style="width:19mm;border:0.2mm solid #d1d5db;" src="' . $embed($jpeg) . '">';
             }
             return $tags ? implode(' ', $tags) : '<span style="' . $muted . '">Belum ada foto</span>';
         };
         foreach ($catalog['groups'] as $entry) {
-            $h .= $t::section($entry['label'] . ' (' . count($entry['areas']) . ' area)');
+            $h .= PdfLayout::CHUNK . $t::section($entry['label'] . ' (' . count($entry['areas']) . ' area)');
             $rows = [];
             foreach ($entry['areas'] as $n => $area) {
                 $rows[] = [

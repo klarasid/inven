@@ -32,9 +32,11 @@ import {
   DialogFooter,
 } from "./components/ui/dialog";
 import { useData, useWorkspace } from "./context";
+import { printAddress } from "./catalog";
 import { read, groups, dateLabel } from "./api";
 import {
   PageHeader,
+  Pdf,
   Panel,
   Choice,
   TextField,
@@ -151,23 +153,30 @@ export function SetupList() {
             : "Daftar butir pemeriksaan yang dipakai jadwal dan pemeriksaan insidental."
         }
         actions={
-          w.config.write && (
-            <>
-              {schedule && (
-                <Button variant="outline" onClick={() => w.go({ view: "checklists" })}>
-                  <ListChecks data-icon="inline-start" />
-                  Kelola checklist
+          <>
+            {/* The sheet of running schedules, or the checklists those schedules use as forms to fill in. */}
+            <Pdf
+              label={schedule ? "Cetak jadwal" : "Cetak checklist terjadwal"}
+              href={printAddress(w.config.inventory, schedule ? "print_schedules" : "print_checklists")}
+            />
+            {w.config.write && (
+              <>
+                {schedule && (
+                  <Button variant="outline" onClick={() => w.go({ view: "checklists" })}>
+                    <ListChecks data-icon="inline-start" />
+                    Kelola checklist
+                  </Button>
+                )}
+                <Button
+                  disabled={noTemplates}
+                  onClick={() => w.go({ view: schedule ? "schedule-edit" : "template-edit" })}
+                >
+                  <Plus data-icon="inline-start" />
+                  {schedule ? "Buat jadwal" : "Buat checklist"}
                 </Button>
-              )}
-              <Button
-                disabled={noTemplates}
-                onClick={() => w.go({ view: schedule ? "schedule-edit" : "template-edit" })}
-              >
-                <Plus data-icon="inline-start" />
-                {schedule ? "Buat jadwal" : "Buat checklist"}
-              </Button>
-            </>
-          )
+              </>
+            )}
+          </>
         }
       />
       {noTemplates ? (
@@ -480,17 +489,21 @@ function TemplateEditor({ template }: { template?: Template }) {
         }
         actions={
           readonly &&
-          w.config.write &&
           template && (
             <>
-              <Button variant="outline" onClick={() => w.go({ view: "template-edit", record: template.id })}>
-                <Copy data-icon="inline-start" />
-                Salin / revisi
-              </Button>
-              <Button onClick={() => w.go({ view: "schedule-edit", template_id: template.id })}>
-                <CalendarDays data-icon="inline-start" />
-                Jadwalkan
-              </Button>
+              <Pdf label="Cetak lembar isian" href={printAddress(w.config.inventory, "print_checklists", { record: template.id })} />
+              {w.config.write && (
+                <>
+                  <Button variant="outline" onClick={() => w.go({ view: "template-edit", record: template.id })}>
+                    <Copy data-icon="inline-start" />
+                    Salin / revisi
+                  </Button>
+                  <Button onClick={() => w.go({ view: "schedule-edit", template_id: template.id })}>
+                    <CalendarDays data-icon="inline-start" />
+                    Jadwalkan
+                  </Button>
+                </>
+              )}
             </>
           )
         }

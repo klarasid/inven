@@ -33,7 +33,7 @@ import { Checkbox } from "./components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { RoomAreasTab, RoomPlansTab } from "./room-areas";
 import { LabelDialog } from "./labels";
-import { CatalogDialog } from "./catalog";
+import { AreaListDialog, CatalogDialog } from "./catalog";
 import {
   Dialog,
   DialogContent,
@@ -220,7 +220,7 @@ function RoomGrid() {
   const w = useWorkspace();
   const { data, error, loading } = useData<Page<Values>>("rooms", w.route);
   const [selected, setSelected] = useState<Values>();
-  const [catalog, setCatalog] = useState(false);
+  const [list, setList] = useState<"catalog" | "areas">();
   const open = (id: unknown) => w.go({ view: "inventory", room: String(id) });
   return (
     <>
@@ -229,10 +229,27 @@ function RoomGrid() {
         description="Pilih ruangan untuk melihat, menambah, dan mencetak kartu inventaris barangnya."
         actions={
           <>
-            <Button variant="outline" onClick={() => setCatalog(true)}>
-              <Images data-icon="inline-start" />
-              Cetak daftar berfoto
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline">
+                  <Images data-icon="inline-start" />
+                  Cetak daftar
+                  <ChevronDown data-icon="inline-end" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72">
+                <DropdownMenuGroup>
+                  <DropdownMenuItem className="flex flex-col items-start gap-0.5" onSelect={() => setList("catalog")}>
+                    <span className="font-medium">Daftar inventaris berfoto</span>
+                    <span className="text-xs text-muted-foreground">Barang beserta fotonya, per kategori atau area.</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="flex flex-col items-start gap-0.5" onSelect={() => setList("areas")}>
+                    <span className="font-medium">Daftar area dan fasilitas</span>
+                    <span className="text-xs text-muted-foreground">Area tiap ruangan, luas ruangan, dan fotonya.</span>
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
             {w.config.write && (
               <Button onClick={() => w.go({ view: "room-edit" })}>
                 <Plus data-icon="inline-start" />
@@ -242,7 +259,8 @@ function RoomGrid() {
           </>
         }
       />
-      <CatalogDialog open={catalog} onOpenChange={setCatalog} />
+      <CatalogDialog open={list === "catalog"} onOpenChange={(open) => setList(open ? "catalog" : undefined)} />
+      <AreaListDialog open={list === "areas"} onOpenChange={(open) => setList(open ? "areas" : undefined)} />
       <div className="flex flex-col gap-2 sm:flex-row">
         <SearchBox placeholder="Cari nama atau kode ruangan…" />
         <LibraryFilter />

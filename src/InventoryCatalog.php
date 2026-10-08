@@ -115,8 +115,15 @@ final class InventoryCatalog
         return $catalog;
     }
 
-    /** A photo small enough to print a few hundred of: a JPEG data URI, or null when it cannot be read. */
+    /** A photo small enough to print a few hundred of, as a JPEG data URI; null when it cannot be read. */
     public static function thumbnail(?string $bytes): ?string
+    {
+        $jpeg = self::thumbnailBytes($bytes);
+        return $jpeg === null ? null : 'data:image/jpeg;base64,' . base64_encode($jpeg);
+    }
+
+    /** The same photo as JPEG bytes. */
+    public static function thumbnailBytes(?string $bytes): ?string
     {
         $image = $bytes === null || $bytes === '' ? false : @imagecreatefromstring($bytes);
         if (!$image) return null;
@@ -124,7 +131,7 @@ final class InventoryCatalog
         $thumb = imagecreatetruecolor(max(1, (int) (imagesx($image) * $scale)), max(1, (int) (imagesy($image) * $scale)));
         imagecopyresampled($thumb, $image, 0, 0, 0, 0, imagesx($thumb), imagesy($thumb), imagesx($image), imagesy($image));
         ob_start(); imagejpeg($thumb, null, 75); $jpeg = (string) ob_get_clean(); imagedestroy($thumb); imagedestroy($image);
-        return 'data:image/jpeg;base64,' . base64_encode($jpeg);
+        return $jpeg;
     }
 
     /**
@@ -133,9 +140,12 @@ final class InventoryCatalog
      *
      * @param  callable(string): ?string  $readPhoto  the bytes of a stored photo, by its filename
      * @param  array{library_name?:string,printed_by?:string,documents?:array}  $context
+     * @param  (callable(string): string)|null  $embed  the `src` for a thumbnail's JPEG bytes; a data URI unless
+     *                                                 the caller keeps the photos out of the HTML (Documents::photos)
      */
-    public static function html(array $catalog, callable $readPhoto, array $context = [], string $style = 'latex'): string
+    public static function html(array $catalog, callable $readPhoto, array $context = [], string $style = 'latex', ?callable $embed = null): string
     {
+        $embed ??= static fn(string $jpeg): string => 'data:image/jpeg;base64,' . base64_encode($jpeg);
         require_once __DIR__ . '/WatchPdf.php';
         require_once __DIR__ . '/PdfDocuments.php';
         $t = WatchPdf::STYLES[$style] ?? PdfLatex::class;
@@ -174,7 +184,10 @@ final class InventoryCatalog
             foreach ($entry['items'] as $n => $item) {
                 $images = [];
                 foreach ($item['photos'] as $filename) {
-                    if (!array_key_exists($filename, $thumbs)) $thumbs[$filename] = self::thumbnail($readPhoto($filename));
+                    if (!array_key_exists($filename, $thumbs)) {
+                        $jpeg = self::thumbnailBytes($readPhoto($filename));
+                        $thumbs[$filename] = $jpeg === null ? null : $embed($jpeg);
+                    }
                     if ($thumbs[$filename] !== null) $images[] = $thumb . $thumbs[$filename] . '">';
                 }
                 $detail = array_filter([trim((string) $item['item_type']), trim((string) $item['brand_model'])], static fn($text) => $text !== '');
@@ -188,7 +201,7 @@ final class InventoryCatalog
                     $e(Inventory::CONDITIONS[$item['item_condition']] ?? $item['item_condition']),
                 ];
             }
-            $h .= $t::section($entry['label'] . ' (' . count($rows) . ' barang)')
+            $h .= PdfLayout::CHUNK . $t::section($entry['label'] . ' (' . count($rows) . ' barang)')
                 . $t::table('Barang ' . mb_strtolower($entry['label']), [['No.', 'r'], ['Foto', 'c'], 'Barang', 'Kode', 'Ruangan', ['Jumlah', 'r'], 'Kondisi'], $rows, '', '8.8pt');
         }
         return $h;

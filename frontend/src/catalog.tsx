@@ -16,6 +16,54 @@ const photoChoices = [
   { value: "all", title: "Semua foto", text: "Termasuk foto pemanfaatannya." },
 ];
 
+/** Where SLiMS prints one of the lists or sheets (documents.php), in the style picked from the print menu. */
+export const printAddress = (inventory: string, action: string, params: Record<string, unknown> = {}) => (style: string) =>
+  url(inventory, { workspace: "", action, ...params, style });
+
+/** Daftar area dan fasilitas: which group of areas, then the print menu for its style. */
+export function AreaListDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const w = useWorkspace();
+  const [group, setGroup] = useState("all");
+  const library = String(w.route.library || "");
+  const groups = [["all", "Semua"], ...Object.entries(w.options.sarpras.areaGroups)];
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Cetak daftar area dan fasilitas</DialogTitle>
+          <DialogDescription>
+            {library
+              ? "Area di ruangan lokasi perpustakaan yang sedang disaring, dengan luas ruangan dan fotonya."
+              : "Area di semua ruangan, dengan luas ruangan dan fotonya. Untuk satu lokasi, saring dulu daftar ruangan."}
+          </DialogDescription>
+        </DialogHeader>
+        <Field>
+          <FieldLabel>Kelompok area</FieldLabel>
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            className="grid w-full grid-cols-2"
+            value={group}
+            onValueChange={(v) => v && setGroup(v)}
+          >
+            {groups.map(([value, label]) => (
+              <ToggleGroupItem key={value} value={value} className="h-auto px-3 py-2">
+                {label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        </Field>
+        <DialogFooter>
+          <Pdf
+            label="Cetak PDF"
+            href={printAddress(w.config.inventory, "print_areas", { group: group === "all" ? "" : group, library })}
+          />
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /** Daftar inventaris berfoto: what it lists and how, then the print menu for its style. */
 export function CatalogDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const w = useWorkspace();
@@ -23,16 +71,7 @@ export function CatalogDialog({ open, onOpenChange }: { open: boolean; onOpenCha
   const [photos, setPhotos] = useState("first");
   const [categories, setCategories] = useState<string[]>([]);
   const library = String(w.route.library || "");
-  const target = (style: string) =>
-    url(w.config.inventory, {
-      workspace: "",
-      action: "print_catalog",
-      group,
-      photos,
-      categories: categories.join(","),
-      library,
-      style,
-    });
+  const target = printAddress(w.config.inventory, "print_catalog", { group, photos, categories: categories.join(","), library });
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>

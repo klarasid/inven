@@ -141,7 +141,14 @@ Bagian atas halaman merangkum berapa aspek yang sudah baik dan berapa yang perlu
 
 ### Daftar inventaris berfoto
 
-Di **Ruangan & Barang**, klik **Cetak daftar berfoto** untuk mencetak barang beserta fotonya, dikelompokkan per kategori atau per area. Pilih gaya di menu **Cetak PDF**, seperti laporan lainnya. Satu dokumen memuat paling banyak 500 barang dan 500 foto.
+Di **Ruangan & Barang**, klik **Cetak daftar → Daftar inventaris berfoto** untuk mencetak barang beserta fotonya, dikelompokkan per kategori atau per area. Pilih gaya di menu **Cetak PDF**, seperti laporan lainnya. Satu dokumen memuat paling banyak 500 barang dan 500 foto.
+
+Dokumen lain dicetak dari halamannya masing-masing, dengan pilihan gaya yang sama:
+
+- **Daftar area dan fasilitas**: Ruangan & Barang → **Cetak daftar**.
+- **Daftar perangkat lunak**: Perangkat Lunak → **Cetak daftar**.
+- **Jadwal pemeriksaan**: Jadwal → **Cetak jadwal**.
+- **Checklist pemeriksaan** sebagai lembar isian: Checklist → **Cetak checklist terjadwal**, atau **Cetak lembar isian** di halaman satu checklist.
 
 ### Label QR code
 

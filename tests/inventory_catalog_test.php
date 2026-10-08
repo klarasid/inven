@@ -86,6 +86,12 @@ $iso = InventoryCatalog::html($areas, static fn (string $filename): ?string => n
 check(str_contains($iso, 'No. Dokumen') && str_contains($iso, 'DIB/' . date('Y')) && !str_contains($html, 'No. Dokumen'), 'gaya ISO mencetak kepala dokumen dengan nomor dari Pengaturan Cetak; gaya LaTeX tidak');
 $html = InventoryCatalog::html($every, static fn (string $filename): ?string => $jpeg);
 check(substr_count($html, 'data:image/jpeg;base64,') === 3 && str_contains($html, '3 foto'), 'semua foto barang dicetak berdampingan');
+// Photos beside the HTML rather than in it: mPDF refuses HTML past 1 MB, which a hundred photos as data URIs are.
+$kept = [];
+$named = InventoryCatalog::html($areas, static fn (string $filename): ?string => $jpeg, [], 'latex', static function (string $bytes) use (&$kept): string { $kept[] = $bytes; return 'var:foto' . count($kept); });
+check(!str_contains($named, 'data:image') && substr_count($named, 'src="var:foto1"') === 2 && count($kept) === 2 && getimagesizefromstring($kept[0])[0] === 320,
+    'foto dapat dititipkan di luar HTML: tiap foto sekali, walau barangnya tercantum di dua area');
+check(count(explode(SLiMS\Plugins\Inventory\PdfLayout::CHUNK, $named)) === 5, 'dokumen dapat diserahkan ke mPDF per kelompok');
 $db->exec('INSERT INTO inventory_item_photos (item_id, filename) WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 500) SELECT 1, \'banyak-\' || i || \'.jpg\' FROM n');
 rejects(static fn () => InventoryCatalog::build($db, 'category', ['perabot'], '', 'all'), 'daftar di atas 500 foto ditolak dengan saran', 'cetak satu foto per barang');
 check(InventoryCatalog::build($db, 'category', ['perabot'])['photo_count'] === 2, 'satu foto per barang tetap dapat dibuat');

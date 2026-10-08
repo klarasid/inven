@@ -14,6 +14,12 @@ final class PdfLayout
     public const ACCENT = '#1e3a5f';
     private const MONTHS = [1 => 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 
+    /**
+     * Where a long document may be handed to mPDF in pieces (Documents::write). mPDF refuses a
+     * piece of HTML longer than pcre.backtrack_limit, 1 MB unless the server raised it.
+     */
+    public const CHUNK = '<!--chunk-->';
+
     public static function e($value): string
     {
         return htmlspecialchars((string) ($value ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');

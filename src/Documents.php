@@ -44,6 +44,30 @@ final class Documents
         return PrintDefaults::style($this->db, $requested);
     }
 
+    /**
+     * Keeps a document's photos out of its HTML: each is handed to mPDF by name and the HTML only
+     * names it. As data URIs, some eighty thumbnails already pass the 1 MB of HTML mPDF accepts.
+     *
+     * @return callable(string): string  the `src` for a thumbnail's JPEG bytes
+     */
+    public static function photos(\Mpdf\Mpdf $pdf): callable
+    {
+        return static function (string $jpeg) use ($pdf): string {
+            $name = 'foto' . count($pdf->imageVars);
+            $pdf->imageVars[$name] = $jpeg;
+
+            return 'var:' . $name;
+        };
+    }
+
+    /** Hands a document to mPDF piece by piece, so a long one stays under what mPDF accepts at once. */
+    public static function write(\Mpdf\Mpdf $pdf, string $html): void
+    {
+        foreach (explode(PdfLayout::CHUNK, $html) as $piece) {
+            if ($piece !== '') $pdf->WriteHTML($piece);
+        }
+    }
+
     /** @return array<string, mixed> */
     private function room(int $locationId): array
     {
@@ -151,9 +175,8 @@ final class Documents
         $catalog = InventoryCatalog::build($this->db, $group, $categories, $library, $photos);
         $style = $this->style($style);
         $context = ['library_name' => $libraryName, 'printed_by' => $printedBy, 'documents' => PdfDocuments::load($this->db)];
-        $html = InventoryCatalog::html($catalog, static fn (string $filename): ?string => $storage->read($filename), $context, $style);
         $pdf = WatchPdf::mpdf($this->tempDir, 'Daftar Inventaris Berfoto', $style);
-        $pdf->WriteHTML($html);
+        self::write($pdf, InventoryCatalog::html($catalog, static fn (string $filename): ?string => $storage->read($filename), $context, $style, self::photos($pdf)));
 
         return ['filename' => 'daftar-inventaris-berfoto-' . self::slug($group . '-' . $library, $group) . '.pdf', 'bytes' => $pdf->Output('', 'S'), 'count' => $catalog['items']];
     }
@@ -170,9 +193,8 @@ final class Documents
         $catalog = AreaCatalog::build($this->db, $group, $library);
         $areaPhotos = AreaPhotos::storage();
         $style = $this->style($style);
-        $html = AreaCatalog::html($catalog, static fn (string $filename): ?string => $areaPhotos->read($filename), static fn (string $filename): ?string => $itemPhotos->read($filename), ['library_name' => $libraryName, 'printed_by' => $printedBy, 'documents' => PdfDocuments::load($this->db)], $style);
         $pdf = WatchPdf::mpdf($this->tempDir, 'Daftar Area dan Fasilitas', $style);
-        $pdf->WriteHTML($html);
+        self::write($pdf, AreaCatalog::html($catalog, static fn (string $filename): ?string => $areaPhotos->read($filename), static fn (string $filename): ?string => $itemPhotos->read($filename), ['library_name' => $libraryName, 'printed_by' => $printedBy, 'documents' => PdfDocuments::load($this->db)], $style, self::photos($pdf)));
 
         return ['filename' => 'daftar-area-dan-fasilitas' . ($group !== '' ? '-' . $group : '') . '.pdf', 'bytes' => $pdf->Output('', 'S'), 'count' => $catalog['areas']];
     }

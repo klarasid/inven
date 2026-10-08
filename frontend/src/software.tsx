@@ -16,7 +16,8 @@ import {
 } from "./components/ui/dialog";
 import { useWorkspace } from "./context";
 import { dateLabel, url } from "./api";
-import { Blank, Choice, ErrorBox, ImagePreview, Loading, PageHeader, TextField, previewPdf } from "./shared";
+import { Blank, Choice, ErrorBox, ImagePreview, Loading, PageHeader, Pdf, TextField, previewPdf } from "./shared";
+import { printAddress } from "./catalog";
 import { Confirm, usePage } from "./settings";
 
 /** A file that shows an application's licence: a certificate, an invoice, a screenshot. */
@@ -179,6 +180,7 @@ export function SoftwarePage() {
               <ChartNoAxesColumn data-icon="inline-start" />
               Lihat Rekap Sarpras
             </Button>
+            <Pdf label="Cetak daftar" href={printAddress(w.config.inventory, "print_software")} />
             {data?.write && (
               <Button onClick={add}>
                 <Plus data-icon="inline-start" />

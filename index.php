@@ -11,8 +11,8 @@ if (isset($_GET['action']) && $_GET['action'] === 'print_labels') {
     require __DIR__ . '/labels.php';
     exit;
 }
-if (isset($_GET['action']) && $_GET['action'] === 'print_catalog') {
-    require __DIR__ . '/catalog.php';
+if (in_array($_GET['action'] ?? '', ['print_catalog', 'print_areas', 'print_software', 'print_schedules', 'print_checklists'], true)) {
+    require __DIR__ . '/documents.php';
     exit;
 }
 
