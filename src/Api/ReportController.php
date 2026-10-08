@@ -164,11 +164,11 @@ final class ReportController
         ]);
     }
 
-    /** One inspection as PDF: its berita acara, with what was examined, the findings and their photos. */
+    /** One inspection as PDF: its berita acara, with what was examined, the findings and their photos. ?style= as in Documents::inspection. */
     public function inspection(Context $context, int $id): Sendable
     {
         RoomController::throttlePdf($context);
-        $document = $context->documents()->inspection($context->watch(), $id);
+        $document = $context->documents()->inspection($context->watch(), $id, $context->request->query('style'));
         $context->log('Dokumen pemeriksaan #' . $id . ' diunduh.', 'Print');
 
         return new BytesResponse($document['bytes'], 'application/pdf', $document['filename']);
@@ -177,7 +177,7 @@ final class ReportController
     public function document(Context $context): Sendable
     {
         RoomController::throttlePdf($context);
-        $document = $context->documents()->period($context->watch(), self::filter($context), $context->staff()->name);
+        $document = $context->documents()->period($context->watch(), self::filter($context), $context->staff()->name, $context->request->query('style'));
         $context->log('Laporan pengawasan ' . self::filter($context)['from'] . ' s.d. ' . self::filter($context)['to'] . ' diunduh.', 'Print');
 
         return new BytesResponse($document['bytes'], 'application/pdf', $document['filename']);

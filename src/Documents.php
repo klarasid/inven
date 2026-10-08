@@ -178,17 +178,19 @@ final class Documents
     /**
      * One inspection as a document, as the admin Reports page prints it: what was examined, the
      * findings with their photos, and the examiner's signature block. The berita acara of the check.
+     * $style is `latex`, `iso`, `kop` or `kop:<id>`; with none, the default saved in Pengaturan Cetak.
      *
      * @return array{filename: string, bytes: string, count: int}
      */
-    public function inspection(Supervision $watch, int $id): array
+    public function inspection(Supervision $watch, int $id, string $style = ''): array
     {
         self::ensureRuntime();
         require_once __DIR__ . '/WatchPdf.php';
         require_once __DIR__ . '/PdfDocuments.php';
+        $style = PrintDefaults::style($this->db, $style);
         $document = $watch->document($id);
-        $html = WatchPdf::detail($document, static fn (array $photo): ?string => $watch->photo($id, (int) $photo['id']), 'latex', PdfDocuments::load($this->db));
-        $pdf = WatchPdf::mpdf($this->tempDir, 'Dokumen Pemeriksaan #' . $id, 'latex');
+        $html = WatchPdf::detail($document, static fn (array $photo): ?string => $watch->photo($id, (int) $photo['id']), $style, PdfDocuments::load($this->db));
+        $pdf = WatchPdf::mpdf($this->tempDir, 'Dokumen Pemeriksaan #' . $id, $style);
         $pdf->WriteHTML($html);
         Telemetry::count('inspection_pdf');
 
@@ -236,23 +238,25 @@ final class Documents
     }
 
     /**
-     * The supervision report for a period, as the admin Reports page prints it.
+     * The supervision report for a period, as the admin Reports page prints it, in the style
+     * asked for or with none the default saved in Pengaturan Cetak (see inspection()).
      *
      * @param  array{from: string, to: string, library: string, room: int, inspection_status: string, finding_status: string}  $filter
      * @return array{filename: string, bytes: string, count: int}
      */
-    public function period(Supervision $watch, array $filter, string $printedBy): array
+    public function period(Supervision $watch, array $filter, string $printedBy, string $style = ''): array
     {
         self::ensureRuntime();
         require_once __DIR__ . '/WatchPdf.php';
         require_once __DIR__ . '/PdfDocuments.php';
+        $style = PrintDefaults::style($this->db, $style);
         $rows = $watch->inspections($filter, 1, self::MAX_ROWS + 1);
         if (count($rows) > self::MAX_ROWS) {
             throw new RuntimeException('Laporan melebihi 500 pemeriksaan. Pilih periode yang lebih pendek.');
         }
         $context = ['library' => '', 'room' => '', 'printed_by' => $printedBy, 'documents' => PdfDocuments::load($this->db)];
-        $html = WatchPdf::summary($filter, $watch->summary($filter, true), $rows, $context, 'latex');
-        $pdf = WatchPdf::mpdf($this->tempDir, 'Laporan Pengawasan dan Pemeliharaan', 'latex');
+        $html = WatchPdf::summary($filter, $watch->summary($filter, true), $rows, $context, $style);
+        $pdf = WatchPdf::mpdf($this->tempDir, 'Laporan Pengawasan dan Pemeliharaan', $style);
         $pdf->WriteHTML($html);
         Telemetry::count('report_pdf');
 

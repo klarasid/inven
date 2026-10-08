@@ -65,6 +65,7 @@ final class Supervision
                 case 'finding': $this->finding($input,$uploads,$actor); $result=['tab'=>'finding','record'=>(int)$input['id']]; break;
                 case 'report': $result=['tab'=>'finding','record'=>$this->report($input,$uploads,$fixUploads,$actor)]; break;
                 case 'pdf_documents': require_once __DIR__.'/PdfDocuments.php'; PdfDocuments::save($this->db,(array)($input['documents']??[])); $result=['tab'=>'reports']; break;
+                case 'pdf_defaults': require_once __DIR__.'/PrintDefaults.php'; PrintDefaults::save($this->db,(array)($input['defaults']??[])); $result=['tab'=>'reports']; break;
                 default: throw new RuntimeException('Aksi pengawasan tidak dikenal.');
             }
             if (in_array($action, ['inspection','result_photos'], true)) {

@@ -4,8 +4,9 @@ import { useWorkspace } from "./context";
 import { PageHeader } from "./shared";
 import { LetterheadManager } from "./letterheads";
 import { DocumentNumbering } from "./documents";
+import { PrintDefaults } from "./print-defaults";
 
-const tabs = { letterheads: "Template kop", documents: "Nomor dokumen" } as const;
+const tabs = { letterheads: "Template kop", documents: "Nomor dokumen", defaults: "Gaya bawaan" } as const;
 
 export function PrintSettingsPage() {
   const w = useWorkspace();
@@ -14,7 +15,7 @@ export function PrintSettingsPage() {
     <>
       <PageHeader
         title="Pengaturan Cetak"
-        description="Kop institusi dan nomor dokumen yang dipakai setiap PDF: laporan periode, dokumen pemeriksaan, laporan kerusakan, dan Rekap Sarpras."
+        description="Kop institusi, nomor dokumen, dan gaya bawaan yang dipakai setiap PDF: laporan periode, dokumen pemeriksaan, laporan kerusakan, dan Rekap Sarpras."
       />
       {!w.config.write && (
         <Alert>
@@ -31,7 +32,7 @@ export function PrintSettingsPage() {
           ))}
         </TabsList>
       </Tabs>
-      {tab === "letterheads" ? <LetterheadManager /> : <DocumentNumbering />}
+      {tab === "letterheads" ? <LetterheadManager /> : tab === "documents" ? <DocumentNumbering /> : <PrintDefaults />}
     </>
   );
 }

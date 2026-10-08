@@ -160,6 +160,12 @@ final class Workspace
             require_once __DIR__.'/PdfDocuments.php';
             return ['settings'=>PdfDocuments::load($w->pdo()),'types'=>PdfDocuments::TYPES,'placeholders'=>PdfDocuments::PLACEHOLDERS];
         }
+        if($resource==='pdf_defaults') {
+            require_once __DIR__.'/PrintDefaults.php';
+            $letterheads=array_values(array_map(static fn(array $t):array=>['id'=>(string)$t['id'],'name'=>(string)$t['name']],Letterheads::all($w->pdo())));
+            usort($letterheads,fn($a,$b)=>strcasecmp($a['name'],$b['name']));
+            return ['settings'=>PrintDefaults::load($w->pdo()),'styles'=>PrintDefaults::STYLES,'kir'=>PrintDefaults::KIR,'letterheads'=>$letterheads];
+        }
         if($resource==='feedback') {
             // The Masukan button: what this staff member sent and Klaras's replies. Before migration 20 there is none.
             require_once __DIR__.'/Feedback.php';

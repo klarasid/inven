@@ -156,6 +156,8 @@ Jika unggahan ditolak, simpan ulang PDF sebagai **PDF/A** lalu unggah kembali.
 
 Nomor dokumen, revisi, dan tanggal terbit tiap jenis PDF diatur di **Pengaturan Cetak → Nomor dokumen**.
 
+Aplikasi Klaras InvenSync dan aplikasi AI tidak punya menu Cetak PDF. Gaya laporan dan tata letak KIR yang mereka pakai diatur di **Pengaturan Cetak → Gaya bawaan**.
+
 ## Aplikasi Klaras InvenSync
 
 Klaras InvenSync adalah aplikasi HP untuk petugas. Dengan aplikasi ini, petugas dapat memotret barang, memindai label QR, mengisi pemeriksaan, melapor kerusakan, dan memindai eksemplar saat stock opname, termasuk saat offline. Semua fitur plugin tetap dapat dipakai tanpa aplikasi.

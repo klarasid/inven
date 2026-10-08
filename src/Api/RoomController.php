@@ -64,11 +64,11 @@ final class RoomController
         ]);
     }
 
-    /** Kartu Inventaris Ruangan as PDF. */
+    /** Kartu Inventaris Ruangan as PDF: ?layout=classic or modern, else the default saved in Pengaturan Cetak. */
     public function kir(Context $context, int $id): Sendable
     {
         self::throttlePdf($context);
-        $document = $context->documents()->kir($id, $context->request->query('layout') === 'modern', Context::libraryName());
+        $document = $context->documents()->kir($id, \SLiMS\Plugins\Inventory\PrintDefaults::modern($context->db, $context->request->query('layout')), Context::libraryName());
         $context->log('Kartu inventaris lokasi #' . $id . ' diunduh (' . $document['count'] . ' barang).', 'Print');
 
         return new BytesResponse($document['bytes'], 'application/pdf', $document['filename']);
