@@ -14,12 +14,17 @@ require_once __DIR__ . '/PdfLayout.php';
 final class PdfDocuments
 {
     public const SETTING = 'inventory_pdf_documents';
-    public const TYPES = ['period' => 'Laporan periode', 'inspection' => 'Dokumen pemeriksaan', 'report' => 'Laporan kerusakan', 'sarpras' => 'Rekap sarpras'];
+    public const TYPES = ['period' => 'Laporan periode', 'inspection' => 'Dokumen pemeriksaan', 'report' => 'Laporan kerusakan', 'sarpras' => 'Rekap sarpras', 'catalog' => 'Daftar inventaris berfoto', 'areas' => 'Daftar area dan fasilitas', 'software' => 'Daftar perangkat lunak', 'schedules' => 'Jadwal pemeriksaan', 'checklists' => 'Checklist pemeriksaan'];
     public const DEFAULTS = [
         'period' => ['number' => 'LAP-SARPRAS/{dari}-{sampai}', 'revision' => '00', 'issued' => ''],
         'inspection' => ['number' => 'PMR-{id}', 'revision' => '00', 'issued' => ''],
         'report' => ['number' => 'LK-{id}', 'revision' => '00', 'issued' => ''],
         'sarpras' => ['number' => 'REKAP-SARPRAS/{romawi}/{tahun}', 'revision' => '00', 'issued' => ''],
+        'catalog' => ['number' => 'INV-FOTO/{romawi}/{tahun}', 'revision' => '00', 'issued' => ''],
+        'areas' => ['number' => 'AREA/{romawi}/{tahun}', 'revision' => '00', 'issued' => ''],
+        'software' => ['number' => 'PERANGKAT-LUNAK/{romawi}/{tahun}', 'revision' => '00', 'issued' => ''],
+        'schedules' => ['number' => 'JADWAL-PMR/{tahun}', 'revision' => '00', 'issued' => ''],
+        'checklists' => ['number' => 'CHECKLIST-PMR/{tahun}', 'revision' => '00', 'issued' => ''],
     ];
     /** Placeholders accepted in number formats, with their meaning for the settings form. */
     public const PLACEHOLDERS = [

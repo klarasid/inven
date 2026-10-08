@@ -95,58 +95,69 @@ final class AreaCatalog
     }
 
     /**
+     * The list as a document in one of the print styles the reports use (WatchPdf::STYLES).
+     *
      * @param  callable(string): ?string  $readAreaPhoto  the bytes of an area's stored photo, by its filename
      * @param  callable(string): ?string  $readItemPhoto  the same for an item's photo
-     * @param  array{library_name?:string,printed_by?:string}  $context
+     * @param  array{library_name?:string,printed_by?:string,documents?:array}  $context
      */
-    public static function html(array $catalog, callable $readAreaPhoto, callable $readItemPhoto, array $context = []): string
+    public static function html(array $catalog, callable $readAreaPhoto, callable $readItemPhoto, array $context = [], string $style = 'latex'): string
     {
+        require_once __DIR__ . '/WatchPdf.php';
+        $t = WatchPdf::STYLES[$style] ?? PdfLatex::class;
         $e = static fn($value): string => PdfLayout::e($value);
+        $today = date('Y-m-d');
+        $muted = 'font-size:8pt;color:#555555;';
         $scope = array_filter([(string) ($context['library_name'] ?? ''), $catalog['group'] === '' ? 'Semua kelompok area' : Sarpras::AREA_GROUPS[$catalog['group']]]);
-        $h = PdfLayout::css('.thumb{width:19mm;border:0.2mm solid #d1d5db;}.grid td.photo{width:46mm;text-align:center;}')
-            . PdfLayout::header('DAFTAR AREA DAN FASILITAS', $e(implode(' · ', $scope)))
-            . PdfLayout::meta([
+        $h = $t::begin()
+            . $t::titleBlock(
+                'Daftar Area dan Fasilitas',
+                ($context['printed_by'] ?? '') !== '' ? $e($context['printed_by']) : '',
+                $e(implode(' · ', $scope)) . ' · Per ' . PdfLayout::date($today),
+                PdfDocuments::identity($context['documents'] ?? PdfDocuments::DEFAULTS, 'areas', ['date' => $today], $today)
+            )
+            . $t::facts([
                 'Jumlah area' => (string) $catalog['areas'],
                 'Area berfoto' => $catalog['with_photos'] . ' dari ' . $catalog['areas'] . ' · ' . $catalog['photo_count'] . ' foto',
                 'Dicetak oleh' => $e($context['printed_by'] ?? ''),
-                'Tanggal' => PdfLayout::date(new \DateTimeImmutable('now')),
+                'Tanggal' => PdfLayout::date($today),
             ]);
-        if (!$catalog['groups']) $h .= '<p class="muted">Belum ada area yang dicatat.</p>';
-        $images = static function (array $filenames, callable $read): string {
+        if (!$catalog['groups']) $h .= $t::paragraph('Belum ada area yang dicatat.');
+        $images = static function (array $filenames, callable $read) use ($muted): string {
             $tags = [];
             foreach ($filenames as $filename) {
                 $thumbnail = InventoryCatalog::thumbnail($read((string) $filename));
-                if ($thumbnail !== null) $tags[] = '<img class="thumb" src="' . $thumbnail . '">';
+                if ($thumbnail !== null) $tags[] = '<img style="width:19mm;border:0.2mm solid #d1d5db;" src="' . $thumbnail . '">';
             }
-            return $tags ? implode(' ', $tags) : '<span class="muted small">Belum ada foto</span>';
+            return $tags ? implode(' ', $tags) : '<span style="' . $muted . '">Belum ada foto</span>';
         };
         foreach ($catalog['groups'] as $entry) {
-            $h .= '<h2>' . $e($entry['label']) . ' (' . count($entry['areas']) . ' area)</h2>';
+            $h .= $t::section($entry['label'] . ' (' . count($entry['areas']) . ' area)');
             $rows = [];
             foreach ($entry['areas'] as $n => $area) {
                 $rows[] = [
                     (string) ($n + 1),
                     $images($area['photos'], $readAreaPhoto),
-                    '<span class="strong">' . $e($area['label']) . '</span>' . (trim((string) $area['name']) !== '' ? '<br><span class="muted small">' . $e($area['name']) . '</span>' : ''),
+                    '<b>' . $e($area['label']) . '</b>' . (trim((string) $area['name']) !== '' ? '<br><span style="' . $muted . '">' . $e($area['name']) . '</span>' : ''),
                     $e($area['room_name']),
                     $area['area_m2'] === null ? '—' : number_format((float) $area['area_m2'], 2, ',', '.') . ' m²',
                 ];
             }
-            $h .= PdfLayout::table([['No.', 'no'], ['Foto', 'photo'], 'Area', 'Ruangan', ['Luas ruangan', 'num']], $rows, 'Belum ada area di kelompok ini.');
+            $h .= $t::table('Area ' . mb_strtolower((string) $entry['label']), [['No.', 'r'], ['Foto', 'c'], 'Area', 'Ruangan', ['Luas ruangan', 'r']], $rows, 'Belum ada area di kelompok ini.', '8.8pt');
             if ($entry['items']) {
                 $rows = [];
                 foreach ($entry['items'] as $n => $item) {
                     $rows[] = [
                         (string) ($n + 1),
                         $images($item['photos'], $readItemPhoto),
-                        '<span class="strong">' . $e($item['item_name']) . '</span>' . (trim((string) $item['item_type']) !== '' ? '<br><span class="muted small">' . $e($item['item_type']) . '</span>' : ''),
+                        '<b>' . $e($item['item_name']) . '</b>' . (trim((string) $item['item_type']) !== '' ? '<br><span style="' . $muted . '">' . $e($item['item_type']) . '</span>' : ''),
                         $e($item['item_code']),
                         $e($item['room_name']),
                         $e(Inventory::CONDITIONS[$item['item_condition']] ?? $item['item_condition']),
                     ];
                 }
-                $h .= '<h3>Barang fasilitas umum (' . count($rows) . ' barang)</h3>'
-                    . PdfLayout::table([['No.', 'no'], ['Foto', 'photo'], 'Barang', 'Kode', 'Ruangan', 'Kondisi'], $rows);
+                $h .= $t::subsection('Barang fasilitas umum (' . count($rows) . ' barang)')
+                    . $t::table('Barang fasilitas umum', [['No.', 'r'], ['Foto', 'c'], 'Barang', 'Kode', 'Ruangan', 'Kondisi'], $rows, '', '8.8pt');
             }
         }
         return $h;

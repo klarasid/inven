@@ -139,6 +139,10 @@ Rekap dihitung per **lokasi perpustakaan** (lokasi SLiMS yang dipilih pada tiap 
 
 Bagian atas halaman merangkum berapa aspek yang sudah baik dan berapa yang perlu perhatian; saring daftarnya dengan tombol **Perlu perhatian**, **Belum ada data**, atau **Sudah baik**. Setiap aspek menampilkan kondisinya (Sangat baik, Baik, Cukup, Kurang). Klik sebuah aspek untuk melihat syarat yang sudah dan belum terpenuhi, rincian datanya, dan saran perbaikan dengan tombol menuju menu tempat datanya diisi. Klik **Cetak rekap** untuk PDF dalam gaya LaTeX, ISO, atau kop institusi.
 
+### Daftar inventaris berfoto
+
+Di **Ruangan & Barang**, klik **Cetak daftar berfoto** untuk mencetak barang beserta fotonya, dikelompokkan per kategori atau per area. Pilih gaya di menu **Cetak PDF**, seperti laporan lainnya. Satu dokumen memuat paling banyak 500 barang dan 500 foto.
+
 ### Label QR code
 
 Pada halaman ruangan, klik **Cetak label**. Anda dapat memilih ukuran lembar (A4 3×8, A4 2×7, atau stiker 50×30 mm) dan label pertama yang masih kosong. QR code dapat mengarah ke:

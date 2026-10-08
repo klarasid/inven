@@ -11,6 +11,10 @@ if (isset($_GET['action']) && $_GET['action'] === 'print_labels') {
     require __DIR__ . '/labels.php';
     exit;
 }
+if (isset($_GET['action']) && $_GET['action'] === 'print_catalog') {
+    require __DIR__ . '/catalog.php';
+    exit;
+}
 
 require LIB . 'ip_based_access.inc.php';
 do_checkIP('smc');

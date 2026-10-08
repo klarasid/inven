@@ -82,6 +82,8 @@ preg_match('/src="data:image\/jpeg;base64,([^"]+)"/', $html, $found);
 $size = getimagesizefromstring((string) base64_decode($found[1]));
 check($size[0] === 320 && $size[1] === 240, 'foto diperkecil sebelum dicetak');
 check(substr_count($html, 'Belum ada foto') === 2, 'barang tanpa foto, atau yang fotonya tidak terbaca, ditandai');
+$iso = InventoryCatalog::html($areas, static fn (string $filename): ?string => null, ['documents' => ['catalog' => ['number' => 'DIB/{tahun}', 'revision' => '02', 'issued' => '']]], 'iso');
+check(str_contains($iso, 'No. Dokumen') && str_contains($iso, 'DIB/' . date('Y')) && !str_contains($html, 'No. Dokumen'), 'gaya ISO mencetak kepala dokumen dengan nomor dari Pengaturan Cetak; gaya LaTeX tidak');
 $html = InventoryCatalog::html($every, static fn (string $filename): ?string => $jpeg);
 check(substr_count($html, 'data:image/jpeg;base64,') === 3 && str_contains($html, '3 foto'), 'semua foto barang dicetak berdampingan');
 $db->exec('INSERT INTO inventory_item_photos (item_id, filename) WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 500) SELECT 1, \'banyak-\' || i || \'.jpg\' FROM n');

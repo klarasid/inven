@@ -12,7 +12,8 @@ use SlimsConnect\Http\Sendable;
  * Daftar inventaris berfoto: the items with one photo each, grouped by category (?group=category,
  * the default) or by the areas of their rooms (?group=area), for some categories
  * (?categories=perabot,peralatan) and one library location (?library=P01) when given. An item is
- * shown with its first photo, or with all of them (?photos=all).
+ * shown with its first photo, or with all of them (?photos=all). The document takes ?style= as
+ * the reports do (Documents::inspection).
  */
 final class CatalogController
 {
@@ -53,7 +54,7 @@ final class CatalogController
     {
         RoomController::throttlePdf($context);
         [$group, $categories, $library, $photos] = self::filter($context);
-        $document = $context->documents()->catalog($context->storage, $group, $categories, $library, $photos, Context::libraryName(), $context->staff()->name);
+        $document = $context->documents()->catalog($context->storage, $group, $categories, $library, $photos, Context::libraryName(), $context->staff()->name, $context->request->query('style'));
         $context->log('Daftar inventaris berfoto diunduh (' . $document['count'] . ' barang).', 'Print');
 
         return new BytesResponse($document['bytes'], 'application/pdf', $document['filename']);

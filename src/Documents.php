@@ -32,6 +32,18 @@ final class Documents
         return strtolower(trim((string) preg_replace('/[^A-Za-z0-9_-]+/', '-', $text), '-')) ?: $fallback;
     }
 
+    /**
+     * The WatchPdf style a document is typeset in: the one asked for (`latex`, `iso`, `kop` or
+     * `kop:<id>`), or with none the default saved in Pengaturan Cetak.
+     */
+    private function style(string $requested): string
+    {
+        require_once __DIR__ . '/WatchPdf.php';
+        require_once __DIR__ . '/PdfDocuments.php';
+
+        return PrintDefaults::style($this->db, $requested);
+    }
+
     /** @return array<string, mixed> */
     private function room(int $locationId): array
     {
@@ -124,18 +136,23 @@ final class Documents
     }
 
     /**
-     * Daftar inventaris berfoto: the items with their first photo or all of them, grouped by category or by area.
+     * Daftar inventaris berfoto: the items with their first photo or all of them, grouped by category or by area,
+     * in the style asked for or with none the default saved in Pengaturan Cetak (see inspection()).
      *
      * @param  list<string>  $categories
      * @return array{filename: string, bytes: string, count: int}
      */
-    public function catalog(PhotoStorage $storage, string $group, array $categories, string $library, string $photos, string $libraryName, string $printedBy): array
+    public function catalog(PhotoStorage $storage, string $group, array $categories, string $library, string $photos, string $libraryName, string $printedBy, string $style = ''): array
     {
         self::ensureRuntime();
         require_once __DIR__ . '/InventoryCatalog.php';
+        require_once __DIR__ . '/WatchPdf.php';
+        require_once __DIR__ . '/PdfDocuments.php';
         $catalog = InventoryCatalog::build($this->db, $group, $categories, $library, $photos);
-        $html = InventoryCatalog::html($catalog, static fn (string $filename): ?string => $storage->read($filename), ['library_name' => $libraryName, 'printed_by' => $printedBy]);
-        $pdf = PdfLayout::mpdf($this->tempDir, 'Daftar Inventaris Berfoto', PdfLayout::footer('Daftar inventaris berfoto'));
+        $style = $this->style($style);
+        $context = ['library_name' => $libraryName, 'printed_by' => $printedBy, 'documents' => PdfDocuments::load($this->db)];
+        $html = InventoryCatalog::html($catalog, static fn (string $filename): ?string => $storage->read($filename), $context, $style);
+        $pdf = WatchPdf::mpdf($this->tempDir, 'Daftar Inventaris Berfoto', $style);
         $pdf->WriteHTML($html);
 
         return ['filename' => 'daftar-inventaris-berfoto-' . self::slug($group . '-' . $library, $group) . '.pdf', 'bytes' => $pdf->Output('', 'S'), 'count' => $catalog['items']];
@@ -146,14 +163,15 @@ final class Documents
      *
      * @return array{filename: string, bytes: string, count: int}
      */
-    public function areas(PhotoStorage $itemPhotos, string $group, string $library, string $libraryName, string $printedBy): array
+    public function areas(PhotoStorage $itemPhotos, string $group, string $library, string $libraryName, string $printedBy, string $style = ''): array
     {
         self::ensureRuntime();
         require_once __DIR__ . '/AreaCatalog.php';
         $catalog = AreaCatalog::build($this->db, $group, $library);
         $areaPhotos = AreaPhotos::storage();
-        $html = AreaCatalog::html($catalog, static fn (string $filename): ?string => $areaPhotos->read($filename), static fn (string $filename): ?string => $itemPhotos->read($filename), ['library_name' => $libraryName, 'printed_by' => $printedBy]);
-        $pdf = PdfLayout::mpdf($this->tempDir, 'Daftar Area dan Fasilitas', PdfLayout::footer('Daftar area dan fasilitas'));
+        $style = $this->style($style);
+        $html = AreaCatalog::html($catalog, static fn (string $filename): ?string => $areaPhotos->read($filename), static fn (string $filename): ?string => $itemPhotos->read($filename), ['library_name' => $libraryName, 'printed_by' => $printedBy, 'documents' => PdfDocuments::load($this->db)], $style);
+        $pdf = WatchPdf::mpdf($this->tempDir, 'Daftar Area dan Fasilitas', $style);
         $pdf->WriteHTML($html);
 
         return ['filename' => 'daftar-area-dan-fasilitas' . ($group !== '' ? '-' . $group : '') . '.pdf', 'bytes' => $pdf->Output('', 'S'), 'count' => $catalog['areas']];
@@ -164,13 +182,14 @@ final class Documents
      *
      * @return array{filename: string, bytes: string, count: int}
      */
-    public function software(string $printedBy): array
+    public function software(string $printedBy, string $style = ''): array
     {
         self::ensureRuntime();
         require_once __DIR__ . '/SoftwareList.php';
         $list = SoftwareList::build($this->db, date('Y-m-d'));
-        $pdf = PdfLayout::mpdf($this->tempDir, 'Daftar Perangkat Lunak', PdfLayout::footer('Daftar perangkat lunak'));
-        $pdf->WriteHTML(SoftwareList::html($list, ['printed_by' => $printedBy]));
+        $style = $this->style($style);
+        $pdf = WatchPdf::mpdf($this->tempDir, 'Daftar Perangkat Lunak', $style);
+        $pdf->WriteHTML(SoftwareList::html($list, ['printed_by' => $printedBy, 'documents' => PdfDocuments::load($this->db)], $style));
 
         return ['filename' => 'daftar-perangkat-lunak.pdf', 'bytes' => $pdf->Output('', 'S'), 'count' => $list['applications']];
     }
@@ -187,7 +206,7 @@ final class Documents
         self::ensureRuntime();
         require_once __DIR__ . '/WatchPdf.php';
         require_once __DIR__ . '/PdfDocuments.php';
-        $style = PrintDefaults::style($this->db, $style);
+        $style = $this->style($style);
         $document = $watch->document($id);
         $html = WatchPdf::detail($document, static fn (array $photo): ?string => $watch->photo($id, (int) $photo['id']), $style, PdfDocuments::load($this->db));
         $pdf = WatchPdf::mpdf($this->tempDir, 'Dokumen Pemeriksaan #' . $id, $style);
@@ -202,7 +221,7 @@ final class Documents
      *
      * @return array{filename: string, bytes: string, count: int}
      */
-    public function schedules(Supervision $watch, string $printedBy): array
+    public function schedules(Supervision $watch, string $printedBy, string $style = ''): array
     {
         self::ensureRuntime();
         require_once __DIR__ . '/WatchSheets.php';
@@ -212,8 +231,9 @@ final class Documents
         }
         usort($rows, static fn (array $a, array $b): int => [Supervision::decode((string) $a['snapshot'])['room_name'] ?? '', $a['id']] <=> [Supervision::decode((string) $b['snapshot'])['room_name'] ?? '', $b['id']]);
         $rooms = (int) $watch->query('SELECT COUNT(*) FROM inventory_locations')->fetchColumn();
-        $pdf = PdfLayout::mpdf($this->tempDir, 'Jadwal Pemeriksaan', PdfLayout::footer('Jadwal pemeriksaan'));
-        $pdf->WriteHTML(WatchSheets::schedules($rows, ['printed_by' => $printedBy, 'rooms' => $rooms]));
+        $style = $this->style($style);
+        $pdf = WatchPdf::mpdf($this->tempDir, 'Jadwal Pemeriksaan', $style);
+        $pdf->WriteHTML(WatchSheets::schedules($rows, ['printed_by' => $printedBy, 'rooms' => $rooms, 'documents' => PdfDocuments::load($this->db)], $style));
 
         return ['filename' => 'jadwal-pemeriksaan.pdf', 'bytes' => $pdf->Output('', 'S'), 'count' => count($rows)];
     }
@@ -224,15 +244,16 @@ final class Documents
      *
      * @return array{filename: string, bytes: string, count: int}
      */
-    public function checklists(Supervision $watch, int $id, string $printedBy): array
+    public function checklists(Supervision $watch, int $id, string $printedBy, string $style = ''): array
     {
         self::ensureRuntime();
         require_once __DIR__ . '/WatchSheets.php';
         $templates = $id > 0
             ? [$watch->row('templates', $id)]
             : $watch->query('SELECT t.* FROM inventory_watch_templates t WHERE t.id IN (SELECT s.template_id FROM inventory_watch_schedules s WHERE s.active=1 AND s.location_id IS NOT NULL AND (s.end_date IS NULL OR s.end_date>=CURRENT_DATE)) ORDER BY t.name, t.id')->fetchAll(PDO::FETCH_ASSOC);
-        $pdf = PdfLayout::mpdf($this->tempDir, 'Checklist Pemeriksaan', PdfLayout::footer('Checklist pemeriksaan'));
-        $pdf->WriteHTML(WatchSheets::checklists($templates, ['printed_by' => $printedBy]));
+        $style = $this->style($style);
+        $pdf = WatchPdf::mpdf($this->tempDir, 'Checklist Pemeriksaan', $style);
+        $pdf->WriteHTML(WatchSheets::checklists($templates, ['printed_by' => $printedBy, 'documents' => PdfDocuments::load($this->db)], $style));
 
         return ['filename' => 'checklist-pemeriksaan' . ($id > 0 ? '-' . $id : '') . '.pdf', 'bytes' => $pdf->Output('', 'S'), 'count' => count($templates)];
     }
@@ -249,7 +270,7 @@ final class Documents
         self::ensureRuntime();
         require_once __DIR__ . '/WatchPdf.php';
         require_once __DIR__ . '/PdfDocuments.php';
-        $style = PrintDefaults::style($this->db, $style);
+        $style = $this->style($style);
         $rows = $watch->inspections($filter, 1, self::MAX_ROWS + 1);
         if (count($rows) > self::MAX_ROWS) {
             throw new RuntimeException('Laporan melebihi 500 pemeriksaan. Pilih periode yang lebih pendek.');

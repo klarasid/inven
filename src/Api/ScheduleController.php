@@ -73,7 +73,7 @@ final class ScheduleController
     public function document(Context $context): Sendable
     {
         RoomController::throttlePdf($context);
-        $document = $context->documents()->schedules($context->watch(), $context->staff()->name);
+        $document = $context->documents()->schedules($context->watch(), $context->staff()->name, $context->request->query('style'));
         $context->log('Jadwal pemeriksaan diunduh (' . $document['count'] . ' jadwal).', 'Print');
 
         return new BytesResponse($document['bytes'], 'application/pdf', $document['filename']);
@@ -83,7 +83,7 @@ final class ScheduleController
     public function templatesDocument(Context $context): Sendable
     {
         RoomController::throttlePdf($context);
-        $document = $context->documents()->checklists($context->watch(), $context->request->queryInt('id', 0, 0, PHP_INT_MAX), $context->staff()->name);
+        $document = $context->documents()->checklists($context->watch(), $context->request->queryInt('id', 0, 0, PHP_INT_MAX), $context->staff()->name, $context->request->query('style'));
         $context->log('Checklist pemeriksaan diunduh (' . $document['count'] . ' checklist).', 'Print');
 
         return new BytesResponse($document['bytes'], 'application/pdf', $document['filename']);

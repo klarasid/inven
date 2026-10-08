@@ -43,7 +43,7 @@ final class AreaController
     {
         RoomController::throttlePdf($context);
         [$group, $library] = self::filter($context);
-        $document = $context->documents()->areas($context->storage, $group, $library, Context::libraryName(), $context->staff()->name);
+        $document = $context->documents()->areas($context->storage, $group, $library, Context::libraryName(), $context->staff()->name, $context->request->query('style'));
         $context->log('Daftar area dan fasilitas diunduh (' . $document['count'] . ' area).', 'Print');
 
         return new BytesResponse($document['bytes'], 'application/pdf', $document['filename']);

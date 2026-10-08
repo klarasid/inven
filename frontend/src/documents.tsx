@@ -18,6 +18,11 @@ const DEFAULTS: Record<string, Identity> = {
   inspection: { number: "PMR-{id}", revision: "00", issued: "" },
   report: { number: "LK-{id}", revision: "00", issued: "" },
   sarpras: { number: "REKAP-SARPRAS/{romawi}/{tahun}", revision: "00", issued: "" },
+  catalog: { number: "INV-FOTO/{romawi}/{tahun}", revision: "00", issued: "" },
+  areas: { number: "AREA/{romawi}/{tahun}", revision: "00", issued: "" },
+  software: { number: "PERANGKAT-LUNAK/{romawi}/{tahun}", revision: "00", issued: "" },
+  schedules: { number: "JADWAL-PMR/{tahun}", revision: "00", issued: "" },
+  checklists: { number: "CHECKLIST-PMR/{tahun}", revision: "00", issued: "" },
 };
 const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
 

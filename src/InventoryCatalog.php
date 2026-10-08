@@ -128,12 +128,19 @@ final class InventoryCatalog
     }
 
     /**
+     * The list as a document in one of the print styles the reports use (WatchPdf::STYLES); for
+     * `kop`, PdfLetterhead must have its template already.
+     *
      * @param  callable(string): ?string  $readPhoto  the bytes of a stored photo, by its filename
-     * @param  array{library_name?:string,printed_by?:string}  $context
+     * @param  array{library_name?:string,printed_by?:string,documents?:array}  $context
      */
-    public static function html(array $catalog, callable $readPhoto, array $context = []): string
+    public static function html(array $catalog, callable $readPhoto, array $context = [], string $style = 'latex'): string
     {
+        require_once __DIR__ . '/WatchPdf.php';
+        require_once __DIR__ . '/PdfDocuments.php';
+        $t = WatchPdf::STYLES[$style] ?? PdfLatex::class;
         $e = static fn($value): string => PdfLayout::e($value);
+        $today = date('Y-m-d');
         $scope = array_filter([
             (string) ($context['library_name'] ?? ''),
             $catalog['categories'] ? implode(', ', array_map(static fn($code) => Sarpras::CATEGORIES[$code], $catalog['categories'])) : 'Semua kategori',
@@ -141,20 +148,24 @@ final class InventoryCatalog
         ]);
         // Every photo of an item: smaller, two abreast, so five of them still fit beside its row.
         $all = $catalog['photos'] === 'all';
-        $h = PdfLayout::css($all
-            ? '.thumb{width:19mm;border:0.2mm solid #d1d5db;}.grid td.photo{width:46mm;text-align:center;}'
-            : '.thumb{width:26mm;border:0.2mm solid #d1d5db;}.grid td.photo{width:28mm;text-align:center;}')
-            . PdfLayout::header('DAFTAR INVENTARIS BERFOTO', $e(implode(' · ', $scope)))
-            . PdfLayout::meta([
-                'Jumlah barang' => (string) $catalog['items'],
-                'Barang berfoto' => $catalog['with_photos'] . ' dari ' . $catalog['items'] . ($all ? ' · ' . $catalog['photo_count'] . ' foto' : ''),
-                'Dicetak oleh' => $e($context['printed_by'] ?? ''),
-                'Tanggal' => PdfLayout::date(new \DateTimeImmutable('now')),
-            ]);
+        $thumb = '<img style="width:' . ($all ? '19mm' : '26mm') . ';border:0.2mm solid #d1d5db;" src="';
+        $muted = 'font-size:8pt;color:#555555;';
+        $h = $t::begin() . $t::titleBlock(
+            'Daftar Inventaris Berfoto',
+            ($context['printed_by'] ?? '') !== '' ? $e($context['printed_by']) : '',
+            $e(implode(' · ', $scope)) . ' · Per ' . PdfLayout::date($today),
+            PdfDocuments::identity($context['documents'] ?? PdfDocuments::DEFAULTS, 'catalog', ['date' => $today], $today)
+        );
+        $h .= $t::facts([
+            'Jumlah barang' => (string) $catalog['items'],
+            'Barang berfoto' => $catalog['with_photos'] . ' dari ' . $catalog['items'] . ($all ? ' · ' . $catalog['photo_count'] . ' foto' : ''),
+            'Dicetak oleh' => $e($context['printed_by'] ?? ''),
+            'Tanggal' => PdfLayout::date($today),
+        ]);
         if ($catalog['group'] === 'area') {
-            $h .= '<p class="note">Barang dicatat pada ruangan. Bila satu ruangan memiliki beberapa area, barangnya tercantum pada tiap area ruangan itu.</p>';
+            $h .= $t::paragraph('Barang dicatat pada ruangan. Bila satu ruangan memiliki beberapa area, barangnya tercantum pada tiap area ruangan itu.');
         }
-        if (!$catalog['groups']) $h .= '<p class="muted">Tidak ada barang yang sesuai.</p>';
+        if (!$catalog['groups']) $h .= $t::paragraph('Tidak ada barang yang sesuai.');
 
         // A photo is read and scaled down once, however many groups list its item.
         $thumbs = [];
@@ -164,21 +175,21 @@ final class InventoryCatalog
                 $images = [];
                 foreach ($item['photos'] as $filename) {
                     if (!array_key_exists($filename, $thumbs)) $thumbs[$filename] = self::thumbnail($readPhoto($filename));
-                    if ($thumbs[$filename] !== null) $images[] = '<img class="thumb" src="' . $thumbs[$filename] . '">';
+                    if ($thumbs[$filename] !== null) $images[] = $thumb . $thumbs[$filename] . '">';
                 }
                 $detail = array_filter([trim((string) $item['item_type']), trim((string) $item['brand_model'])], static fn($text) => $text !== '');
                 $rows[] = [
                     (string) ($n + 1),
-                    $images ? implode(' ', $images) : '<span class="muted small">Belum ada foto</span>',
-                    '<span class="strong">' . $e($item['item_name']) . '</span>' . ($detail ? '<br><span class="muted small">' . $e(implode(' · ', $detail)) . '</span>' : ''),
+                    $images ? implode(' ', $images) : '<span style="' . $muted . '">Belum ada foto</span>',
+                    '<b>' . $e($item['item_name']) . '</b>' . ($detail ? '<br><span style="' . $muted . '">' . $e(implode(' · ', $detail)) . '</span>' : ''),
                     $e($item['item_code']),
                     $e($item['room_name']),
                     $e($item['quantity_register']),
                     $e(Inventory::CONDITIONS[$item['item_condition']] ?? $item['item_condition']),
                 ];
             }
-            $h .= '<h2>' . $e($entry['label']) . ' (' . count($rows) . ' barang)</h2>'
-                . PdfLayout::table([['No.', 'no'], ['Foto', 'photo'], 'Barang', 'Kode', 'Ruangan', ['Jumlah', 'num'], 'Kondisi'], $rows);
+            $h .= $t::section($entry['label'] . ' (' . count($rows) . ' barang)')
+                . $t::table('Barang ' . mb_strtolower($entry['label']), [['No.', 'r'], ['Foto', 'c'], 'Barang', 'Kode', 'Ruangan', ['Jumlah', 'r'], 'Kondisi'], $rows, '', '8.8pt');
         }
         return $h;
     }

@@ -65,41 +65,52 @@ final class SoftwareList
         ];
     }
 
-    /** @param array{printed_by?:string} $context */
-    public static function html(array $list, array $context = []): string
+    /**
+     * The register as a document in one of the print styles the reports use (WatchPdf::STYLES).
+     *
+     * @param array{printed_by?:string,documents?:array} $context
+     */
+    public static function html(array $list, array $context = [], string $style = 'latex'): string
     {
+        require_once __DIR__ . '/WatchPdf.php';
+        $t = WatchPdf::STYLES[$style] ?? PdfLatex::class;
         $e = static fn($value): string => PdfLayout::e($value);
-        $h = PdfLayout::css()
-            . PdfLayout::header('DAFTAR PERANGKAT LUNAK', 'Perangkat lunak yang digunakan perpustakaan beserta legalitas lisensinya')
-            . PdfLayout::meta([
+        $today = date('Y-m-d');
+        $h = $t::begin()
+            . $t::titleBlock(
+                'Daftar Perangkat Lunak',
+                ($context['printed_by'] ?? '') !== '' ? $e($context['printed_by']) : '',
+                'Perangkat lunak yang digunakan perpustakaan beserta legalitas lisensinya · Per ' . PdfLayout::date($today),
+                PdfDocuments::identity($context['documents'] ?? PdfDocuments::DEFAULTS, 'software', ['date' => $today], $today)
+            )
+            . $t::facts([
                 'Jumlah aplikasi' => (string) $list['applications'],
                 'Berlisensi resmi' => $list['licensed'] . ' dari ' . $list['applications'] . ($list['percent'] === null ? '' : ' (' . number_format($list['percent'], 1, ',', '.') . '%)'),
                 'Dicetak oleh' => $e($context['printed_by'] ?? ''),
-                'Tanggal' => PdfLayout::date(new \DateTimeImmutable('now')),
+                'Tanggal' => PdfLayout::date($today),
             ])
-            . '<p class="note">Lisensi open source dan gratis dihitung resmi. Lisensi yang sudah melewati masa berlakunya dihitung tidak resmi.</p>';
-        if (!$list['groups']) $h .= '<p class="muted">Belum ada aplikasi di register Perangkat Lunak.</p>';
+            . $t::paragraph('Lisensi open source dan gratis dihitung resmi. Lisensi yang sudah melewati masa berlakunya dihitung tidak resmi.');
+        if (!$list['groups']) $h .= $t::paragraph('Belum ada aplikasi di register Perangkat Lunak.');
         foreach ($list['groups'] as $group) {
             $rows = [];
             foreach ($group['items'] as $n => $item) {
-                $status = $item['licensed'] ? '<span class="t-good strong">Resmi</span>' : '<span class="t-bad strong">' . ($item['expired'] ? 'Kedaluwarsa' : 'Tidak resmi') . '</span>';
                 $rows[] = [
                     (string) ($n + 1),
-                    '<span class="strong">' . $e($item['name']) . '</span>' . (trim((string) $item['version']) !== '' ? ' ' . $e($item['version']) : ''),
+                    '<b>' . $e($item['name']) . '</b>' . (trim((string) $item['version']) !== '' ? ' ' . $e($item['version']) : ''),
                     $e(Sarpras::LICENCES[$item['licence']] ?? $item['licence']),
                     (trim((string) $item['licence_ref']) !== '' ? $e($item['licence_ref']) : '—')
-                        . ($item['files'] ? '<br><span class="muted small">' . count($item['files']) . ' berkas bukti terlampir</span>' : ''),
+                        . ($item['files'] ? '<br><span style="font-size:8pt;color:#555555;">' . count($item['files']) . ' berkas bukti terlampir</span>' : ''),
                     $item['valid_until'] === null ? '—' : PdfLayout::date($item['valid_until']),
                     (string) (int) $item['installs'],
-                    $status,
+                    '<b>' . ($item['licensed'] ? 'Resmi' : ($item['expired'] ? 'Kedaluwarsa' : 'Tidak resmi')) . '</b>',
                 ];
             }
-            $h .= '<h2>' . $e($group['label']) . ' (' . count($rows) . ' aplikasi)</h2>'
-                . PdfLayout::table([['No.', 'no'], 'Aplikasi', 'Jenis lisensi', 'Nomor / bukti lisensi', 'Berlaku sampai', ['Instalasi', 'num'], 'Status'], $rows);
+            $h .= $t::section($group['label'] . ' (' . count($rows) . ' aplikasi)')
+                . $t::table('Perangkat lunak ' . mb_strtolower((string) $group['label']), [['No.', 'r'], 'Aplikasi', 'Jenis lisensi', 'Nomor / bukti lisensi', 'Berlaku sampai', ['Instalasi', 'r'], 'Status'], $rows, '', '8.8pt');
         }
-        return $h . PdfLayout::signatures([
+        return $h . $t::signatures([
             ['Mengetahui,', 'Kepala Perpustakaan', ''],
             ['Disusun oleh,', 'Petugas Pengelola', (string) ($context['printed_by'] ?? '')],
-        ], '...................., ' . PdfLayout::date(new \DateTimeImmutable('now')));
+        ], '...................., ' . PdfLayout::date($today));
     }
 }

@@ -67,7 +67,7 @@ final class SoftwareController
     public function document(Context $context): Sendable
     {
         RoomController::throttlePdf($context);
-        $document = $context->documents()->software($context->staff()->name);
+        $document = $context->documents()->software($context->staff()->name, $context->request->query('style'));
         $context->log('Daftar perangkat lunak diunduh (' . $document['count'] . ' aplikasi).', 'Print');
 
         return new BytesResponse($document['bytes'], 'application/pdf', $document['filename']);

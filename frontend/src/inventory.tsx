@@ -18,6 +18,7 @@ import {
   ChevronDown,
   QrCode,
   Tags,
+  Images,
   X,
 } from "lucide-react";
 import { Button } from "./components/ui/button";
@@ -32,6 +33,7 @@ import { Checkbox } from "./components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { RoomAreasTab, RoomPlansTab } from "./room-areas";
 import { LabelDialog } from "./labels";
+import { CatalogDialog } from "./catalog";
 import {
   Dialog,
   DialogContent,
@@ -218,6 +220,7 @@ function RoomGrid() {
   const w = useWorkspace();
   const { data, error, loading } = useData<Page<Values>>("rooms", w.route);
   const [selected, setSelected] = useState<Values>();
+  const [catalog, setCatalog] = useState(false);
   const open = (id: unknown) => w.go({ view: "inventory", room: String(id) });
   return (
     <>
@@ -225,14 +228,21 @@ function RoomGrid() {
         title="Ruangan & Barang"
         description="Pilih ruangan untuk melihat, menambah, dan mencetak kartu inventaris barangnya."
         actions={
-          w.config.write && (
-            <Button onClick={() => w.go({ view: "room-edit" })}>
-              <Plus data-icon="inline-start" />
-              Tambah ruangan
+          <>
+            <Button variant="outline" onClick={() => setCatalog(true)}>
+              <Images data-icon="inline-start" />
+              Cetak daftar berfoto
             </Button>
-          )
+            {w.config.write && (
+              <Button onClick={() => w.go({ view: "room-edit" })}>
+                <Plus data-icon="inline-start" />
+                Tambah ruangan
+              </Button>
+            )}
+          </>
         }
       />
+      <CatalogDialog open={catalog} onOpenChange={setCatalog} />
       <div className="flex flex-col gap-2 sm:flex-row">
         <SearchBox placeholder="Cari nama atau kode ruangan…" />
         <LibraryFilter />
