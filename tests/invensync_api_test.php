@@ -392,6 +392,48 @@ try {
     check($pdf(call('GET', 'AreaController@document', headers: bearer($agentToken), query: ['group' => 'umum'])), 'the list of areas and facilities comes as PDF, photos and all');
     check(call('GET', 'AreaController@summary', headers: bearer($agentToken), query: ['group' => 'gedung'])['code'] === 'validation_failed'
         && call('GET', 'AreaController@summary', headers: bearer($agentToken), query: ['library' => 'X99'])['code'] === 'validation_failed', 'an unknown group or location is refused');
+
+    // One room's areas, whose photos the app adds and removes.
+    $ofRoom = call('GET', 'AreaController@ofRoom', headers: bearer($baca), params: ['id' => 2])['body']['data'];
+    $toiletArea = array_values(array_filter($ofRoom['areas'], static fn (array $area): bool => $area['id'] === $toilet))[0] ?? [];
+    $toiletPhoto = $toiletArea['photo_ids'][0] ?? 0;
+    check($ofRoom['room']['id'] === 2 && $ofRoom['max_photos'] === 3 && $toiletPhoto > 0
+        && ['type' => $toiletArea['type'], 'type_label' => $toiletArea['type_label'], 'name' => $toiletArea['name']] === ['type' => 'toilet', 'type_label' => 'Toilet', 'name' => ''], "a room's areas come with their kind and the ids of their photos, to a read-only librarian too");
+    $areaPhoto = call('GET', 'AreaController@photo', headers: bearer($baca), params: ['id' => 2, 'area' => $toilet, 'photo' => $toiletPhoto]);
+    check($areaPhoto['status'] === 200 && $areaPhoto['body'] instanceof \SLiMS\Plugins\Inventory\Api\BytesResponse, "an area's photo is served as JPEG");
+    check(call('GET', 'AreaController@photo', headers: bearer($baca), params: ['id' => 1, 'area' => $toilet, 'photo' => $toiletPhoto])['code'] === 'not_found', "an area's photo is not served through another room");
+
+    $upload = static function (array $files, string $token) use ($toilet): array {
+        $_FILES = $files === [] ? [] : ['photos' => ['name' => array_fill(0, count($files), 'a.jpg'), 'error' => array_fill(0, count($files), UPLOAD_ERR_OK), 'tmp_name' => $files]];
+        try {
+            return call('POST', 'AreaController@addPhotos', headers: bearer($token) + ['Content-Type' => 'multipart/form-data; boundary=x'], params: ['id' => 2, 'area' => $toilet]);
+        } finally {
+            $_FILES = [];
+        }
+    };
+    $areaPhotoCount = static function () use ($db, $toilet): int {
+        $count = $db->prepare('SELECT COUNT(*) FROM inventory_area_photos WHERE area_id = ?');
+        $count->execute([$toilet]);
+        return (int) $count->fetchColumn();
+    };
+    $notUploaded = tempnam(sys_get_temp_dir(), $prefix);
+    file_put_contents($notUploaded, $areaJpeg);
+    check($upload([$notUploaded], $baca)['code'] === 'read_only', 'a read-only librarian adds no photo to an area');
+    check($upload([], $token)['code'] === 'validation_failed', 'adding photos to an area needs at least one');
+    check($upload([$notUploaded], $token)['code'] === 'rejected' && $areaPhotoCount() === 1, 'a file that was not uploaded with the request is refused, and nothing is kept');
+    \SLiMS\Plugins\Inventory\AreaPhotos::store($db, $areaStorage, 2, $toilet, $areaJpeg, 1, date('Y-m-d H:i:s'));
+    $tooMany = $upload([$notUploaded, $notUploaded], $token);
+    check($tooMany['code'] === 'rejected' && str_contains($tooMany['message'], '1 foto lagi') && $areaPhotoCount() === 2, 'an area takes no more photos than it has room for, all or none');
+    \SLiMS\Plugins\Inventory\AreaPhotos::store($db, $areaStorage, 2, $toilet, $areaJpeg, 1, date('Y-m-d H:i:s'));
+    check(str_contains((string) ($upload([$notUploaded], $token)['message'] ?? ''), 'paling banyak 3 foto'), 'a full area says to remove a photo first');
+    unlink($notUploaded);
+
+    $toiletFile = $db->query('SELECT filename FROM inventory_area_photos WHERE id = ' . (int) $toiletPhoto)->fetchColumn();
+    $removed = call('DELETE', 'AreaController@deletePhoto', headers: bearer($token), params: ['id' => 2, 'area' => $toilet, 'photo' => $toiletPhoto]);
+    $toiletArea = array_values(array_filter($removed['body']['data']['areas'] ?? [], static fn (array $area): bool => $area['id'] === $toilet))[0] ?? [];
+    check($removed['status'] === 200 && count($toiletArea['photo_ids'] ?? []) === 2 && !in_array($toiletPhoto, $toiletArea['photo_ids'] ?? [], true)
+        && $areaStorage->read((string) $toiletFile) === null, "a librarian removes an area's photo, file and all, and gets the room's areas back");
+    check(call('DELETE', 'AreaController@deletePhoto', headers: bearer($token), params: ['id' => 2, 'area' => $toilet, 'photo' => $toiletPhoto])['code'] === 'not_found', 'a photo already removed is reported gone');
     $db->prepare('DELETE FROM inventory_area_photos WHERE area_id = ?')->execute([$toilet]);
     $db->prepare('DELETE FROM inventory_room_areas WHERE id = ?')->execute([$toilet]);
 

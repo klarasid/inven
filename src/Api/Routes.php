@@ -36,6 +36,10 @@ final class Routes
         $map('GET', '/rooms/[i:id]/items', [RoomController::class, 'items']);
         $map('GET', '/rooms/[i:id]/documents/kir', [RoomController::class, 'kir']);
         $map('GET', '/rooms/[i:id]/documents/labels', [RoomController::class, 'labels']);
+        $map('GET', '/rooms/[i:id]/areas', [AreaController::class, 'ofRoom']);
+        $map('POST', '/rooms/[i:id]/areas/[i:area]/photos', [AreaController::class, 'addPhotos']);
+        $map('GET', '/rooms/[i:id]/areas/[i:area]/photos/[i:photo]', [AreaController::class, 'photo']);
+        $map('DELETE', '/rooms/[i:id]/areas/[i:area]/photos/[i:photo]', [AreaController::class, 'deletePhoto']);
 
         $map('GET', '/areas', [AreaController::class, 'summary']);
         $map('GET', '/areas/document', [AreaController::class, 'document']);
