@@ -43,6 +43,10 @@ final class Routes
 
         $map('GET', '/areas', [AreaController::class, 'summary']);
         $map('GET', '/areas/document', [AreaController::class, 'document']);
+        $map('GET', '/areas/outside', [AreaController::class, 'outside']);
+        $map('POST', '/areas/[i:area]/photos', [AreaController::class, 'addOutsidePhotos']);
+        $map('GET', '/areas/[i:area]/photos/[i:photo]', [AreaController::class, 'outsidePhoto']);
+        $map('DELETE', '/areas/[i:area]/photos/[i:photo]', [AreaController::class, 'deleteOutsidePhoto']);
         $map('GET', '/catalog', [CatalogController::class, 'summary']);
         $map('GET', '/catalog/document', [CatalogController::class, 'document']);
         $map('GET', '/software', [SoftwareController::class, 'index']);

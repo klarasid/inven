@@ -15,10 +15,21 @@ require_once __DIR__ . '/ItemPhotos.php';
  * looks like. An area is not an item, so it has its own photos, a few per area, kept as an
  * item's are: re-encoded as JPEG (ItemPhotos::normalize) in a folder denied to browsers, and
  * served only through the room's page and the documents the plugin prints.
+ *
+ * Where a room is named, OUTSIDE names the areas outside any room (RoomAreas::outside) instead.
  */
 final class AreaPhotos
 {
     public const MAX_PER_AREA = 3;
+
+    /** In place of a room's id: the areas outside any room. */
+    public const OUTSIDE = 0;
+
+    /** @return array{0:string,1:list<int>} the condition on the area (alias a) and its arguments */
+    private static function place(int $roomId): array
+    {
+        return $roomId === self::OUTSIDE ? ['a.location_id IS NULL', []] : ['a.location_id = ?', [$roomId]];
+    }
 
     public static function storage(): PhotoStorage
     {
@@ -26,15 +37,15 @@ final class AreaPhotos
     }
 
     /**
-     * The photos of every area, of one room or of all, by area and oldest first.
+     * The photos of every area, of one room (or OUTSIDE) or of all, by area and oldest first.
      *
      * @return array<int, list<array{id:int,filename:string,created_at:string}>>
      */
     public static function byArea(PDO $db, ?int $roomId = null): array
     {
-        $query = $db->prepare('SELECT p.id, p.area_id, p.filename, p.created_at FROM inventory_area_photos p JOIN inventory_room_areas a ON a.id = p.area_id'
-            . ($roomId === null ? '' : ' WHERE a.location_id = ?') . ' ORDER BY p.id');
-        $query->execute($roomId === null ? [] : [$roomId]);
+        [$where, $args] = $roomId === null ? ['1 = 1', []] : self::place($roomId);
+        $query = $db->prepare('SELECT p.id, p.area_id, p.filename, p.created_at FROM inventory_area_photos p JOIN inventory_room_areas a ON a.id = p.area_id WHERE ' . $where . ' ORDER BY p.id');
+        $query->execute($args);
         $photos = [];
         foreach ($query->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $photos[(int) $row['area_id']][] = ['id' => (int) $row['id'], 'filename' => (string) $row['filename'], 'created_at' => (string) $row['created_at']];
@@ -55,9 +66,10 @@ final class AreaPhotos
     /** Stores a photo's bytes for an area of the room, as add() does once the upload is read. @return int the photo's id */
     public static function store(PDO $db, PhotoStorage $storage, int $roomId, int $areaId, string $bytes, ?int $uid, string $now): int
     {
-        $area = $db->prepare('SELECT 1 FROM inventory_room_areas WHERE id = ? AND location_id = ?');
-        $area->execute([$areaId, $roomId]);
-        if (!$area->fetchColumn()) throw new RuntimeException('Area tidak ditemukan di ruangan ini.');
+        [$where, $args] = self::place($roomId);
+        $area = $db->prepare('SELECT 1 FROM inventory_room_areas a WHERE a.id = ? AND ' . $where);
+        $area->execute([$areaId, ...$args]);
+        if (!$area->fetchColumn()) throw new RuntimeException($roomId === self::OUTSIDE ? 'Area di luar ruangan tidak ditemukan.' : 'Area tidak ditemukan di ruangan ini.');
         $count = $db->prepare('SELECT COUNT(*) FROM inventory_area_photos WHERE area_id = ?');
         $count->execute([$areaId]);
         if ((int) $count->fetchColumn() >= self::MAX_PER_AREA) {
@@ -75,10 +87,11 @@ final class AreaPhotos
 
     public static function delete(PDO $db, PhotoStorage $storage, int $roomId, int $id): void
     {
-        $query = $db->prepare('SELECT p.filename FROM inventory_area_photos p JOIN inventory_room_areas a ON a.id = p.area_id WHERE p.id = ? AND a.location_id = ?');
-        $query->execute([$id, $roomId]);
+        [$where, $args] = self::place($roomId);
+        $query = $db->prepare('SELECT p.filename FROM inventory_area_photos p JOIN inventory_room_areas a ON a.id = p.area_id WHERE p.id = ? AND ' . $where);
+        $query->execute([$id, ...$args]);
         $filename = $query->fetchColumn();
-        if ($filename === false) throw new RuntimeException('Foto tidak ditemukan pada area di ruangan ini.');
+        if ($filename === false) throw new RuntimeException($roomId === self::OUTSIDE ? 'Foto tidak ditemukan pada area di luar ruangan.' : 'Foto tidak ditemukan pada area di ruangan ini.');
         $db->prepare('DELETE FROM inventory_area_photos WHERE id = ?')->execute([$id]);
         $storage->cleanup([(string) $filename]);
     }

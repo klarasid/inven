@@ -68,6 +68,17 @@ final class Sarpras
 
     public const AREA_GROUPS = ['dasar' => 'Area layanan dasar', 'pendukung' => 'Area pendukung', 'umum' => 'Fasilitas umum'];
 
+    /**
+     * Kinds of area that may stand outside any room (RoomAreas::saveOutside): the public
+     * facilities and the open areas. A collection or a reading room is always inside one.
+     *
+     * @return list<string>
+     */
+    public static function outsideTypes(): array
+    {
+        return array_keys(array_filter(self::AREA_TYPES, static fn(array $type): bool => $type['group'] === 'umum' || !empty($type['open'])));
+    }
+
     public const CATEGORIES = [
         'perabot' => 'Perabot (meja, kursi, rak)',
         'peralatan' => 'Peralatan perpustakaan',
@@ -113,7 +124,7 @@ final class Sarpras
     /** Classification lists for the room and item forms. */
     public static function lists(): array
     {
-        return ['areaTypes' => self::AREA_TYPES, 'areaGroups' => self::AREA_GROUPS, 'categories' => self::CATEGORIES, 'types' => self::TYPES];
+        return ['areaTypes' => self::AREA_TYPES, 'areaGroups' => self::AREA_GROUPS, 'outsideAreaTypes' => self::outsideTypes(), 'categories' => self::CATEGORIES, 'types' => self::TYPES];
     }
 
     /** Room area in m², or null when left empty. */
@@ -418,6 +429,8 @@ final class Sarpras
         $roomAreas = RoomAreas::byRoom($db, $library);
         $roomFunctions = [];
         foreach ($rooms as $room) $roomFunctions[(int) $room['id']] = array_values(array_unique(array_column($roomAreas[(int) $room['id']] ?? [], 'type')));
+        // A car park, a canteen or a garden outside any room.
+        $outside = RoomAreas::outside($db, $library);
         $label = static fn(string $code) => self::AREA_TYPES[$code]['label'] ?? $code;
         // "Area koleksi" inside a sentence: "Komputer di area koleksi".
         $place = static fn(string $code) => mb_strtolower(mb_substr($label($code), 0, 1)) . mb_substr($label($code), 1);
@@ -449,21 +462,25 @@ final class Sarpras
         ];
 
         // 2. Ruang atau area layanan
-        [$basic, $support] = $split(array_values(array_unique(array_merge(...array_values($roomFunctions ?: [[]])))));
+        [$basic, $support] = $split(array_values(array_unique(array_merge(array_column($outside, 'type'), ...array_values($roomFunctions ?: [[]])))));
         $present = array_merge($basic, $support);
         $classified = count(array_filter($roomFunctions));
+        $areaNames = static fn(array $areas): string => implode(', ', array_map(static fn($a) => $label($a['type']) . ($a['name'] !== '' ? ' (' . $a['name'] . ')' : ''), $areas)) ?: '—';
         $aspects[] = [
             'no' => 2, 'section' => 'Gedung dan ruang', 'title' => 'Ruang atau area layanan perpustakaan',
             'value' => count($basic) . ' dari 4 area dasar · ' . count($support) . ' area pendukung',
-            'level' => $classified === 0 ? null : (count($basic) < 4 ? 'd' : (count($support) > 1 ? 'a' : (count($support) === 1 ? 'b' : 'c'))),
-            'basis' => "Dari area yang dicatat pada $classified dari " . count($rooms) . ' ruangan.',
+            'level' => $classified === 0 && !$outside ? null : (count($basic) < 4 ? 'd' : (count($support) > 1 ? 'a' : (count($support) === 1 ? 'b' : 'c'))),
+            'basis' => "Dari area yang dicatat pada $classified dari " . count($rooms) . ' ruangan' . ($outside ? ' dan ' . count($outside) . ' area di luar ruangan' : '') . '.',
             'checks' => array_merge(
                 array_map(static fn($code) => ['label' => self::AREA_TYPES[$code]['label'], 'ok' => in_array($code, $basic, true)], array_keys(array_filter(self::AREA_TYPES, static fn($f) => $f['group'] === 'dasar'))),
                 [['label' => 'Lebih dari 1 area pendukung' . ($support ? ': ' . implode(', ', array_map($label, $support)) : ''), 'ok' => count($support) > 1]]
             ),
-            'rows' => array_map(static fn($r) => [$r['room_name'], implode(', ', array_map(static fn($a) => $label($a['type']) . ($a['name'] !== '' ? ' (' . $a['name'] . ')' : ''), $roomAreas[(int) $r['id']] ?? [])) ?: '—'], $rooms),
+            'rows' => array_merge(
+                array_map(static fn($r) => [$r['room_name'], $areaNames($roomAreas[(int) $r['id']] ?? [])], $rooms),
+                $outside ? [[RoomAreas::OUTSIDE, $areaNames($outside)]] : []
+            ),
             'columns' => ['Ruangan', 'Area'],
-            'fix' => 'Buka tiap ruangan, lalu catat areanya di tab Area. Satu ruangan boleh memiliki beberapa area.',
+            'fix' => 'Buka tiap ruangan, lalu catat areanya di tab Area. Satu ruangan boleh memiliki beberapa area. Gazebo dan taman di luar gedung dicatat di Area luar ruangan.',
             'sources' => ['inventory'],
         ];
 
@@ -580,9 +597,9 @@ final class Sarpras
             count($security) > 5 ? 'a' : (count($security) === 5 ? 'b' : (count($security) === 4 ? 'c' : 'd')),
             'Lebih dari 5 jenis sarana keamanan', 'Beri kategori Keamanan pada barang, lalu isi jenisnya, misalnya APAR, CCTV, security gate, alarm, atau jalur evakuasi.');
 
-        // 10. Fasilitas umum: areas of that kind in the rooms, and items of the category.
+        // 10. Fasilitas umum: areas of that kind in the rooms and outside them, and items of the category.
         $public = [];
-        foreach ($roomAreas as $areas) {
+        foreach ([...array_values($roomAreas), $outside] as $areas) {
             foreach ($group(array_column($areas, 'type'), 'umum') as $code) {
                 $public[mb_strtolower($label($code))] ??= ['type' => $label($code), 'count' => 0];
                 $public[mb_strtolower($label($code))]['count']++;
@@ -594,8 +611,8 @@ final class Sarpras
         $public = array_values($public);
         $aspects[] = self::typeAspect(10, 'Keamanan dan fasilitas umum', 'Ketersediaan fasilitas umum', $public,
             count($public) > 6 ? 'a' : (count($public) === 6 ? 'b' : (count($public) === 5 ? 'c' : 'd')),
-            'Lebih dari 6 jenis fasilitas umum', 'Catat toilet, musala, parkir, kantin, ruang laktasi, atau area outdoor sebagai area di ruangannya (tab Area). Barang seperti papan petunjuk dan dispenser air minum dicatat sebagai barang berkategori Fasilitas umum.',
-            'Jenis berbeda dari area fasilitas umum di ruangan dan dari barang yang berfungsi (tidak Rusak berat).');
+            'Lebih dari 6 jenis fasilitas umum', 'Catat toilet, musala, parkir, kantin, ruang laktasi, atau area outdoor sebagai area di ruangannya (tab Area), atau di Area luar ruangan bila letaknya di luar gedung, seperti parkir, kantin, dan taman. Barang seperti papan petunjuk dan dispenser air minum dicatat sebagai barang berkategori Fasilitas umum.',
+            'Jenis berbeda dari area fasilitas umum di ruangan dan di luar ruangan, dan dari barang yang berfungsi (tidak Rusak berat).');
 
         // 11. Pengawasan dan pemeliharaan, over the last twelve months.
         $filter = $watch->filter(['from' => (new \DateTimeImmutable('-1 year +1 day'))->format('Y-m-d'), 'to' => $today, 'library' => $library]);

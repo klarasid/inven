@@ -31,7 +31,7 @@ import { Separator } from "./components/ui/separator";
 import { Input } from "./components/ui/input";
 import { Checkbox } from "./components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger } from "./components/ui/tabs";
-import { RoomAreasTab, RoomPlansTab } from "./room-areas";
+import { OutsideAreasSection, RoomAreasTab, RoomPlansTab } from "./room-areas";
 import { LabelDialog } from "./labels";
 import { AreaListDialog, CatalogDialog } from "./catalog";
 import {
@@ -245,7 +245,7 @@ function RoomGrid() {
                   </DropdownMenuItem>
                   <DropdownMenuItem className="flex flex-col items-start gap-0.5" onSelect={() => setList("areas")}>
                     <span className="font-medium">Daftar area dan fasilitas</span>
-                    <span className="text-xs text-muted-foreground">Area tiap ruangan, luas ruangan, dan fotonya.</span>
+                    <span className="text-xs text-muted-foreground">Area tiap ruangan dan di luar ruangan, luas ruangan, dan fotonya.</span>
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
               </DropdownMenuContent>
@@ -265,6 +265,7 @@ function RoomGrid() {
         <SearchBox placeholder="Cari nama atau kode ruangan…" />
         <LibraryFilter />
       </div>
+      {!w.route.q && <OutsideAreasSection library={String(w.route.library || "")} />}
       <ErrorBox message={error} />
       {loading ? (
         <Loading />

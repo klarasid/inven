@@ -56,7 +56,7 @@ foreach ([
     // SLiMS's members: sivitas is counted from them (Sivitas).
     'CREATE TABLE member (member_id TEXT PRIMARY KEY, member_type_id INTEGER, inst_name TEXT, is_pending INTEGER, expire_date TEXT)',
     'CREATE TABLE inventory_locations (id INTEGER PRIMARY KEY, room_name TEXT, location_code TEXT, area_m2 REAL, slims_location_id TEXT)',
-    'CREATE TABLE inventory_room_areas (id INTEGER PRIMARY KEY, location_id INTEGER, type TEXT, name TEXT NOT NULL DEFAULT \'\', created_at TEXT, updated_at TEXT)',
+    'CREATE TABLE inventory_room_areas (id INTEGER PRIMARY KEY, location_id INTEGER, slims_location_id TEXT, type TEXT, name TEXT NOT NULL DEFAULT \'\', created_at TEXT, updated_at TEXT)',
     'CREATE TABLE inventory_items (id INTEGER PRIMARY KEY, location_id INTEGER, item_name TEXT, category TEXT, item_type TEXT NOT NULL DEFAULT \'\', item_condition TEXT)',
     'CREATE TABLE inventory_software (id INTEGER PRIMARY KEY, name TEXT, version TEXT, licence TEXT, valid_until TEXT)',
     'CREATE TABLE inventory_support_documents (id INTEGER PRIMARY KEY, library_code TEXT NOT NULL DEFAULT \'\', kind TEXT, location_id INTEGER, title TEXT, filename TEXT, mime TEXT, created_by INTEGER, created_at TEXT)',

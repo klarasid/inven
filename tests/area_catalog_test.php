@@ -17,7 +17,7 @@ function rejects(callable $run, string $label, string $message): void
 $db = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 foreach ([
     'CREATE TABLE inventory_locations (id INTEGER PRIMARY KEY, room_name TEXT, area_m2 REAL, slims_location_id TEXT)',
-    'CREATE TABLE inventory_room_areas (id INTEGER PRIMARY KEY, location_id INTEGER, type TEXT, name TEXT NOT NULL DEFAULT \'\')',
+    'CREATE TABLE inventory_room_areas (id INTEGER PRIMARY KEY, location_id INTEGER, slims_location_id TEXT, type TEXT, name TEXT NOT NULL DEFAULT \'\')',
     'CREATE TABLE inventory_area_photos (id INTEGER PRIMARY KEY, area_id INTEGER, filename TEXT, created_by INTEGER, created_at TEXT)',
     'CREATE TABLE inventory_items (id INTEGER PRIMARY KEY, location_id INTEGER, item_name TEXT, brand_model TEXT NOT NULL DEFAULT \'\', item_code TEXT, quantity_register TEXT NOT NULL DEFAULT \'1\', item_condition TEXT, category TEXT, item_type TEXT NOT NULL DEFAULT \'\')',
     'CREATE TABLE inventory_item_photos (id INTEGER PRIMARY KEY, item_id INTEGER, filename TEXT)',
@@ -47,6 +47,15 @@ check($summary['groups'][2] === ['key' => 'umum', 'label' => 'Fasilitas umum', '
     'ringkasan menghitung area per jenis, area berfoto, dan barang fasilitas umum');
 check(AreaCatalog::build($db, 'pendukung', 'P01')['groups'] === [] , 'kelompok tanpa area tidak dicantumkan');
 rejects(static fn () => AreaCatalog::build($db, 'gedung'), 'kelompok lain ditolak', 'Pilih kelompok area');
+
+// A car park and a canteen outside any room, each of its own library location.
+$db->exec("INSERT INTO inventory_room_areas (id, location_id, slims_location_id, type, name) VALUES (8, NULL, 'P01', 'parkir', 'Parkir motor'), (9, NULL, 'P02', 'kantin', ''), (10, 99, NULL, 'kantin', 'ruangan yang sudah tidak ada')");
+$withOutside = AreaCatalog::build($db, 'umum');
+check($names($withOutside) === [['Fasilitas umum' => ['Toilet @ Lantai Dasar', 'Musala @ Lantai Dasar', 'Area parkir @ Halaman Kampus 2', 'Area parkir @ Luar ruangan', 'Kantin / pantri @ Luar ruangan']]], 'area luar ruangan tercantum sebagai Luar ruangan, setelah ruangan pada jenis yang sama; area ruangan yang sudah tidak ada dilewati');
+check($names(AreaCatalog::build($db, 'umum', 'P01')) === [['Fasilitas umum' => ['Toilet @ Lantai Dasar', 'Musala @ Lantai Dasar', 'Area parkir @ Luar ruangan']]], 'area luar ruangan mengikuti lokasi perpustakaannya sendiri');
+$outsideHtml = AreaCatalog::html(AreaCatalog::build($db, 'umum', 'P02'), static fn (string $f): ?string => null, static fn (string $f): ?string => null);
+check(str_contains($outsideHtml, 'Luar ruangan') && str_contains($outsideHtml, 'Kantin / pantri') && str_contains($outsideHtml, '—'), 'area luar ruangan dicetak tanpa luas ruangan');
+$db->exec('DELETE FROM inventory_room_areas WHERE id IN (8, 9, 10)');
 
 $picture = imagecreatetruecolor(800, 600);
 ob_start(); imagejpeg($picture); $jpeg = (string) ob_get_clean();

@@ -2,12 +2,13 @@
 import React from 'react'
 import { afterEach, expect, test, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { AreaDialog, RoomAreasTab, RoomPlansTab } from './room-areas'
+import { AreaDialog, OutsideAreasSection, RoomAreasTab, RoomPlansTab } from './room-areas'
 import { WorkspaceContext, type ContextValue } from './context'
 
-const sarpras={areaTypes:{baca:{label:'Area baca',group:'dasar'},diskusi:{label:'Ruang diskusi',group:'pendukung'},toilet:{label:'Toilet',group:'umum'}},areaGroups:{dasar:'Area layanan dasar',pendukung:'Area pendukung',umum:'Fasilitas umum'},categories:{},types:{}}
+const sarpras={areaTypes:{baca:{label:'Area baca',group:'dasar'},diskusi:{label:'Ruang diskusi',group:'pendukung'},gazebo:{label:'Gazebo',group:'pendukung',open:true},toilet:{label:'Toilet',group:'umum'},parkir:{label:'Area parkir',group:'umum'}},areaGroups:{dasar:'Area layanan dasar',pendukung:'Area pendukung',umum:'Fasilitas umum'},outsideAreaTypes:['gazebo','toilet','parkir'],categories:{},types:{}}
 const details={maxAreaPhotos:3,maxPhotoBytes:2097152,areas:[{id:1,type:'baca',name:'',photos:[]},{id:2,type:'baca',name:'Pojok baca anak',photos:[]},{id:3,type:'toilet',name:'',photos:[{id:11,created_at:'2026-10-05 09:00:00',url:'http://localhost/photo?photo_id=11'},{id:12,created_at:'2026-10-05 09:00:00',url:'http://localhost/photo?photo_id=12'}]}],plans:[{id:7,title:'Lantai 1',mime:'image/png',created_at:'2026-10-02 09:00:00',url:'http://localhost/plan?plan_id=7'},{id:8,title:'Jalur evakuasi',mime:'application/pdf',created_at:'2026-10-02 09:00:00',url:'http://localhost/plan?plan_id=8'}],maxPlanBytes:5*1024*1024,maxPlans:10}
-const context=(write=true):ContextValue=>({config:{write,api:'http://localhost/api'} as ContextValue['config'],options:{sarpras} as unknown as ContextValue['options'],route:{view:'inventory',room:5},go:vi.fn(),back:vi.fn(),dirty:vi.fn(),refresh:vi.fn(),revision:0,mutate:vi.fn().mockResolvedValue({ok:true})})
+const libraries=[{location_id:'P01',location_name:'Perpustakaan Pusat'},{location_id:'P02',location_name:'Perpustakaan Cabang'}]
+const context=(write=true,libs:object[]=libraries):ContextValue=>({config:{write,api:'http://localhost/api'} as ContextValue['config'],options:{sarpras,libraries:libs} as unknown as ContextValue['options'],route:{view:'inventory',room:5},go:vi.fn(),back:vi.fn(),dirty:vi.fn(),refresh:vi.fn(),revision:0,mutate:vi.fn().mockResolvedValue({ok:true})})
 const serve=(data:object)=>{const fetch=vi.fn().mockResolvedValue({ok:true,headers:{get:()=>'application/json'},json:async()=>({ok:true,data})});vi.stubGlobal('fetch',fetch);return fetch}
 const mount=(w:ContextValue,tab:React.ReactNode)=>render(<WorkspaceContext.Provider value={w}>{tab}</WorkspaceContext.Provider>)
 const card=(title:string)=>screen.getByText(title).closest('[data-slot="card"]') as HTMLElement
@@ -171,4 +172,63 @@ test('a plan is uploaded with its title, and a file of the wrong kind is refused
  expect((files as FormData).get('plan')).toBe(plan)
  expect(inventory).toBe(true)
  await waitFor(()=>expect(w.refresh).toHaveBeenCalled())
+})
+
+const outside={maxAreas:40,maxAreaPhotos:3,maxPhotoBytes:2097152,migrated:true,areas:[{id:21,type:'parkir',name:'Parkir motor',library:'P01',library_name:'Perpustakaan Pusat',photos:[{id:31,created_at:'2026-10-15 09:00:00',url:'http://localhost/photo?photo_id=31'}]},{id:22,type:'gazebo',name:'',library:'P02',library_name:'Perpustakaan Cabang',photos:[]}]}
+
+test('areas outside any room are listed with their library while every library is shown',async()=>{
+ const fetch=serve(outside)
+ mount(context(),<OutsideAreasSection library=""/>)
+ await screen.findByText('Parkir motor')
+ expect(String(fetch.mock.calls[0][0])).toBe('http://localhost/api?resource=outside-areas')
+ expect(screen.getByText('Perpustakaan Pusat')).toBeTruthy()
+ expect(screen.getByRole('button',{name:'Lihat foto 1 Area parkir'})).toBeTruthy()
+ expect(screen.getByRole('button',{name:'Tambah area'})).toBeTruthy()
+ cleanup()
+ const filtered=serve(outside)
+ mount(context(),<OutsideAreasSection library="P01"/>)
+ await screen.findByText('Parkir motor')
+ expect(String(filtered.mock.calls[0][0])).toBe('http://localhost/api?library=P01&resource=outside-areas')
+ expect(screen.queryByText('Perpustakaan Pusat')).toBeNull()
+})
+
+test('before migration 24 the outside areas say what to run, and nothing can be added',async()=>{
+ serve({...outside,areas:[],migrated:false})
+ mount(context(),<OutsideAreasSection library=""/>)
+ expect(await screen.findByText(/Jalankan migrasi plugin hingga versi 24/)).toBeTruthy()
+ expect(screen.queryByRole('button',{name:'Tambah area'})).toBeNull()
+})
+
+test('an area outside any room offers only outdoor kinds and is saved to the library chosen',async()=>{
+ Element.prototype.hasPointerCapture??=()=>false
+ Element.prototype.scrollIntoView??=()=>{}
+ globalThis.ResizeObserver??=class{observe(){}unobserve(){}disconnect(){}} as unknown as typeof ResizeObserver
+ const w=context();(w.mutate as ReturnType<typeof vi.fn>).mockResolvedValue({ok:true,message:'Area tersimpan.',record:23})
+ const saved=vi.fn()
+ mount(w,<AreaDialog outside={{library:''}} maxPhotos={3} maxPhotoBytes={2097152} onClose={vi.fn()} onSaved={saved}/>)
+ fireEvent.keyDown(await screen.findByRole('combobox',{name:/Jenis area/}),{key:'ArrowDown'})
+ expect(await screen.findByRole('option',{name:'Area parkir'})).toBeTruthy()
+ expect(screen.queryByRole('option',{name:'Area baca'})).toBeNull()
+ fireEvent.keyDown(screen.getByRole('option',{name:'Area parkir'}),{key:'Enter'})
+ // Several libraries: the area must say which it belongs to.
+ fireEvent.click(screen.getByRole('button',{name:'Simpan'}))
+ expect(await screen.findByText('Pilih lokasi perpustakaan area ini.')).toBeTruthy()
+ expect(w.mutate).not.toHaveBeenCalled()
+ fireEvent.keyDown(screen.getByRole('combobox',{name:/Lokasi perpustakaan/}),{key:'ArrowDown'})
+ fireEvent.keyDown(await screen.findByRole('option',{name:'Perpustakaan Cabang'}),{key:'Enter'})
+ const photo=new File(['a'],'parkir.jpg',{type:'image/jpeg'})
+ fireEvent.change(screen.getByLabelText('Foto area'),{target:{files:[photo]}})
+ fireEvent.click(screen.getByRole('button',{name:'Simpan'}))
+ await waitFor(()=>expect(saved).toHaveBeenCalled())
+ expect((w.mutate as ReturnType<typeof vi.fn>).mock.calls.map(([values])=>values)).toEqual([{form_action:'save_outside_area',library:'P02',record_id:0,type:'parkir',name:''},{form_action:'upload_outside_area_photo',area_id:23}])
+})
+
+test('with one library an outside area needs no choice of library',async()=>{
+ const w=context(true,[libraries[0]])
+ mount(w,<AreaDialog outside={{library:''}} area={outside.areas[0] as never} maxPhotos={3} maxPhotoBytes={2097152} onClose={vi.fn()} onSaved={vi.fn()}/>)
+ await screen.findByRole('dialog',{name:'Ubah area'})
+ expect(screen.queryByRole('combobox',{name:/Lokasi perpustakaan/})).toBeNull()
+ fireEvent.click(screen.getByRole('button',{name:'Hapus foto 1'}))
+ await waitFor(()=>expect(w.mutate).toHaveBeenCalledTimes(1))
+ expect((w.mutate as ReturnType<typeof vi.fn>).mock.calls[0][0]).toEqual({form_action:'delete_outside_area_photo',record_id:31})
 })

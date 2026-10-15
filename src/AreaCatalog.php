@@ -13,8 +13,8 @@ require_once __DIR__ . '/PdfLayout.php';
 require_once __DIR__ . '/Sarpras.php';
 
 /**
- * Daftar area dan fasilitas: the areas inside the rooms (RoomAreas) with the room each is in and
- * its photos, under their group: the basic service areas, the supporting ones, and the public
+ * Daftar area dan fasilitas: the areas inside the rooms (RoomAreas) with the room each is in, and
+ * the areas outside any room (a car park, a canteen) as "Luar ruangan", with their photos, under their group: the basic service areas, the supporting ones, and the public
  * facilities. A public facility may also be an item rather than an area (a signboard, a water
  * dispenser): the items of that category are listed with the public facilities.
  */
@@ -30,9 +30,18 @@ final class AreaCatalog
     public static function build(PDO $db, string $group = '', string $library = ''): array
     {
         if ($group !== '' && !isset(Sarpras::AREA_GROUPS[$group])) throw new RuntimeException('Pilih kelompok area: layanan dasar, pendukung, atau fasilitas umum.');
-        $query = $db->prepare('SELECT a.id, a.type, a.name, l.id AS room_id, l.room_name, l.area_m2 FROM inventory_room_areas a JOIN inventory_locations l ON l.id = a.location_id'
-            . ($library === '' ? '' : ' WHERE l.slims_location_id = ?') . ' ORDER BY l.room_name, l.id, a.id');
-        $query->execute($library === '' ? [] : [$library]);
+        // An area outside any room has no room and names its library itself.
+        $sql = 'SELECT a.id, a.type, a.name, l.id AS room_id, l.room_name, l.area_m2 FROM inventory_room_areas a LEFT JOIN inventory_locations l ON l.id = a.location_id'
+            . ' WHERE (l.id IS NOT NULL OR a.location_id IS NULL)%s ORDER BY l.room_name, l.id, a.id';
+        try {
+            $query = $db->prepare(sprintf($sql, $library === '' ? '' : ' AND COALESCE(l.slims_location_id, a.slims_location_id) = ?'));
+            $query->execute($library === '' ? [] : [$library]);
+        } catch (\PDOException $error) {
+            // Before migration 24 every area is in a room.
+            if ((int) ($error->errorInfo[1] ?? 0) !== 1054) throw $error;
+            $query = $db->prepare(sprintf($sql, ' AND l.slims_location_id = ?'));
+            $query->execute([$library]);
+        }
         // Before migration 19 no area has a photo.
         try {
             $photos = AreaPhotos::byArea($db);
@@ -45,13 +54,14 @@ final class AreaCatalog
         foreach ($query->fetchAll(PDO::FETCH_ASSOC) as $row) {
             $type = Sarpras::AREA_TYPES[$row['type']] ?? null;
             if ($type === null || ($group !== '' && $type['group'] !== $group)) continue;
-            $areas[] = $row + ['label' => $type['label'], 'group' => $type['group'], 'photos' => array_column($photos[(int) $row['id']] ?? [], 'filename')];
+            if ($row['room_id'] === null) $row['room_name'] = RoomAreas::OUTSIDE;
+            $areas[] = $row + ['outside' => $row['room_id'] === null, 'label' => $type['label'], 'group' => $type['group'], 'photos' => array_column($photos[(int) $row['id']] ?? [], 'filename')];
         }
         if (count($areas) > self::MAX_AREAS) throw new RuntimeException('Daftar memuat lebih dari ' . self::MAX_AREAS . ' area. Pilih satu kelompok area atau satu lokasi perpustakaan.');
         $photoCount = array_sum(array_map(static fn(array $area): int => count($area['photos']), $areas));
         if ($photoCount > self::MAX_PHOTOS) throw new RuntimeException('Daftar memuat lebih dari ' . self::MAX_PHOTOS . ' foto. Pilih satu kelompok area atau satu lokasi perpustakaan.');
-        // By kind of area, then by room, as the Area tab lists them.
-        usort($areas, static fn(array $a, array $b): int => [$order[$a['type']], $a['room_name'], $a['id']] <=> [$order[$b['type']], $b['room_name'], $b['id']]);
+        // By kind of area, then by room, as the Area tab lists them; those outside any room last.
+        usort($areas, static fn(array $a, array $b): int => [$order[$a['type']], $a['outside'], $a['room_name'], $a['id']] <=> [$order[$b['type']], $b['outside'], $b['room_name'], $b['id']]);
 
         $groups = [];
         foreach (Sarpras::AREA_GROUPS as $key => $label) {

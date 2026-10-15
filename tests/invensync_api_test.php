@@ -88,11 +88,13 @@ try {
     $db->exec('CREATE TABLE item (item_id INT PRIMARY KEY, item_code VARCHAR(20), item_status_id CHAR(3) NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     $db->exec('CREATE TABLE slims_connect_rate_limits (rate_key CHAR(64) PRIMARY KEY, attempts INT, window_started_at DATETIME, blocked_until DATETIME NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
     $db->exec('CREATE TABLE slims_connect_settings (name VARCHAR(64) PRIMARY KEY, value TEXT, updated_at DATETIME) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
-    foreach (['CreateInventoryTables', 'AddSlimsLocationToInventoryLocations', 'CreateInventoryItemPhotos', 'MoveInventoryPhotosToFiles', 'AllowSharedInventoryLocationCodes', 'CreateInventoryItemCodes', 'CreateInventorySupervision', 'CreateInvensyncApi', 'AddFacilityProfileData', 'AllowSeveralItemCategories', 'CreateRoomAreasAndPlans', 'AllowAgentConnections', 'MapMembersToLocations', 'CreateNetworkDocuments', 'CreateSoftwareFiles', 'RenameNetworkDocumentsToSupportDocuments', 'MoveBandwidthEvidenceToSupportDocuments', 'CreateAreaPhotos', 'CreateFeedback', 'MoveSupervisionPhotosFromItemFolder', 'AddFeedbackThreads', 'CreateFeedbackAttachments'] as $migration) (new $migration())->up();
+    foreach (['CreateInventoryTables', 'AddSlimsLocationToInventoryLocations', 'CreateInventoryItemPhotos', 'MoveInventoryPhotosToFiles', 'AllowSharedInventoryLocationCodes', 'CreateInventoryItemCodes', 'CreateInventorySupervision', 'CreateInvensyncApi', 'AddFacilityProfileData', 'AllowSeveralItemCategories', 'CreateRoomAreasAndPlans', 'AllowAgentConnections', 'MapMembersToLocations', 'CreateNetworkDocuments', 'CreateSoftwareFiles', 'RenameNetworkDocumentsToSupportDocuments', 'MoveBandwidthEvidenceToSupportDocuments', 'CreateAreaPhotos', 'CreateFeedback', 'MoveSupervisionPhotosFromItemFolder', 'AddFeedbackThreads', 'CreateFeedbackAttachments', 'AddOutsideAreas'] as $migration) (new $migration())->up();
     (new CreateInvensyncApi())->up();
     check(true, 'migration 8 is repeatable');
     (new AddFeedbackThreads())->up();
     (new CreateFeedbackAttachments())->up();
+    (new AddOutsideAreas())->up();
+    check(true, 'migration 24 is repeatable');
     $db->exec("INSERT INTO inventory_feedback (token, kind, message, created_at) VALUES ('t', 'bug', 'Tombol cetak tidak merespons.', NOW())");
     $db->exec("INSERT INTO inventory_feedback_replies (feedback_id, panel_reply_id, kind, message, replied_at, received_at) VALUES (LAST_INSERT_ID(), NULL, 'sender', 'Di Chrome.', NOW(), NOW())");
     check((int) $db->query('SELECT can_reply FROM inventory_feedback')->fetchColumn() === 1, 'migration 22 is repeatable, opens threads to answers, and keeps answers not sent yet');
@@ -359,6 +361,8 @@ try {
     check($sarpras['aspects'][1]['rows'] === [['Ruang baca umum', 'Area baca, Area literasi / pojok baca (Pojok baca)'], ['Ruang referensi', '—']], 'the areas of each room come with the service area aspect');
 
     // Daftar inventaris berfoto, as an agent asks for it.
+    // The computer of the items above, whose categories a later check emptied.
+    $db->exec("UPDATE inventory_items SET category = 'komputer' WHERE id = 17");
     $catalog = call('GET', 'CatalogController@summary', headers: bearer($agentToken), query: ['group' => 'area', 'categories' => 'komputer'])['body']['data'];
     check($catalog['items'] === 1 && $catalog['with_photos'] === 0 && array_column($catalog['groups'], 'items', 'label') === ['Area baca' => 1, 'Area literasi / pojok baca' => 1], 'the photo inventory is summed up by the areas of the items\' rooms');
     check($pdf(call('GET', 'CatalogController@document', headers: bearer($baca), query: ['categories' => 'komputer'])), 'the photo inventory comes as PDF, to a read-only librarian too');
@@ -436,6 +440,41 @@ try {
     check(call('DELETE', 'AreaController@deletePhoto', headers: bearer($token), params: ['id' => 2, 'area' => $toilet, 'photo' => $toiletPhoto])['code'] === 'not_found', 'a photo already removed is reported gone');
     $db->prepare('DELETE FROM inventory_area_photos WHERE area_id = ?')->execute([$toilet]);
     $db->prepare('DELETE FROM inventory_room_areas WHERE id = ?')->execute([$toilet]);
+
+    // A car park outside any room: its photos too are added and removed from the app.
+    $parkir = \SLiMS\Plugins\Inventory\RoomAreas::saveOutside($db, '', 0, ['type' => 'parkir', 'name' => 'Parkir motor'], date('Y-m-d H:i:s'));
+    $outsideAreas = call('GET', 'AreaController@outside', headers: bearer($baca))['body']['data'];
+    check(($outsideAreas['areas'] ?? []) === [['id' => $parkir, 'type' => 'parkir', 'type_label' => 'Area parkir', 'name' => 'Parkir motor', 'photo_ids' => [], 'library_code' => 'P01', 'library_name' => 'Perpustakaan Pusat']]
+        && $outsideAreas['max_photos'] === 3, 'the areas outside any room come with their library, to a read-only librarian too');
+    $parkirPhoto = \SLiMS\Plugins\Inventory\AreaPhotos::store($db, $areaStorage, \SLiMS\Plugins\Inventory\AreaPhotos::OUTSIDE, $parkir, $areaJpeg, 1, date('Y-m-d H:i:s'));
+    $served = call('GET', 'AreaController@outsidePhoto', headers: bearer($baca), params: ['area' => $parkir, 'photo' => $parkirPhoto]);
+    check($served['status'] === 200 && $served['body'] instanceof \SLiMS\Plugins\Inventory\Api\BytesResponse, "an outside area's photo is served as JPEG");
+    check(call('GET', 'AreaController@photo', headers: bearer($baca), params: ['id' => 0, 'area' => $parkir, 'photo' => $parkirPhoto])['code'] === 'not_found'
+        && call('GET', 'AreaController@photo', headers: bearer($baca), params: ['id' => 2, 'area' => $parkir, 'photo' => $parkirPhoto])['code'] === 'not_found', "an outside area's photo is not served through a room");
+    $db->exec("INSERT INTO inventory_room_areas (location_id, type, name, created_at, updated_at) VALUES (2, 'toilet', '', NOW(), NOW())");
+    $inRoom = (int) $db->lastInsertId();
+    $inRoomPhoto = \SLiMS\Plugins\Inventory\AreaPhotos::store($db, $areaStorage, 2, $inRoom, $areaJpeg, 1, date('Y-m-d H:i:s'));
+    check(call('GET', 'AreaController@outsidePhoto', headers: bearer($baca), params: ['area' => $inRoom, 'photo' => $inRoomPhoto])['code'] === 'not_found', "a room's area is not reached as one outside any room");
+    $notUploaded = tempnam(sys_get_temp_dir(), $prefix);
+    file_put_contents($notUploaded, $areaJpeg);
+    $outsideUpload = static function (int $area, string $token) use ($notUploaded): array {
+        $_FILES = ['photos' => ['name' => ['a.jpg'], 'error' => [UPLOAD_ERR_OK], 'tmp_name' => [$notUploaded]]];
+        try {
+            return call('POST', 'AreaController@addOutsidePhotos', headers: bearer($token) + ['Content-Type' => 'multipart/form-data; boundary=x'], params: ['area' => $area]);
+        } finally {
+            $_FILES = [];
+        }
+    };
+    check($outsideUpload($parkir, $baca)['code'] === 'read_only', 'a read-only librarian adds no photo to an outside area');
+    check($outsideUpload($inRoom, $token)['code'] === 'not_found', "photos of a room's area are not added as if it were outside");
+    check($outsideUpload($parkir, $token)['code'] === 'rejected', 'a file that was not uploaded with the request is refused for an outside area too');
+    unlink($notUploaded);
+    $parkirFile = $db->query('SELECT filename FROM inventory_area_photos WHERE id = ' . $parkirPhoto)->fetchColumn();
+    check(call('DELETE', 'AreaController@deleteOutsidePhoto', headers: bearer($token), params: ['area' => $inRoom, 'photo' => $inRoomPhoto])['code'] === 'not_found', "a photo of a room's area is not removed as if it were outside");
+    $removed = call('DELETE', 'AreaController@deleteOutsidePhoto', headers: bearer($token), params: ['area' => $parkir, 'photo' => $parkirPhoto]);
+    check($removed['status'] === 200 && ($removed['body']['data']['areas'][0]['photo_ids'] ?? null) === [] && $areaStorage->read((string) $parkirFile) === null, "a librarian removes an outside area's photo, file and all, and gets the outside areas back");
+    $db->exec('DELETE FROM inventory_area_photos WHERE area_id IN (' . $parkir . ', ' . $inRoom . ')');
+    $db->exec('DELETE FROM inventory_room_areas WHERE id IN (' . $parkir . ', ' . $inRoom . ')');
 
     // The software register, as an agent asks for it.
     $db->exec("INSERT INTO inventory_software (name, version, purpose, licence, licence_ref, valid_until, installs, created_at, updated_at) VALUES ('Windows 11 Pro', '23H2', 'Sistem operasi', 'komersial', 'KUNCI-RAHASIA-123', NULL, 12, NOW(), NOW()), ('Photoshop', 'CS6', '', 'tidak', '', NULL, 2, NOW(), NOW())");

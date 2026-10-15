@@ -38,6 +38,11 @@ final class Workspace
     {
         return ['%"assignee":{"id":"'.$uid.'",%','%"assignee":{"id":'.$uid.',%'];
     }
+    /** Whether migration 24 has run, so an area may stand outside any room. */
+    private static function outsideMigrated(Supervision $w): bool
+    {
+        return (bool)$w->query("SHOW COLUMNS FROM inventory_room_areas LIKE 'slims_location_id'")->fetchColumn();
+    }
     private static function page(Supervision $w,string $select,string $from,array $args,int $page,string $order): array
     {
         $total=(int)$w->query('SELECT COUNT(*) '.$from,$args)->fetchColumn();
@@ -138,6 +143,20 @@ final class Workspace
                 return ['areas'=>$areas,'plans'=>$plans,'maxPlanBytes'=>RoomPlans::MAX_BYTES,'maxPlans'=>RoomPlans::MAX_PER_ROOM,'maxAreaPhotos'=>AreaPhotos::MAX_PER_AREA,'maxPhotoBytes'=>ItemPhotos::MAX_BYTES];
             } catch(\PDOException $e) {
                 if(in_array((int)($e->errorInfo[1]??0),[1146,1054],true))throw new \RuntimeException('Area dan denah ruangan belum tersedia. Jalankan migrasi plugin hingga versi 12 melalui System → Plugins.');
+                throw $e;
+            }
+        }
+        if($resource==='outside-areas') {
+            // Areas outside any room (a car park, a canteen) of every library location or of one.
+            require_once __DIR__.'/RoomAreas.php';require_once __DIR__.'/AreaPhotos.php';
+            try {
+                $names=$w->query('SELECT location_id,location_name FROM mst_location')->fetchAll(\PDO::FETCH_KEY_PAIR);
+                $areas=RoomAreas::outside($w->pdo(),$library);
+                $photos=$areas?AreaPhotos::byArea($w->pdo(),AreaPhotos::OUTSIDE):[];
+                $areas=array_map(static fn(array $area):array=>$area+['library_name'=>(string)($names[$area['library']]??''),'photos'=>array_map(static fn(array $photo):array=>['id'=>$photo['id'],'created_at'=>$photo['created_at'],'url'=>self::endpoint('index.php',['action'=>'area_photo','photo_id'=>$photo['id']])],$photos[$area['id']]??[])],$areas);
+                return ['areas'=>$areas,'maxAreas'=>RoomAreas::MAX_OUTSIDE,'maxAreaPhotos'=>AreaPhotos::MAX_PER_AREA,'maxPhotoBytes'=>ItemPhotos::MAX_BYTES,'migrated'=>self::outsideMigrated($w)];
+            } catch(\PDOException $e) {
+                if((int)($e->errorInfo[1]??0)===1146)throw new \RuntimeException('Area belum tersedia. Jalankan migrasi plugin hingga versi 24 melalui System → Plugins.');
                 throw $e;
             }
         }

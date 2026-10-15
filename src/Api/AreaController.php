@@ -15,8 +15,9 @@ use SlimsConnect\Http\Sendable;
  * Daftar area dan fasilitas: the areas inside the rooms with their rooms and photos, for one
  * group (?group=dasar, pendukung or umum) and one library location (?library=P01) when given.
  *
- * And one room's areas, whose photos the app can add and remove. The areas themselves are
- * recorded on the room's Area tab in SLiMS; the app does not add or rename them.
+ * And one room's areas, or the areas outside any room (a car park, a canteen), whose photos the
+ * app can add and remove. The areas themselves are recorded in SLiMS, on the room's Area tab or
+ * under Area luar ruangan; the app does not add or rename them.
  */
 final class AreaController
 {
@@ -31,6 +32,52 @@ final class AreaController
      * never more than AreaPhotos::MAX_PER_AREA to an area.
      */
     public function addPhotos(Context $context, int $id, int $areaId): JsonResponse
+    {
+        self::guardRoom($id);
+        $added = $this->storePhotos($context, $id, $areaId);
+        $context->log('Foto area #' . $areaId . ' di ruangan #' . $id . ' ditambahkan: ' . $added . '.', 'Update');
+
+        return JsonResponse::ok(self::room($context, $id), 201);
+    }
+
+    /** Areas outside any room, of every library location, each naming its own. */
+    public function outside(Context $context): JsonResponse
+    {
+        return JsonResponse::ok(self::outsideAreas($context));
+    }
+
+    /** As addPhotos, for an area outside any room. */
+    public function addOutsidePhotos(Context $context, int $areaId): JsonResponse
+    {
+        $added = $this->storePhotos($context, AreaPhotos::OUTSIDE, $areaId);
+        $context->log('Foto area luar ruangan #' . $areaId . ' ditambahkan: ' . $added . '.', 'Update');
+
+        return JsonResponse::ok(self::outsideAreas($context), 201);
+    }
+
+    public function outsidePhoto(Context $context, int $areaId, int $photoId): Sendable
+    {
+        return self::sendPhoto($context, AreaPhotos::OUTSIDE, $areaId, $photoId);
+    }
+
+    public function deleteOutsidePhoto(Context $context, int $areaId, int $photoId): JsonResponse
+    {
+        self::removePhoto($context, AreaPhotos::OUTSIDE, $areaId, $photoId);
+        $context->log('Foto #' . $photoId . ' area luar ruangan #' . $areaId . ' dihapus.', 'Delete');
+
+        return JsonResponse::ok(self::outsideAreas($context));
+    }
+
+    /** Room 0 would name the areas outside any room (AreaPhotos::OUTSIDE), which have their own paths. */
+    private static function guardRoom(int $id): void
+    {
+        if ($id < 1) {
+            throw Failure::notFound('Ruangan tidak ditemukan.');
+        }
+    }
+
+    /** The photos of an area of the room or outside any room, all of them kept or none. @return int how many */
+    private function storePhotos(Context $context, int $id, int $areaId): int
     {
         $files = $context->input()->files('photos');
         $uploads = [];
@@ -50,10 +97,10 @@ final class AreaController
         $db->beginTransaction();
         try {
             // Serialises photo changes to this area, so two phones cannot pass the limit together.
-            $lock = $db->prepare('SELECT id FROM inventory_room_areas WHERE id = ? AND location_id = ? FOR UPDATE');
-            $lock->execute([$areaId, $id]);
+            $lock = $db->prepare('SELECT id FROM inventory_room_areas WHERE id = ? AND ' . ($id === AreaPhotos::OUTSIDE ? 'location_id IS NULL' : 'location_id = ?') . ' FOR UPDATE');
+            $lock->execute($id === AreaPhotos::OUTSIDE ? [$areaId] : [$areaId, $id]);
             if (!$lock->fetchColumn()) {
-                throw Failure::notFound('Area tidak ditemukan di ruangan ini.');
+                throw Failure::notFound($id === AreaPhotos::OUTSIDE ? 'Area di luar ruangan tidak ditemukan.' : 'Area tidak ditemukan di ruangan ini.');
             }
             $count = $db->prepare('SELECT COUNT(*) FROM inventory_area_photos WHERE area_id = ?');
             $count->execute([$areaId]);
@@ -84,12 +131,18 @@ final class AreaController
             $storage->cleanup($written);
             throw $error;
         }
-        $context->log('Foto area #' . $areaId . ' di ruangan #' . $id . ' ditambahkan: ' . count($added) . '.', 'Update');
 
-        return JsonResponse::ok(self::room($context, $id), 201);
+        return count($added);
     }
 
     public function photo(Context $context, int $id, int $areaId, int $photoId): Sendable
+    {
+        self::guardRoom($id);
+
+        return self::sendPhoto($context, $id, $areaId, $photoId);
+    }
+
+    private static function sendPhoto(Context $context, int $id, int $areaId, int $photoId): Sendable
     {
         $filename = self::photoFile($context, $id, $areaId, $photoId);
         $bytes = $filename === null ? null : AreaPhotos::storage()->read($filename);
@@ -102,20 +155,27 @@ final class AreaController
 
     public function deletePhoto(Context $context, int $id, int $areaId, int $photoId): JsonResponse
     {
-        if (self::photoFile($context, $id, $areaId, $photoId) === null) {
-            throw Failure::notFound('Foto tidak ditemukan pada area ini atau sudah dihapus.');
-        }
-        AreaPhotos::delete($context->db, AreaPhotos::storage(), $id, $photoId);
+        self::guardRoom($id);
+        self::removePhoto($context, $id, $areaId, $photoId);
         $context->log('Foto #' . $photoId . ' area #' . $areaId . ' di ruangan #' . $id . ' dihapus.', 'Delete');
 
         return JsonResponse::ok(self::room($context, $id));
     }
 
-    /** The stored file of a photo of this area of this room, or null when it is not one. */
+    private static function removePhoto(Context $context, int $id, int $areaId, int $photoId): void
+    {
+        if (self::photoFile($context, $id, $areaId, $photoId) === null) {
+            throw Failure::notFound('Foto tidak ditemukan pada area ini atau sudah dihapus.');
+        }
+        AreaPhotos::delete($context->db, AreaPhotos::storage(), $id, $photoId);
+    }
+
+    /** The stored file of a photo of this area of this room (or OUTSIDE), or null when it is not one. */
     private static function photoFile(Context $context, int $id, int $areaId, int $photoId): ?string
     {
-        $query = $context->db->prepare('SELECT p.filename FROM inventory_area_photos p JOIN inventory_room_areas a ON a.id = p.area_id WHERE p.id = ? AND p.area_id = ? AND a.location_id = ?');
-        $query->execute([$photoId, $areaId, $id]);
+        $outside = $id === AreaPhotos::OUTSIDE;
+        $query = $context->db->prepare('SELECT p.filename FROM inventory_area_photos p JOIN inventory_room_areas a ON a.id = p.area_id WHERE p.id = ? AND p.area_id = ? AND ' . ($outside ? 'a.location_id IS NULL' : 'a.location_id = ?'));
+        $query->execute($outside ? [$photoId, $areaId] : [$photoId, $areaId, $id]);
         $filename = $query->fetchColumn();
 
         return is_string($filename) ? $filename : null;
@@ -129,14 +189,36 @@ final class AreaController
 
         return [
             'room' => $room,
-            'areas' => array_map(static fn (array $area): array => [
-                'id' => $area['id'],
-                'type' => $area['type'],
-                'type_label' => Sarpras::AREA_TYPES[$area['type']]['label'] ?? $area['type'],
-                'name' => $area['name'],
-                'photo_ids' => array_column($photos[$area['id']] ?? [], 'id'),
-            ], RoomAreas::of($context->db, $id)),
+            'areas' => array_map(static fn (array $area): array => self::area($area, $photos), RoomAreas::of($context->db, $id)),
             'max_photos' => AreaPhotos::MAX_PER_AREA,
+        ];
+    }
+
+    /** @return array{areas: list<array<string, mixed>>, max_photos: int} */
+    private static function outsideAreas(Context $context): array
+    {
+        $names = $context->db->query('SELECT location_id, location_name FROM mst_location')->fetchAll(PDO::FETCH_KEY_PAIR);
+        $areas = RoomAreas::outside($context->db);
+        $photos = $areas ? AreaPhotos::byArea($context->db, AreaPhotos::OUTSIDE) : [];
+
+        return [
+            'areas' => array_map(static fn (array $area): array => self::area($area, $photos) + [
+                'library_code' => $area['library'],
+                'library_name' => (string) ($names[$area['library']] ?? ''),
+            ], $areas),
+            'max_photos' => AreaPhotos::MAX_PER_AREA,
+        ];
+    }
+
+    /** @param array<int, list<array{id:int}>> $photos by area */
+    private static function area(array $area, array $photos): array
+    {
+        return [
+            'id' => $area['id'],
+            'type' => $area['type'],
+            'type_label' => Sarpras::AREA_TYPES[$area['type']]['label'] ?? $area['type'],
+            'name' => $area['name'],
+            'photo_ids' => array_column($photos[$area['id']] ?? [], 'id'),
         ];
     }
 

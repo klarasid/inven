@@ -37,7 +37,7 @@ foreach ([
     // SLiMS's members: sivitas is counted from them (Sivitas).
     'CREATE TABLE member (member_id TEXT PRIMARY KEY, member_type_id INTEGER, inst_name TEXT, is_pending INTEGER, expire_date TEXT)',
     'CREATE TABLE inventory_locations (id INTEGER PRIMARY KEY, room_name TEXT, location_code TEXT, area_m2 REAL, room_functions TEXT NOT NULL DEFAULT \'\', slims_location_id TEXT)',
-    'CREATE TABLE inventory_room_areas (id INTEGER PRIMARY KEY, location_id INTEGER, type TEXT, name TEXT NOT NULL DEFAULT \'\', created_at TEXT, updated_at TEXT)',
+    'CREATE TABLE inventory_room_areas (id INTEGER PRIMARY KEY, location_id INTEGER, slims_location_id TEXT, type TEXT, name TEXT NOT NULL DEFAULT \'\', created_at TEXT, updated_at TEXT)',
     'CREATE TABLE inventory_room_plans (id INTEGER PRIMARY KEY, location_id INTEGER, title TEXT, filename TEXT, mime TEXT, created_by INTEGER, created_at TEXT)',
     'CREATE TABLE inventory_items (id INTEGER PRIMARY KEY, location_id INTEGER, item_name TEXT, category TEXT, item_type TEXT NOT NULL DEFAULT \'\', item_condition TEXT)',
     'CREATE TABLE inventory_software (id INTEGER PRIMARY KEY, name TEXT, version TEXT, licence TEXT, valid_until TEXT)',
@@ -106,6 +106,46 @@ check($aspect($main, 10)['rows'] === [['Dispenser air minum', '1'], ['Toilet', '
 check($main['counts']['unclassified_rooms'] === 0, 'ruangan yang memiliki area tidak dihitung belum dicatat');
 $second = Sarpras::recap($db, $watch, '10');
 check($aspect($second, 10)['rows'] === [['Musala', '1']] && $aspect($second, 2)['value'] === '1 dari 4 area dasar · 0 area pendukung', 'tiap lokasi hanya menghitung area ruangannya sendiri');
+
+// Areas outside any room ----------------------------------------------------------------------
+rejects(fn() => RoomAreas::saveOutside($db, '', 0, ['type' => 'parkir'], $now), 'dengan beberapa lokasi, area luar ruangan menyebut lokasinya');
+rejects(fn() => RoomAreas::saveOutside($db, '99', 0, ['type' => 'parkir'], $now), 'lokasi yang tidak dikenal ditolak');
+rejects(fn() => RoomAreas::saveOutside($db, '00', 0, ['type' => 'koleksi'], $now), 'area koleksi tidak dicatat di luar ruangan');
+$parkir = RoomAreas::saveOutside($db, '00', 0, ['type' => 'parkir', 'name' => 'Parkir motor'], $now);
+$kantin = RoomAreas::saveOutside($db, '00', 0, ['type' => 'kantin'], $now);
+$gazebo = RoomAreas::saveOutside($db, '00', 0, ['type' => 'gazebo'], $now);
+rejects(fn() => RoomAreas::saveOutside($db, '00', 0, ['type' => 'kantin'], $now), 'kantin yang sama tidak dicatat dua kali di satu lokasi');
+$otherCanteen = RoomAreas::saveOutside($db, '10', 0, ['type' => 'kantin'], $now);
+check($otherCanteen > 0, 'lokasi lain boleh mencatat kantinnya sendiri');
+rejects(fn() => RoomAreas::saveOutside($db, '10', $kantin, ['type' => 'kantin'], $now), 'area yang dipindah ke lokasi lain tidak boleh kembar di sana');
+check(array_column(RoomAreas::outside($db, '00'), 'type') === ['gazebo', 'parkir', 'kantin'] && count(RoomAreas::outside($db)) === 4 && RoomAreas::outside($db, '10')[0]['library'] === '10', 'area luar ruangan berurutan menurut jenisnya, per lokasi atau semuanya');
+check(!in_array('parkir', array_merge(...array_map(static fn(array $areas): array => array_column($areas, 'type'), array_values(RoomAreas::byRoom($db)))), true), 'area luar ruangan bukan area salah satu ruangan');
+$toiletArea = RoomAreas::of($db, 3)[0]['id'];
+rejects(fn() => RoomAreas::save($db, 1, $parkir, ['type' => 'parkir'], $now), 'area luar ruangan tidak diubah lewat sebuah ruangan');
+rejects(fn() => RoomAreas::saveOutside($db, '00', $toiletArea, ['type' => 'toilet'], $now), 'area sebuah ruangan tidak diubah sebagai area luar ruangan');
+rejects(fn() => RoomAreas::deleteOutside($db, $toiletArea), 'area sebuah ruangan tidak dihapus sebagai area luar ruangan');
+$withOutside = Sarpras::recap($db, $watch, '00');
+check($aspect($withOutside, 10)['rows'] === [['Area parkir', '1'], ['Dispenser air minum', '1'], ['Kantin / pantri', '1'], ['Toilet', '1']] && str_contains($aspect($withOutside, 10)['fix'], 'Area luar ruangan'), 'parkir dan kantin di luar ruangan dihitung sebagai fasilitas umum');
+check($aspect($withOutside, 2)['value'] === '4 dari 4 area dasar · 4 area pendukung' && end($aspect($withOutside, 2)['rows']) === ['Luar ruangan', 'Gazebo, Area parkir (Parkir motor), Kantin / pantri'], 'gazebo di luar ruangan dihitung sebagai area pendukung dan dirinci sebagai Luar ruangan');
+check($withOutside['counts']['unclassified_rooms'] === 0 && $withOutside['counts']['rooms'] === 3, 'area luar ruangan tidak dihitung sebagai ruangan');
+check($aspect(Sarpras::recap($db, $watch, '10'), 10)['rows'] === [['Kantin / pantri', '1'], ['Musala', '1']], 'tiap lokasi hanya menghitung area luar ruangannya sendiri');
+RoomAreas::deleteOutside($db, $gazebo);
+rejects(fn() => RoomAreas::deleteOutside($db, $gazebo), 'area luar ruangan yang sudah dihapus dilaporkan tidak ada');
+check(array_column(RoomAreas::outside($db, '00'), 'type') === ['parkir', 'kantin'], 'area luar ruangan bisa dihapus');
+foreach ([$parkir, $kantin, $otherCanteen] as $id) RoomAreas::deleteOutside($db, $id);
+
+$single = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+$single->exec('CREATE TABLE mst_location (location_id TEXT PRIMARY KEY, location_name TEXT)');
+$single->exec('CREATE TABLE inventory_locations (id INTEGER PRIMARY KEY, room_name TEXT, slims_location_id TEXT)');
+$single->exec('CREATE TABLE inventory_room_areas (id INTEGER PRIMARY KEY, location_id INTEGER, slims_location_id TEXT, type TEXT, name TEXT NOT NULL DEFAULT \'\', created_at TEXT, updated_at TEXT)');
+$single->exec("INSERT INTO mst_location VALUES ('SL', 'Perpustakaan')");
+$single->exec("INSERT INTO inventory_locations VALUES (1, 'Ruang baca', 'SL')");
+RoomAreas::saveOutside($single, '', 0, ['type' => 'outdoor'], $now);
+check(RoomAreas::outside($single)[0]['library'] === 'SL', 'dengan satu lokasi, area luar ruangan langsung masuk lokasi itu');
+$single->exec('UPDATE inventory_locations SET slims_location_id = NULL');
+$single->exec('DELETE FROM inventory_room_areas');
+RoomAreas::saveOutside($single, '', 0, ['type' => 'outdoor'], $now);
+check(RoomAreas::outside($single)[0]['library'] === '' && RoomAreas::outside($single, 'SL') === [], 'tanpa lokasi, area luar ruangan tidak terikat lokasi mana pun');
 
 // Deleting a room ------------------------------------------------------------------------------
 RoomAreas::deleteRoom($db, 4);

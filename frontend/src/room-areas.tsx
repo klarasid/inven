@@ -1,8 +1,9 @@
 import { useId, useState } from "react";
 import { toast } from "sonner";
-import { FileText, LayoutGrid, Map as MapIcon, Pencil, Plus, Trash2, Upload as UploadIcon } from "lucide-react";
+import { FileText, LayoutGrid, Map as MapIcon, MapPin, Pencil, Plus, Trash2, Trees, Upload as UploadIcon } from "lucide-react";
+import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./components/ui/card";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "./components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./components/ui/dialog";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "./components/ui/field";
 import { Input } from "./components/ui/input";
@@ -12,16 +13,42 @@ import { Actions, Blank, Choice, ErrorBox, ImagePreview, Loading, previewPdf } f
 import { Confirm } from "./settings";
 
 type AreaPhoto = { id: number; created_at: string; url: string };
-/** `photos` is null until the plugin's migration 19 has run. */
-type Area = { id: number; type: string; name: string; photos: AreaPhoto[] | null };
+/** `photos` is null until the plugin's migration 19 has run. An area outside any room names its library. */
+type Area = { id: number; type: string; name: string; photos: AreaPhoto[] | null; library?: string; library_name?: string };
 type Plan = { id: number; title: string; mime: string; created_at: string; url: string };
 type RoomDetails = { areas: Area[]; plans: Plan[]; maxPlanBytes: number; maxPlans: number; maxAreaPhotos: number; maxPhotoBytes: number };
+/** `migrated` is false until the plugin's migration 24 has run. */
+type OutsideDetails = { areas: Area[]; maxAreas: number; maxAreaPhotos: number; maxPhotoBytes: number; migrated: boolean };
+/** Where the dialog keeps an area: in a room, or outside any room as an area of a library location. */
+type Outside = { library: string };
 
 const groupHints: Record<string, string> = {
   dasar: "Empat area ini dinilai di Rekap Sarpras: koleksi, baca, kerja staf, dan layanan.",
   pendukung: "Area tambahan yang mendukung layanan.",
-  umum: "Toilet, musala, parkir, dan sejenisnya. Dihitung sebagai fasilitas umum di Rekap Sarpras.",
+  umum: "Toilet, musala, laktasi, dan sejenisnya. Parkir dan kantin di luar gedung dicatat di Area luar ruangan. Dihitung sebagai fasilitas umum di Rekap Sarpras.",
 };
+
+type Viewing = { url: string; title: string; description: string };
+
+/** An area's photos as thumbnails, each opened full size. */
+function AreaPhotos({ area, label, onView }: { area: Area; label: string; onView: (image: Viewing) => void }) {
+  if (!area.photos?.length) return null;
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-1.5">
+      {area.photos.map((photo, n) => (
+        <button
+          key={photo.id}
+          type="button"
+          className="size-12 cursor-pointer overflow-hidden rounded-md border outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={`Lihat foto ${n + 1} ${label}`}
+          onClick={() => onView({ url: photo.url, title: `Foto ${label}`, description: `${area.name || label}, diunggah ${dateLabel(photo.created_at)}.` })}
+        >
+          <img src={photo.url} alt="" loading="lazy" className="size-full object-cover" />
+        </button>
+      ))}
+    </div>
+  );
+}
 
 /** The areas inside a room: what the room is used for. */
 export function RoomAreasTab({ room }: { room: string }) {
@@ -30,7 +57,7 @@ export function RoomAreasTab({ room }: { room: string }) {
   const { data, error, loading } = useData<RoomDetails>("areas", { room });
   const [editing, setEditing] = useState<Area | "new">();
   const [removing, setRemoving] = useState<Area>();
-  const [viewing, setViewing] = useState<{ url: string; title: string; description: string }>();
+  const [viewing, setViewing] = useState<Viewing>();
   const [busy, setBusy] = useState(false);
   const label = (area: Area) => lists.areaTypes[area.type]?.label || area.type;
 
@@ -95,21 +122,7 @@ export function RoomAreasTab({ room }: { room: string }) {
                             <div className="min-w-0 flex-1">
                               <p className="text-sm font-medium">{label(area)}</p>
                               {area.name && <p className="truncate text-xs text-muted-foreground">{area.name}</p>}
-                              {!!area.photos?.length && (
-                                <div className="mt-1.5 flex flex-wrap gap-1.5">
-                                  {area.photos.map((photo, n) => (
-                                    <button
-                                      key={photo.id}
-                                      type="button"
-                                      className="size-12 cursor-pointer overflow-hidden rounded-md border outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                      aria-label={`Lihat foto ${n + 1} ${label(area)}`}
-                                      onClick={() => setViewing({ url: photo.url, title: `Foto ${label(area)}`, description: `${area.name || label(area)}, diunggah ${dateLabel(photo.created_at)}.` })}
-                                    >
-                                      <img src={photo.url} alt="" loading="lazy" className="size-full object-cover" />
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
+                              <AreaPhotos area={area} label={label(area)} onView={setViewing} />
                             </div>
                             {w.config.write && (
                               <Actions
@@ -159,18 +172,137 @@ export function RoomAreasTab({ room }: { room: string }) {
   );
 }
 
+/**
+ * Areas outside any room: a car park, a canteen, a garden. Each belongs to a library location;
+ * the list shows those of the location the rooms are filtered on, or of every one.
+ */
+export function OutsideAreasSection({ library }: { library: string }) {
+  const w = useWorkspace();
+  const lists = w.options.sarpras;
+  const { data, error } = useData<OutsideDetails>("outside-areas", library ? { library } : {});
+  const [editing, setEditing] = useState<Area | "new">();
+  const [removing, setRemoving] = useState<Area>();
+  const [viewing, setViewing] = useState<Viewing>();
+  const [busy, setBusy] = useState(false);
+  const label = (area: Area) => lists.areaTypes[area.type]?.label || area.type;
+  // Which location an area belongs to matters only while every location is listed.
+  const showLibrary = !library && (w.options.libraries ?? []).length > 1;
+
+  async function remove() {
+    if (!removing) return;
+    setBusy(true);
+    try {
+      const reply = await w.mutate({ form_action: "delete_outside_area", record_id: removing.id }, undefined, true);
+      toast.success(reply.message || "Area dihapus.");
+      setRemoving(undefined);
+      w.refresh();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (error) return <ErrorBox message={error} />;
+  // Quietly while loading: the rooms below matter more.
+  if (!data) return null;
+  return (
+    <Card size="sm">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Trees className="size-4 text-muted-foreground" />
+          Area luar ruangan
+        </CardTitle>
+        <CardDescription>
+          {!data.migrated
+            ? "Jalankan migrasi plugin hingga versi 24 di System → Plugins untuk mencatat parkir, kantin, dan taman di luar ruangan."
+            : data.areas.length
+              ? "Fasilitas di luar gedung. Rekap Sarpras menghitungnya bersama area di ruangan."
+              : "Belum ada. Catat parkir, kantin, taman, dan fasilitas lain di luar gedung di sini, tanpa perlu memilih ruangan."}
+        </CardDescription>
+        {w.config.write && data.migrated && data.areas.length < data.maxAreas && (
+          <CardAction>
+            <Button variant="outline" size="sm" onClick={() => setEditing("new")}>
+              <Plus data-icon="inline-start" />
+              Tambah area
+            </Button>
+          </CardAction>
+        )}
+      </CardHeader>
+      {data.areas.length > 0 && (
+        <CardContent>
+          <ul className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+            {data.areas.map((area) => (
+              <li key={area.id} className="flex items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">{label(area)}</p>
+                  {area.name && <p className="truncate text-xs text-muted-foreground">{area.name}</p>}
+                  {showLibrary && area.library_name && (
+                    <Badge variant="outline" className="mt-1">
+                      <MapPin />
+                      {area.library_name}
+                    </Badge>
+                  )}
+                  <AreaPhotos area={area} label={label(area)} onView={setViewing} />
+                </div>
+                {w.config.write && (
+                  <Actions
+                    label={`Tindakan area ${label(area)}`}
+                    items={[
+                      { label: "Ubah", icon: Pencil, run: () => setEditing(area) },
+                      { label: "Hapus", icon: Trash2, destructive: true, run: () => setRemoving(area) },
+                    ]}
+                  />
+                )}
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+      )}
+      {editing && (
+        <AreaDialog
+          outside={{ library }}
+          area={editing === "new" ? undefined : (data.areas.find((area) => area.id === editing.id) ?? editing)}
+          maxPhotos={data.maxAreaPhotos}
+          maxPhotoBytes={data.maxPhotoBytes}
+          onClose={() => setEditing(undefined)}
+          onSaved={() => {
+            setEditing(undefined);
+            w.refresh();
+          }}
+        />
+      )}
+      <ImagePreview image={viewing} onClose={() => setViewing(undefined)} />
+      <Confirm
+        open={!!removing}
+        title="Hapus area?"
+        description={`${removing ? label(removing) : "Area"}${removing?.name ? ` (${removing.name})` : ""} di luar ruangan dihapus beserta fotonya.`}
+        action="Hapus area"
+        busy={busy}
+        onCancel={() => setRemoving(undefined)}
+        onConfirm={remove}
+      />
+    </Card>
+  );
+}
+
 const photoTypes = ["image/jpeg", "image/png", "image/webp"];
 
-/** Adds or changes an area, with its photos. Exported for its tests: the list opens it from a menu. */
+/**
+ * Adds or changes an area, with its photos: of a room, or outside any room (a car park, a canteen)
+ * as an area of a library location. Exported for its tests: the list opens it from a menu.
+ */
 export function AreaDialog({
-  room,
+  room = "",
+  outside,
   area,
   maxPhotos,
   maxPhotoBytes,
   onClose,
   onSaved,
 }: {
-  room: string;
+  room?: string;
+  outside?: Outside;
   area?: Area;
   maxPhotos: number;
   maxPhotoBytes: number;
@@ -183,6 +315,11 @@ export function AreaDialog({
   const photoId = useId();
   const [type, setType] = useState(area?.type || "");
   const [name, setName] = useState(area?.name || "");
+  const libraries = w.options.libraries ?? [];
+  // Where SLiMS keeps several locations, an area outside any room says which one it belongs to.
+  const [library, setLibrary] = useState(area?.library || outside?.library || (libraries.length === 1 ? libraries[0].location_id : ""));
+  const chooseLibrary = !!outside && libraries.length > 1;
+  const kinds = outside ? (lists.outsideAreaTypes ?? Object.keys(lists.areaTypes).filter((k) => lists.areaTypes[k].group === "umum" || lists.areaTypes[k].open)) : Object.keys(lists.areaTypes);
   // Photos chosen here are uploaded once the area itself is saved.
   const [pending, setPending] = useState<File[]>([]);
   const [picker, setPicker] = useState(0);
@@ -204,6 +341,10 @@ export function AreaDialog({
       setError("Pilih jenis area.");
       return;
     }
+    if (chooseLibrary && !library) {
+      setError("Pilih lokasi perpustakaan area ini.");
+      return;
+    }
     if (photoError) {
       setError(photoError);
       return;
@@ -211,13 +352,14 @@ export function AreaDialog({
     setBusy(true);
     setError("");
     try {
-      const reply = await w.mutate({ form_action: "save_area", location_id: room, record_id: area?.id || savedId || 0, type, name }, undefined, true);
+      const record_id = area?.id || savedId || 0;
+      const reply = await w.mutate(outside ? { form_action: "save_outside_area", library, record_id, type, name } : { form_action: "save_area", location_id: room, record_id, type, name }, undefined, true);
       const areaId = area?.id || savedId || Number(reply.record);
       setSavedId(areaId);
       for (const file of pending) {
         const files = new FormData();
         files.append("photo", file);
-        await w.mutate({ form_action: "upload_area_photo", location_id: room, area_id: areaId }, files, true);
+        await w.mutate(outside ? { form_action: "upload_outside_area_photo", area_id: areaId } : { form_action: "upload_area_photo", location_id: room, area_id: areaId }, files, true);
         setPending((left) => left.filter((f) => f !== file));
       }
       toast.success(reply.message || "Area tersimpan.");
@@ -234,7 +376,7 @@ export function AreaDialog({
     setBusy(true);
     setError("");
     try {
-      const reply = await w.mutate({ form_action: "delete_area_photo", location_id: room, record_id: photo.id }, undefined, true);
+      const reply = await w.mutate(outside ? { form_action: "delete_outside_area_photo", record_id: photo.id } : { form_action: "delete_area_photo", location_id: room, record_id: photo.id }, undefined, true);
       toast.success(reply.message || "Foto area dihapus.");
       w.refresh();
     } catch (e) {
@@ -249,7 +391,9 @@ export function AreaDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{area ? "Ubah area" : "Tambah area"}</DialogTitle>
-          <DialogDescription>Satu ruangan boleh memiliki beberapa area.</DialogDescription>
+          <DialogDescription>
+            {outside ? "Fasilitas di luar gedung, misalnya parkir, kantin, atau taman. Barangnya tetap dicatat di ruangan." : "Satu ruangan boleh memiliki beberapa area."}
+          </DialogDescription>
         </DialogHeader>
         <ErrorBox message={error} />
         <FieldGroup>
@@ -259,12 +403,22 @@ export function AreaDialog({
             value={type}
             onChange={setType}
             placeholder="Pilih jenis area"
-            items={Object.entries(lists.areaTypes).map(([value, t]) => ({ value, label: t.label, group: lists.areaGroups[t.group] || t.group }))}
+            items={kinds.map((value) => ({ value, label: lists.areaTypes[value].label, group: lists.areaGroups[lists.areaTypes[value].group] || lists.areaTypes[value].group }))}
           />
+          {chooseLibrary && (
+            <Choice
+              label="Lokasi perpustakaan"
+              required
+              value={library}
+              onChange={setLibrary}
+              placeholder="Pilih lokasi perpustakaan"
+              items={libraries.map((x) => ({ value: x.location_id, label: x.location_name }))}
+            />
+          )}
           <Field>
             <FieldLabel htmlFor={id}>Nama area</FieldLabel>
-            <Input id={id} maxLength={150} value={name} placeholder="Contoh: Pojok baca anak" onChange={(e) => setName(e.target.value)} />
-            <FieldDescription>Opsional. Isi bila ruangan memiliki lebih dari satu area sejenis.</FieldDescription>
+            <Input id={id} maxLength={150} value={name} placeholder={outside ? "Contoh: Parkir motor" : "Contoh: Pojok baca anak"} onChange={(e) => setName(e.target.value)} />
+            <FieldDescription>Opsional. Isi bila {outside ? "ada" : "ruangan memiliki"} lebih dari satu area sejenis.</FieldDescription>
           </Field>
           <Field data-invalid={!!photoError}>
             <FieldLabel htmlFor={photoId}>Foto area</FieldLabel>

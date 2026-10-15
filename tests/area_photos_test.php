@@ -17,7 +17,7 @@ function rejects(callable $run, string $label, string $message): void
 
 $db = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 foreach ([
-    'CREATE TABLE inventory_room_areas (id INTEGER PRIMARY KEY, location_id INTEGER, type TEXT, name TEXT NOT NULL DEFAULT \'\')',
+    'CREATE TABLE inventory_room_areas (id INTEGER PRIMARY KEY, location_id INTEGER, slims_location_id TEXT, type TEXT, name TEXT NOT NULL DEFAULT \'\')',
     'CREATE TABLE inventory_area_photos (id INTEGER PRIMARY KEY, area_id INTEGER, filename TEXT, created_by INTEGER, created_at TEXT)',
     "INSERT INTO inventory_room_areas (id, location_id, type) VALUES (1, 5, 'toilet'), (2, 5, 'baca'), (3, 6, 'parkir')",
 ] as $sql) {
@@ -56,6 +56,16 @@ try {
     check(!isset(AreaPhotos::byArea($db)[1]) && count($files()) === 2, 'foto ikut terhapus bersama areanya');
     $storage->cleanup(AreaPhotos::deleteRoom($db, 5));
     check(array_keys(AreaPhotos::byArea($db)) === [3] && count($files()) === 1 && AreaPhotos::read($db, $storage, $lot) !== null, 'foto ikut terhapus bersama ruangannya, milik ruangan lain tetap');
+
+    // A canteen outside any room keeps its photos the same way, reached as AreaPhotos::OUTSIDE.
+    $db->exec("INSERT INTO inventory_room_areas (id, location_id, slims_location_id, type) VALUES (4, NULL, '00', 'kantin')");
+    $canteen = AreaPhotos::store($db, $storage, AreaPhotos::OUTSIDE, 4, $picture(80), 7, $now);
+    check(array_keys(AreaPhotos::byArea($db, AreaPhotos::OUTSIDE)) === [4] && !isset(AreaPhotos::byArea($db, 6)[4]), 'foto area luar ruangan tercatat pada areanya, terpisah dari ruangan');
+    rejects(static fn () => AreaPhotos::store($db, $storage, 6, 4, $picture(90), 7, $now), 'area luar ruangan tidak menerima foto lewat ruangan', 'Area tidak ditemukan di ruangan ini');
+    rejects(static fn () => AreaPhotos::store($db, $storage, AreaPhotos::OUTSIDE, 3, $picture(90), 7, $now), 'area ruangan tidak menerima foto sebagai area luar ruangan', 'Area di luar ruangan tidak ditemukan');
+    rejects(static fn () => AreaPhotos::delete($db, $storage, AreaPhotos::OUTSIDE, $lot), 'foto area ruangan tidak dihapus sebagai foto area luar ruangan', 'area di luar ruangan');
+    AreaPhotos::delete($db, $storage, AreaPhotos::OUTSIDE, $canteen);
+    check(AreaPhotos::read($db, $storage, $canteen) === null && count($files()) === 1, 'foto area luar ruangan dapat dihapus, berkas dan semuanya');
     echo "ok   done\n";
 } finally {
     exec('rm -rf ' . escapeshellarg(rtrim(SB, '/')));
