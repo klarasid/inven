@@ -8,11 +8,13 @@ import { WorkspaceContext, type ContextValue } from './context'
 const places=[{code:'00',name:'Kampus Tembalang',rooms:5},{code:'10',name:'Kampus Tegal',rooms:1}]
 const settings={designed:false,building_area:0,bandwidth_mbps:0,bandwidth_users:0,bandwidth_coverage:'all',bandwidth_date:''}
 const support={documents:[],topics:{jaringan:'Jaringan internet',keamanan:'Keamanan dan keselamatan'},kinds:{speedtest:{label:'Hasil uji kecepatan',topic:'jaringan',room:true},isp:{label:'Layanan ISP',topic:'jaringan',room:false},pos:{label:'POS tanggap darurat dan sistem keamanan',topic:'keamanan',room:false}},rooms:[{id:4,name:'Ruang baca'}],max_bytes:5242880,max:100}
-const data=(more:object={})=>({settings,support,sivitas:{count:1200,single:false,unmapped:30},coverage:{all:'Seluruh area layanan',partial:'Sebagian area layanan'},levels:{a:'Sangat baik',b:'Baik',c:'Cukup',d:'Kurang'},
+const outside={maxAreas:40,maxAreaPhotos:3,maxPhotoBytes:2097152,migrated:true,areas:[{id:21,type:'parkir',name:'Parkir motor',photos:[{id:31,created_at:'2026-10-15 09:00:00'}]}]}
+const sarpras={areaTypes:{parkir:{label:'Area parkir',group:'umum'},kantin:{label:'Kantin / pantri',group:'umum'}},areaGroups:{umum:'Fasilitas umum'},outsideAreaTypes:['parkir','kantin'],categories:{},types:{}}
+const data=(more:object={})=>({settings,support,outside,sivitas:{count:1200,single:false,unmapped:30},coverage:{all:'Seluruh area layanan',partial:'Sebagian area layanan'},levels:{a:'Sangat baik',b:'Baik',c:'Cukup',d:'Kurang'},
  result:[{no:1,name:'Luas gedung dan ruang',value:'Belum diisi',level:null,checks:[{label:'Ada sivitas (anggota aktif) yang dilayani',ok:true}]},{no:6,name:'Jaringan internet',value:'Belum diisi',level:null,checks:[]}],
  locations:places,location:places[1],write:true,csrf:'token',...more})
 const pages={sarpras:'http://localhost/sarpras.php',software:'http://localhost/software.php',facility:'http://localhost/facility.php'}
-const context=(route:ContextValue['route']={view:'facility',library:'10'}):ContextValue=>({config:{write:true,pages,today:'2026-10-02'} as ContextValue['config'],options:{} as ContextValue['options'],route,go:vi.fn(),back:vi.fn(),dirty:vi.fn(),refresh:vi.fn(),revision:0,mutate:vi.fn()})
+const context=(route:ContextValue['route']={view:'facility',library:'10'}):ContextValue=>({config:{write:true,pages,today:'2026-10-02'} as ContextValue['config'],options:{sarpras} as unknown as ContextValue['options'],route,go:vi.fn(),back:vi.fn(),dirty:vi.fn(),refresh:vi.fn(),revision:0,mutate:vi.fn()})
 function mount(w:ContextValue){return render(<WorkspaceContext.Provider value={w}><FacilityPage/></WorkspaceContext.Provider>)}
 const reply=(body:object)=>({ok:true,headers:{get:()=>'application/json'},json:async()=>body})
 afterEach(()=>{cleanup();vi.unstubAllGlobals()})
@@ -130,4 +132,26 @@ test('readers open supporting documents but cannot add or remove them; before th
  mount(context())
  expect(await screen.findByText(/Jalankan migrasi plugin hingga versi 17/)).toBeTruthy()
  expect(screen.queryByRole('button',{name:'Tambah dokumen'})).toBeNull()
+})
+
+test('the areas outside any room of this location are kept here, their photos served from this page',async()=>{
+ const fetch=vi.fn((_:string,init:RequestInit)=>Promise.resolve(init.method==='POST'?reply({ok:true,message:'Area dihapus.'}):reply({ok:true,data:data()})))
+ vi.stubGlobal('fetch',fetch)
+ mount(context())
+ expect(await screen.findByText('Area luar ruangan')).toBeTruthy()
+ expect(screen.getByText('Parkir motor')).toBeTruthy()
+ const thumbnail=screen.getByRole('button',{name:'Lihat foto 1 Area parkir'}).querySelector('img')
+ expect(thumbnail?.getAttribute('src')).toBe('http://localhost/facility.php?area_photo=31&library=10')
+ Element.prototype.hasPointerCapture??=()=>false
+ Element.prototype.scrollIntoView??=()=>{}
+ globalThis.ResizeObserver??=class{observe(){}unobserve(){}disconnect(){}} as unknown as typeof ResizeObserver
+ fireEvent.click(screen.getByRole('button',{name:'Tambah area'}))
+ fireEvent.keyDown(await screen.findByRole('combobox',{name:/Jenis area/}),{key:'ArrowDown'})
+ fireEvent.keyDown(await screen.findByRole('option',{name:'Kantin / pantri'}),{key:'Enter'})
+ fireEvent.click(screen.getByRole('button',{name:'Simpan'}))
+ await waitFor(()=>expect(fetch.mock.calls.some(([,init])=>init.method==='POST')).toBe(true))
+ const [target,init]=fetch.mock.calls.find(([,init])=>init.method==='POST')!
+ const body=init.body as FormData
+ expect(target).toBe('http://localhost/facility.php')
+ expect(Object.fromEntries(['action','library','csrf','record_id','type','name'].map(k=>[k,body.get(k)]))).toEqual({action:'area_save',library:'10',csrf:'token',record_id:'0',type:'kantin',name:''})
 })

@@ -1,9 +1,8 @@
 import { useId, useState } from "react";
 import { toast } from "sonner";
-import { FileText, LayoutGrid, Map as MapIcon, MapPin, Pencil, Plus, Trash2, Trees, Upload as UploadIcon } from "lucide-react";
-import { Badge } from "./components/ui/badge";
+import { FileText, LayoutGrid, Map as MapIcon, Pencil, Plus, Trash2, Upload as UploadIcon } from "lucide-react";
 import { Button } from "./components/ui/button";
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "./components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./components/ui/dialog";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "./components/ui/field";
 import { Input } from "./components/ui/input";
@@ -13,19 +12,25 @@ import { Actions, Blank, Choice, ErrorBox, ImagePreview, Loading, previewPdf } f
 import { Confirm } from "./settings";
 
 type AreaPhoto = { id: number; created_at: string; url: string };
-/** `photos` is null until the plugin's migration 19 has run. An area outside any room names its library. */
-type Area = { id: number; type: string; name: string; photos: AreaPhoto[] | null; library?: string; library_name?: string };
+/** `photos` is null until the plugin's migration 19 has run. */
+type Area = { id: number; type: string; name: string; photos: AreaPhoto[] | null };
 type Plan = { id: number; title: string; mime: string; created_at: string; url: string };
 type RoomDetails = { areas: Area[]; plans: Plan[]; maxPlanBytes: number; maxPlans: number; maxAreaPhotos: number; maxPhotoBytes: number };
-/** `migrated` is false until the plugin's migration 24 has run. */
-type OutsideDetails = { areas: Area[]; maxAreas: number; maxAreaPhotos: number; maxPhotoBytes: number; migrated: boolean };
-/** Where the dialog keeps an area: in a room, or outside any room as an area of a library location. */
-type Outside = { library: string };
+/** `migrated` is false until the plugin's migration 24 has run. Photos come without their url, which the page makes. */
+export type OutsideDetails = { areas: Area[]; maxAreas: number; maxAreaPhotos: number; maxPhotoBytes: number; migrated: boolean };
+/** How the dialog keeps an area outside any room: through the page that lists them. */
+type Reply = { message?: string; record?: unknown };
+type OutsideActions = {
+  save: (values: { record_id: number; type: string; name: string }) => Promise<Reply>;
+  upload: (areaId: number, photo: File) => Promise<unknown>;
+  removePhoto: (areaId: number, photoId: number) => Promise<Reply>;
+  refresh: () => void;
+};
 
 const groupHints: Record<string, string> = {
   dasar: "Empat area ini dinilai di Rekap Sarpras: koleksi, baca, kerja staf, dan layanan.",
   pendukung: "Area tambahan yang mendukung layanan.",
-  umum: "Toilet, musala, laktasi, dan sejenisnya. Parkir dan kantin di luar gedung dicatat di Area luar ruangan. Dihitung sebagai fasilitas umum di Rekap Sarpras.",
+  umum: "Toilet, musala, laktasi, dan sejenisnya. Parkir, kantin, dan taman di luar gedung dicatat di Gedung & Jaringan. Dihitung sebagai fasilitas umum di Rekap Sarpras.",
 };
 
 type Viewing = { url: string; title: string; description: string };
@@ -173,29 +178,46 @@ export function RoomAreasTab({ room }: { room: string }) {
 }
 
 /**
- * Areas outside any room: a car park, a canteen, a garden. Each belongs to a library location;
- * the list shows those of the location the rooms are filtered on, or of every one.
+ * Areas outside any room: a car park, a canteen, a garden, of the library location Gedung &
+ * Jaringan shows. That page keeps them: `act` posts an action to it, `photoUrl` serves a photo
+ * from it, and `reload` reads it again.
  */
-export function OutsideAreasSection({ library }: { library: string }) {
+export function OutsideAreas({
+  outside,
+  write,
+  act,
+  photoUrl,
+  reload,
+}: {
+  outside: OutsideDetails;
+  write: boolean;
+  act: (values: Record<string, unknown>) => Promise<{ message?: string; record?: unknown }>;
+  photoUrl: (id: number) => string;
+  reload: () => void;
+}) {
   const w = useWorkspace();
   const lists = w.options.sarpras;
-  const { data, error } = useData<OutsideDetails>("outside-areas", library ? { library } : {});
   const [editing, setEditing] = useState<Area | "new">();
   const [removing, setRemoving] = useState<Area>();
   const [viewing, setViewing] = useState<Viewing>();
   const [busy, setBusy] = useState(false);
   const label = (area: Area) => lists.areaTypes[area.type]?.label || area.type;
-  // Which location an area belongs to matters only while every location is listed.
-  const showLibrary = !library && (w.options.libraries ?? []).length > 1;
+  const areas = outside.areas.map((area) => ({ ...area, photos: area.photos?.map((photo) => ({ ...photo, url: photoUrl(photo.id) })) ?? null }));
+  const actions: OutsideActions = {
+    save: (values) => act({ action: "area_save", ...values }),
+    upload: (areaId, photo) => act({ action: "area_photo_upload", area_id: areaId, photo }),
+    removePhoto: (areaId, photoId) => act({ action: "area_photo_delete", area_id: areaId, record_id: photoId }),
+    refresh: reload,
+  };
 
   async function remove() {
     if (!removing) return;
     setBusy(true);
     try {
-      const reply = await w.mutate({ form_action: "delete_outside_area", record_id: removing.id }, undefined, true);
+      const reply = await act({ action: "area_delete", record_id: removing.id });
       toast.success(reply.message || "Area dihapus.");
       setRemoving(undefined);
-      w.refresh();
+      reload();
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -203,72 +225,53 @@ export function OutsideAreasSection({ library }: { library: string }) {
     }
   }
 
-  if (error) return <ErrorBox message={error} />;
-  // Quietly while loading: the rooms below matter more.
-  if (!data) return null;
+  if (!outside.migrated) {
+    return <p className="text-sm text-muted-foreground">Jalankan migrasi plugin hingga versi 24 di System → Plugins untuk mencatat parkir, kantin, dan taman di luar ruangan.</p>;
+  }
   return (
-    <Card size="sm">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Trees className="size-4 text-muted-foreground" />
-          Area luar ruangan
-        </CardTitle>
-        <CardDescription>
-          {!data.migrated
-            ? "Jalankan migrasi plugin hingga versi 24 di System → Plugins untuk mencatat parkir, kantin, dan taman di luar ruangan."
-            : data.areas.length
-              ? "Fasilitas di luar gedung. Rekap Sarpras menghitungnya bersama area di ruangan."
-              : "Belum ada. Catat parkir, kantin, taman, dan fasilitas lain di luar gedung di sini, tanpa perlu memilih ruangan."}
-        </CardDescription>
-        {w.config.write && data.migrated && data.areas.length < data.maxAreas && (
-          <CardAction>
-            <Button variant="outline" size="sm" onClick={() => setEditing("new")}>
-              <Plus data-icon="inline-start" />
-              Tambah area
-            </Button>
-          </CardAction>
-        )}
-      </CardHeader>
-      {data.areas.length > 0 && (
-        <CardContent>
-          <ul className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
-            {data.areas.map((area) => (
-              <li key={area.id} className="flex items-start gap-2">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">{label(area)}</p>
-                  {area.name && <p className="truncate text-xs text-muted-foreground">{area.name}</p>}
-                  {showLibrary && area.library_name && (
-                    <Badge variant="outline" className="mt-1">
-                      <MapPin />
-                      {area.library_name}
-                    </Badge>
-                  )}
-                  <AreaPhotos area={area} label={label(area)} onView={setViewing} />
-                </div>
-                {w.config.write && (
-                  <Actions
-                    label={`Tindakan area ${label(area)}`}
-                    items={[
-                      { label: "Ubah", icon: Pencil, run: () => setEditing(area) },
-                      { label: "Hapus", icon: Trash2, destructive: true, run: () => setRemoving(area) },
-                    ]}
-                  />
-                )}
-              </li>
-            ))}
-          </ul>
-        </CardContent>
+    <>
+      {areas.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Belum ada area di luar ruangan untuk lokasi ini.</p>
+      ) : (
+        <ul className="flex flex-col divide-y">
+          {areas.map((area) => (
+            <li key={area.id} className="flex items-start gap-2 py-3 first:pt-0 last:pb-0">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">{label(area)}</p>
+                {area.name && <p className="truncate text-xs text-muted-foreground">{area.name}</p>}
+                <AreaPhotos area={area} label={label(area)} onView={setViewing} />
+              </div>
+              {write && (
+                <Actions
+                  label={`Tindakan area ${label(area)}`}
+                  items={[
+                    { label: "Ubah", icon: Pencil, run: () => setEditing(area) },
+                    { label: "Hapus", icon: Trash2, destructive: true, run: () => setRemoving(area) },
+                  ]}
+                />
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {write && areas.length < outside.maxAreas && (
+        <div>
+          <Button variant="outline" onClick={() => setEditing("new")}>
+            <Plus data-icon="inline-start" />
+            Tambah area
+          </Button>
+        </div>
       )}
       {editing && (
         <AreaDialog
-          outside={{ library }}
-          area={editing === "new" ? undefined : (data.areas.find((area) => area.id === editing.id) ?? editing)}
-          maxPhotos={data.maxAreaPhotos}
-          maxPhotoBytes={data.maxPhotoBytes}
+          outside={actions}
+          area={editing === "new" ? undefined : (areas.find((area) => area.id === editing.id) ?? editing)}
+          maxPhotos={outside.maxAreaPhotos}
+          maxPhotoBytes={outside.maxPhotoBytes}
           onClose={() => setEditing(undefined)}
           onSaved={() => {
             setEditing(undefined);
-            w.refresh();
+            reload();
           }}
         />
       )}
@@ -282,7 +285,7 @@ export function OutsideAreasSection({ library }: { library: string }) {
         onCancel={() => setRemoving(undefined)}
         onConfirm={remove}
       />
-    </Card>
+    </>
   );
 }
 
@@ -290,7 +293,7 @@ const photoTypes = ["image/jpeg", "image/png", "image/webp"];
 
 /**
  * Adds or changes an area, with its photos: of a room, or outside any room (a car park, a canteen)
- * as an area of a library location. Exported for its tests: the list opens it from a menu.
+ * through the page that keeps those. Exported for its tests: the list opens it from a menu.
  */
 export function AreaDialog({
   room = "",
@@ -302,7 +305,7 @@ export function AreaDialog({
   onSaved,
 }: {
   room?: string;
-  outside?: Outside;
+  outside?: OutsideActions;
   area?: Area;
   maxPhotos: number;
   maxPhotoBytes: number;
@@ -315,10 +318,7 @@ export function AreaDialog({
   const photoId = useId();
   const [type, setType] = useState(area?.type || "");
   const [name, setName] = useState(area?.name || "");
-  const libraries = w.options.libraries ?? [];
-  // Where SLiMS keeps several locations, an area outside any room says which one it belongs to.
-  const [library, setLibrary] = useState(area?.library || outside?.library || (libraries.length === 1 ? libraries[0].location_id : ""));
-  const chooseLibrary = !!outside && libraries.length > 1;
+  const refresh = outside?.refresh ?? w.refresh;
   const kinds = outside ? (lists.outsideAreaTypes ?? Object.keys(lists.areaTypes).filter((k) => lists.areaTypes[k].group === "umum" || lists.areaTypes[k].open)) : Object.keys(lists.areaTypes);
   // Photos chosen here are uploaded once the area itself is saved.
   const [pending, setPending] = useState<File[]>([]);
@@ -341,10 +341,6 @@ export function AreaDialog({
       setError("Pilih jenis area.");
       return;
     }
-    if (chooseLibrary && !library) {
-      setError("Pilih lokasi perpustakaan area ini.");
-      return;
-    }
     if (photoError) {
       setError(photoError);
       return;
@@ -353,20 +349,24 @@ export function AreaDialog({
     setError("");
     try {
       const record_id = area?.id || savedId || 0;
-      const reply = await w.mutate(outside ? { form_action: "save_outside_area", library, record_id, type, name } : { form_action: "save_area", location_id: room, record_id, type, name }, undefined, true);
+      const reply = outside ? await outside.save({ record_id, type, name }) : await w.mutate({ form_action: "save_area", location_id: room, record_id, type, name }, undefined, true);
       const areaId = area?.id || savedId || Number(reply.record);
       setSavedId(areaId);
       for (const file of pending) {
-        const files = new FormData();
-        files.append("photo", file);
-        await w.mutate(outside ? { form_action: "upload_outside_area_photo", area_id: areaId } : { form_action: "upload_area_photo", location_id: room, area_id: areaId }, files, true);
+        if (outside) {
+          await outside.upload(areaId, file);
+        } else {
+          const files = new FormData();
+          files.append("photo", file);
+          await w.mutate({ form_action: "upload_area_photo", location_id: room, area_id: areaId }, files, true);
+        }
         setPending((left) => left.filter((f) => f !== file));
       }
       toast.success(reply.message || "Area tersimpan.");
       onSaved();
     } catch (e) {
       setError((e as Error).message);
-      w.refresh();
+      refresh();
     } finally {
       setBusy(false);
     }
@@ -376,9 +376,9 @@ export function AreaDialog({
     setBusy(true);
     setError("");
     try {
-      const reply = await w.mutate(outside ? { form_action: "delete_outside_area_photo", record_id: photo.id } : { form_action: "delete_area_photo", location_id: room, record_id: photo.id }, undefined, true);
+      const reply = outside && area ? await outside.removePhoto(area.id, photo.id) : await w.mutate({ form_action: "delete_area_photo", location_id: room, record_id: photo.id }, undefined, true);
       toast.success(reply.message || "Foto area dihapus.");
-      w.refresh();
+      refresh();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -405,16 +405,6 @@ export function AreaDialog({
             placeholder="Pilih jenis area"
             items={kinds.map((value) => ({ value, label: lists.areaTypes[value].label, group: lists.areaGroups[lists.areaTypes[value].group] || lists.areaTypes[value].group }))}
           />
-          {chooseLibrary && (
-            <Choice
-              label="Lokasi perpustakaan"
-              required
-              value={library}
-              onChange={setLibrary}
-              placeholder="Pilih lokasi perpustakaan"
-              items={libraries.map((x) => ({ value: x.location_id, label: x.location_name }))}
-            />
-          )}
           <Field>
             <FieldLabel htmlFor={id}>Nama area</FieldLabel>
             <Input id={id} maxLength={150} value={name} placeholder={outside ? "Contoh: Parkir motor" : "Contoh: Pojok baca anak"} onChange={(e) => setName(e.target.value)} />

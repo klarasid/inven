@@ -36,7 +36,7 @@ $checks = [
     'Rekap Sarpras tidak menerima perubahan data' => ($actions['recap'] ?? null) === []
         && str_contains($controller, 'if (!in_array($action, $actions[$page], true))'),
     'input sarpras hanya di halamannya sendiri' => ($actions['software'] ?? null) === ['software', 'software_delete', 'licence_upload', 'licence_delete']
-        && ($actions['facility'] ?? null) === ['settings', 'document_upload', 'document_delete']
+        && ($actions['facility'] ?? null) === ['settings', 'document_upload', 'document_delete', 'area_save', 'area_delete', 'area_photo_upload', 'area_photo_delete']
         && ($actions['sivitas'] ?? null) === ['map', 'counting', 'merge', 'undo'],
     'memperbaiki institusi anggota butuh hak tulis Keanggotaan' => str_contains($controller, "havePrivilege('membership', 'w')")
         && str_contains($controller, 'if (!$canFixMembers)'),

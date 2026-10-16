@@ -8,6 +8,7 @@ import {
   FolderOpen,
   Plus,
   Trash2,
+  Trees,
   Wifi,
   XCircle,
   type LucideIcon,
@@ -22,6 +23,7 @@ import { dateLabel, url } from "./api";
 import { ActionBar, Choice, ErrorBox, ImagePreview, Loading, LocationSelect, PageHeader, TextField, previewPdf } from "./shared";
 import { Confirm, usePage } from "./settings";
 import { LevelBadge, type Level } from "./sarpras";
+import { OutsideAreas, type OutsideDetails } from "./room-areas";
 
 type Settings = {
   designed: boolean;
@@ -51,6 +53,8 @@ type Result = { no: number; name: string; value: string; level: Level | null; ch
 type Data = {
   settings: Settings;
   support: SupportData;
+  /** The car parks, canteens and gardens of this location, outside any room. */
+  outside: OutsideDetails;
   /** Active SLiMS members counted for this location (Sivitas per Lokasi); not typed in here. */
   sivitas: { count: number; single: boolean; unmapped: number };
   coverage: Record<string, string>;
@@ -63,7 +67,7 @@ type Data = {
   write: boolean;
   csrf: string;
 };
-type Post = (values: Record<string, unknown>) => Promise<{ message?: string }>;
+type Post = (values: Record<string, unknown>) => Promise<{ message?: string; record?: unknown }>;
 
 const num = (v: number) => (v ? String(v) : "");
 const fields = (s: Settings) => ({
@@ -464,7 +468,20 @@ function FacilityForm({ data, page, post, reload }: { data: Data; page: string; 
             </FieldGroup>
           </Section>
         </fieldset>
-        {/* Outside the fieldset: a reader may still open the documents. */}
+        {/* Outside the fieldset: a reader may still open the documents and photos. */}
+        <Section
+          icon={Trees}
+          title="Area luar ruangan"
+          description="Parkir, kantin, taman, dan fasilitas lain di luar gedung, tanpa perlu memilih ruangan. Rekap Sarpras menghitungnya bersama area di ruangan. Barang di sana tetap dicatat di ruangan terdekat."
+        >
+          <OutsideAreas
+            outside={data.outside}
+            write={data.write}
+            act={(values) => post({ ...values, library, csrf: data.csrf })}
+            photoUrl={(id) => url(page, { area_photo: id, library: library || undefined })}
+            reload={reload}
+          />
+        </Section>
         <SupportDocuments data={data} page={page} library={library} post={post} reload={reload} />
         </div>
         <Outcome data={data} changed={changed} open={() => w.go(library ? { view: "sarpras", library } : { view: "sarpras" })} />

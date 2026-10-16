@@ -44,7 +44,7 @@ Paket rilis sudah berisi dependensi PHP dan aset yang telah dibangun, sehingga A
 
 Fungsi ruang yang dulu dicentang di form ruangan kini dicatat sebagai **area** di halaman tiap ruangan (tab **Area**). Migrasi 12 memindahkan tiap fungsi yang sudah dicentang menjadi satu area, jadi Rekap Sarpras tidak berubah setelah migrasi dijalankan.
 
-Fasilitas yang letaknya di luar gedung, seperti area parkir, kantin, taman, atau gazebo, tidak perlu ditempatkan di ruangan mana pun. Catat di bagian **Area luar ruangan** di halaman Ruangan & Barang, per lokasi perpustakaan. Rekap Sarpras dan Daftar area dan fasilitas menghitungnya bersama area di ruangan. Barang tetap dicatat di ruangan. Bagian ini memerlukan migrasi 24.
+Fasilitas yang letaknya di luar gedung, seperti area parkir, kantin, taman, atau gazebo, tidak perlu ditempatkan di ruangan mana pun. Catat di bagian **Area luar ruangan** di halaman **Gedung & Jaringan**, per lokasi perpustakaan. Rekap Sarpras dan Daftar area dan fasilitas menghitungnya bersama area di ruangan. Barang tetap dicatat di ruangan. Bagian ini memerlukan migrasi 24.
 
 Data **Gedung & Jaringan** yang diisi sebelum plugin membedakan lokasi menjadi milik lokasi dengan ruangan terbanyak. Periksa dan pindahkan bila perlu.
 

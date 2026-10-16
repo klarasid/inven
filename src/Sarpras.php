@@ -480,8 +480,8 @@ final class Sarpras
                 $outside ? [[RoomAreas::OUTSIDE, $areaNames($outside)]] : []
             ),
             'columns' => ['Ruangan', 'Area'],
-            'fix' => 'Buka tiap ruangan, lalu catat areanya di tab Area. Satu ruangan boleh memiliki beberapa area. Gazebo dan taman di luar gedung dicatat di Area luar ruangan.',
-            'sources' => ['inventory'],
+            'fix' => 'Buka tiap ruangan, lalu catat areanya di tab Area. Satu ruangan boleh memiliki beberapa area. Gazebo dan taman di luar gedung dicatat di Gedung & Jaringan → Area luar ruangan.',
+            'sources' => ['inventory', 'facility'],
         ];
 
         // 3. Sarana dan prasarana berfungsi baik
@@ -609,9 +609,10 @@ final class Sarpras
         foreach (self::types($items, 'fasilitas_umum') as $type) $public[mb_strtolower($type['type'])] ??= $type;
         ksort($public);
         $public = array_values($public);
-        $aspects[] = self::typeAspect(10, 'Keamanan dan fasilitas umum', 'Ketersediaan fasilitas umum', $public,
+        // Areas outside the building are recorded on Gedung & Jaringan.
+        $aspects[] = ['sources' => ['inventory', 'facility']] + self::typeAspect(10, 'Keamanan dan fasilitas umum', 'Ketersediaan fasilitas umum', $public,
             count($public) > 6 ? 'a' : (count($public) === 6 ? 'b' : (count($public) === 5 ? 'c' : 'd')),
-            'Lebih dari 6 jenis fasilitas umum', 'Catat toilet, musala, parkir, kantin, ruang laktasi, atau area outdoor sebagai area di ruangannya (tab Area), atau di Area luar ruangan bila letaknya di luar gedung, seperti parkir, kantin, dan taman. Barang seperti papan petunjuk dan dispenser air minum dicatat sebagai barang berkategori Fasilitas umum.',
+            'Lebih dari 6 jenis fasilitas umum', 'Catat toilet, musala, parkir, kantin, ruang laktasi, atau area outdoor sebagai area di ruangannya (tab Area), atau di Gedung & Jaringan → Area luar ruangan bila letaknya di luar gedung, seperti parkir, kantin, dan taman. Barang seperti papan petunjuk dan dispenser air minum dicatat sebagai barang berkategori Fasilitas umum.',
             'Jenis berbeda dari area fasilitas umum di ruangan dan di luar ruangan, dan dari barang yang berfungsi (tidak Rusak berat).');
 
         // 11. Pengawasan dan pemeliharaan, over the last twelve months.

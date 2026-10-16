@@ -11,7 +11,8 @@
  *   facility  Gedung & Jaringan: the figures that do not live in the inventory (building area,
  *             bandwidth) and the location's supporting documents (?document=<id>): of its
  *             internet (speed tests, the ISP's service, the Wi-Fi coverage map) and of its
- *             security and safety (SupportDocuments).
+ *             security and safety (SupportDocuments). And the areas outside the building, a car
+ *             park, a canteen, a garden (RoomAreas::outside), with their photos (?area_photo=<id>).
  *   sivitas   Sivitas per Lokasi: active members counted as sivitas, placed at locations by
  *             Institusi, member type or a default (Sivitas). Putting mistyped Institusi right
  *             changes SLiMS's member data, so it also needs Membership write access.
@@ -42,7 +43,11 @@ require_once __DIR__ . '/Sarpras.php';
 require_once __DIR__ . '/Sivitas.php';
 require_once __DIR__ . '/SupportDocuments.php';
 require_once __DIR__ . '/SoftwareFiles.php';
+require_once __DIR__ . '/RoomAreas.php';
+require_once __DIR__ . '/AreaPhotos.php';
 
+use SLiMS\Plugins\Inventory\AreaPhotos;
+use SLiMS\Plugins\Inventory\RoomAreas;
 use SLiMS\Plugins\Inventory\Sarpras;
 use SLiMS\Plugins\Inventory\Sivitas;
 use SLiMS\Plugins\Inventory\SoftwareFiles;
@@ -56,7 +61,7 @@ if (!utility::havePrivilege('stock_take', 'r')) {
 $actions = [
     'recap' => [],
     'software' => ['software', 'software_delete', 'licence_upload', 'licence_delete'],
-    'facility' => ['settings', 'document_upload', 'document_delete'],
+    'facility' => ['settings', 'document_upload', 'document_delete', 'area_save', 'area_delete', 'area_photo_upload', 'area_photo_delete'],
     'sivitas' => ['map', 'counting', 'merge', 'undo'],
 ];
 $page = (string) ($inventorySarprasPage ?? 'recap');
@@ -105,6 +110,8 @@ $place = static function () use ($places, $library): ?array {
 };
 
 $schemaMessage = 'Struktur data sarpras belum tersedia. Jalankan migrasi plugin hingga versi 18 melalui System → Plugins.';
+$outsideMessage = 'Area luar ruangan belum tersedia. Jalankan migrasi plugin hingga versi 24 melalui System → Plugins.';
+$outsideSchema = static fn(Throwable $e): bool => $e instanceof PDOException && (int) ($e->errorInfo[1] ?? 0) === 1054 && str_contains($e->getMessage(), 'slims_location_id');
 $isSchema = static fn(Throwable $e): bool => $e instanceof PDOException && in_array((int) ($e->errorInfo[1] ?? 0), [1054, 1146], true);
 // An unexpected error goes into the daily usage report, stripped of its data. A schema not migrated
 // yet is not one: the report already carries the migration level.
@@ -136,6 +143,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             SupportDocuments::delete($db, $library, $id);
             $log('Dokumen pendukung #' . $id . ($library !== '' ? ' lokasi ' . $library : '') . ' dihapus.', 'Delete');
             $json(['ok' => true, 'message' => 'Dokumen pendukung dihapus.']);
+        } elseif (str_starts_with($action, 'area_')) {
+            // An area outside any room (a car park, a canteen), of this page's location only.
+            $id = (int) ($_POST[$action === 'area_photo_upload' || $action === 'area_photo_delete' ? 'area_id' : 'record_id'] ?? 0);
+            $where = $library !== '' ? ' lokasi ' . $library : '';
+            if (($action !== 'area_save' || $id > 0) && !in_array($id, array_column(RoomAreas::outside($db, $library), 'id'), true)) {
+                throw new RuntimeException('Area luar ruangan tidak ditemukan di lokasi ini.');
+            }
+            if ($action === 'area_save') {
+                $id = RoomAreas::saveOutside($db, $library, $id, $_POST, date('Y-m-d H:i:s'));
+                $log('Area luar ruangan #' . $id . $where . ' disimpan.', 'Update');
+                $json(['ok' => true, 'message' => 'Area tersimpan.', 'record' => $id]);
+            } elseif ($action === 'area_delete') {
+                RoomAreas::deleteOutside($db, $id);
+                AreaPhotos::storage()->cleanup(AreaPhotos::deleteArea($db, $id));
+                $log('Area luar ruangan #' . $id . $where . ' dihapus.', 'Delete');
+                $json(['ok' => true, 'message' => 'Area dihapus.']);
+            } elseif ($action === 'area_photo_upload') {
+                $photo = AreaPhotos::add($db, AreaPhotos::storage(), AreaPhotos::OUTSIDE, $id, is_array($_FILES['photo'] ?? null) ? $_FILES['photo'] : [], isset($_SESSION['uid']) ? (int) $_SESSION['uid'] : null, date('Y-m-d H:i:s'));
+                $log('Foto #' . $photo . ' area luar ruangan #' . $id . ' diunggah.', 'Update');
+                $json(['ok' => true, 'message' => 'Foto area tersimpan.', 'record' => $photo]);
+            } else {
+                $photo = (int) ($_POST['record_id'] ?? 0);
+                if (!array_key_exists($photo, array_column(AreaPhotos::byArea($db, AreaPhotos::OUTSIDE)[$id] ?? [], 'id', 'id'))) {
+                    throw new RuntimeException('Foto tidak ditemukan pada area ini.');
+                }
+                AreaPhotos::delete($db, AreaPhotos::storage(), AreaPhotos::OUTSIDE, $photo);
+                $log('Foto area luar ruangan #' . $photo . ' dihapus.', 'Delete');
+                $json(['ok' => true, 'message' => 'Foto area dihapus.']);
+            }
         } elseif ($page === 'sivitas' && $action === 'map') {
             $basis = (string) ($_POST['basis'] ?? '');
             $values = is_array($_POST['values'] ?? null) ? array_map('strval', $_POST['values']) : [(string) ($_POST['value'] ?? '')];
@@ -200,7 +236,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             error_log('[sarpras] ' . $error->getMessage());
             $report($error);
-            $json(['ok' => false, 'message' => $isSchema($error) ? $schemaMessage : 'Data tidak tersimpan. Periksa log PHP.'], 500);
+            $json(['ok' => false, 'message' => $isSchema($error) ? ($outsideSchema($error) ? $outsideMessage : $schemaMessage) : 'Data tidak tersimpan. Periksa log PHP.'], 500);
         }
     }
     exit;
@@ -226,6 +262,28 @@ if ($page === 'software' && isset($_GET['licence_file'])) {
     header('X-Content-Type-Options: nosniff');
     header('Cache-Control: private, no-store');
     readfile($file['path']);
+    exit;
+}
+
+if ($page === 'facility' && isset($_GET['area_photo'])) {
+    $photo = null;
+    try {
+        $photo = AreaPhotos::read($db, AreaPhotos::storage(), (int) $_GET['area_photo']);
+    } catch (Throwable $error) {
+        error_log('[sarpras] ' . $error->getMessage());
+    }
+    if ($photo === null) {
+        http_response_code(404);
+        echo 'Foto tidak ditemukan.';
+        exit;
+    }
+    header("Content-Security-Policy: default-src 'none'; sandbox");
+    header('Content-Type: image/jpeg');
+    header('Content-Length: ' . strlen($photo));
+    header('Content-Disposition: inline; filename="foto-area.jpg"');
+    header('X-Content-Type-Options: nosniff');
+    header('Cache-Control: private, no-store');
+    echo $photo;
     exit;
 }
 
@@ -354,7 +412,19 @@ if (($_GET['format'] ?? '') === 'json') {
                 'max_bytes' => SupportDocuments::MAX_BYTES,
                 'max' => SupportDocuments::MAX_PER_LIBRARY,
             ];
-            $json(['ok' => true, 'data' => ['settings' => $settings, 'support' => $support, 'sivitas' => $sivitas, 'coverage' => Sarpras::COVERAGE, 'result' => $result, 'levels' => Sarpras::LEVELS, 'locations' => $places['locations'], 'location' => $place()] + $access]);
+            // The areas outside the building, their photos served by ?area_photo=<id>; before
+            // migration 24 the section says to run it.
+            $migrated = (bool) $db->query("SHOW COLUMNS FROM inventory_room_areas LIKE 'slims_location_id'")->fetchColumn();
+            $areas = $migrated ? RoomAreas::outside($db, $library) : [];
+            $photos = $areas ? AreaPhotos::byArea($db, AreaPhotos::OUTSIDE) : [];
+            $outside = [
+                'areas' => array_map(static fn(array $area): array => $area + ['photos' => array_map(static fn(array $photo): array => ['id' => $photo['id'], 'created_at' => $photo['created_at']], $photos[$area['id']] ?? [])], $areas),
+                'maxAreas' => RoomAreas::MAX_OUTSIDE,
+                'maxAreaPhotos' => AreaPhotos::MAX_PER_AREA,
+                'maxPhotoBytes' => \SLiMS\Plugins\Inventory\ItemPhotos::MAX_BYTES,
+                'migrated' => $migrated,
+            ];
+            $json(['ok' => true, 'data' => ['settings' => $settings, 'support' => $support, 'outside' => $outside, 'sivitas' => $sivitas, 'coverage' => Sarpras::COVERAGE, 'result' => $result, 'levels' => Sarpras::LEVELS, 'locations' => $places['locations'], 'location' => $place()] + $access]);
         } else {
             if ($places === null) $places = Sarpras::locations($db);
             $shared = ['levels' => Sarpras::LEVELS, 'locations' => $places['rooms'] > 0 ? $places['locations'] : [], 'unassigned' => $places['unassigned']];

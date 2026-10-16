@@ -439,7 +439,7 @@ try {
         } elseif (in_array($postAction, ['upload_area_photo', 'delete_area_photo'], true)) {
             require_once __DIR__ . '/src/AreaPhotos.php';
             $roomId = (int) ($_POST['location_id'] ?? 0);
-            // Room 0 would name the areas outside any room (AreaPhotos::OUTSIDE), which have their own actions.
+            // Room 0 would name the areas outside any room (AreaPhotos::OUTSIDE), kept on Gedung & Jaringan.
             if ($roomId < 1) throw new RuntimeException('Ruangan tidak ditemukan.');
             if ($postAction === 'upload_area_photo') {
                 $areaId = (int) ($_POST['area_id'] ?? 0);
@@ -450,31 +450,6 @@ try {
                 $id = (int) ($_POST['record_id'] ?? 0);
                 \SLiMS\Plugins\Inventory\AreaPhotos::delete($db, \SLiMS\Plugins\Inventory\AreaPhotos::storage(), $roomId, $id);
                 inventory_log((string) $roomId, 'Foto area #' . $id . ' dihapus.', 'Delete');
-                $message = 'Foto area dihapus.';
-            }
-        } elseif (in_array($postAction, ['save_outside_area', 'delete_outside_area', 'upload_outside_area_photo', 'delete_outside_area_photo'], true)) {
-            // A car park, a canteen or a garden: an area of a library location, outside any room.
-            require_once __DIR__ . '/src/RoomAreas.php';
-            require_once __DIR__ . '/src/AreaPhotos.php';
-            $id = (int) ($_POST['record_id'] ?? 0);
-            if ($postAction === 'save_outside_area') {
-                $isNewArea = $id < 1;
-                $id = \SLiMS\Plugins\Inventory\RoomAreas::saveOutside($db, trim((string) ($_POST['library'] ?? '')), $id, $_POST, $now);
-                inventory_log('', 'Area luar ruangan #' . $id . ($isNewArea ? ' ditambahkan.' : ' diperbarui.'), $isNewArea ? 'Create' : 'Update');
-                $message = 'Area tersimpan.';
-            } elseif ($postAction === 'delete_outside_area') {
-                \SLiMS\Plugins\Inventory\RoomAreas::deleteOutside($db, $id);
-                \SLiMS\Plugins\Inventory\AreaPhotos::storage()->cleanup(\SLiMS\Plugins\Inventory\AreaPhotos::deleteArea($db, $id));
-                inventory_log('', 'Area luar ruangan #' . $id . ' dihapus.', 'Delete');
-                $message = 'Area dihapus.';
-            } elseif ($postAction === 'upload_outside_area_photo') {
-                $areaId = (int) ($_POST['area_id'] ?? 0);
-                $id = \SLiMS\Plugins\Inventory\AreaPhotos::add($db, \SLiMS\Plugins\Inventory\AreaPhotos::storage(), \SLiMS\Plugins\Inventory\AreaPhotos::OUTSIDE, $areaId, is_array($_FILES['photo'] ?? null) ? $_FILES['photo'] : [], $uid, $now);
-                inventory_log('', 'Foto #' . $id . ' area luar ruangan #' . $areaId . ' diunggah.', 'Create');
-                $message = 'Foto area tersimpan.';
-            } else {
-                \SLiMS\Plugins\Inventory\AreaPhotos::delete($db, \SLiMS\Plugins\Inventory\AreaPhotos::storage(), \SLiMS\Plugins\Inventory\AreaPhotos::OUTSIDE, $id);
-                inventory_log('', 'Foto area luar ruangan #' . $id . ' dihapus.', 'Delete');
                 $message = 'Foto area dihapus.';
             }
         } elseif (in_array($postAction, ['upload_plan', 'delete_plan'], true)) {
@@ -600,9 +575,6 @@ try {
             : 'Operasi database gagal. Periksa data yang dimasukkan dan log PHP.'))))));
     if ((int) ($exception->errorInfo[1] ?? 0) === 1146 && str_contains($exception->getMessage(), 'inventory_area_photos')) {
         $message = 'Foto area belum tersedia. Jalankan migrasi plugin hingga versi 19 melalui System → Plugins.';
-    }
-    if ((int) ($exception->errorInfo[1] ?? 0) === 1054 && str_contains($exception->getMessage(), 'slims_location_id') && str_contains($postAction ?? '', 'outside_area')) {
-        $message = 'Area luar ruangan belum tersedia. Jalankan migrasi plugin hingga versi 24 melalui System → Plugins.';
     }
 } catch (RuntimeException $exception) {
     if ($db->inTransaction()) { $db->rollBack(); }
