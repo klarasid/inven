@@ -21,8 +21,8 @@ require_once __DIR__ . '/SupportDocuments.php';
  * that decided it, so the library can see what is missing.
  *
  * A recap is computed for one SLiMS library location: its rooms, its items and its own facility
- * figures. Where several locations hold rooms, their recaps are also combined into one for the
- * institution, each aspect taking the average of the locations that have data for it.
+ * figures. Where several locations hold rooms, the institution's recap counts them all as one
+ * library (recap() with its places), its floor area broken down by location.
  */
 final class Sarpras
 {
@@ -226,6 +226,34 @@ final class Sarpras
         return array_merge(self::DEFAULTS, array_intersect_key(is_array($profiles[$library] ?? null) ? $profiles[$library] : [], self::DEFAULTS));
     }
 
+    /**
+     * The facility figures of an institution's locations put together: their internet adds up
+     * over the locations that measured it, reaches every service area only if it does at each of
+     * them, and is evidenced only if each of them uploaded a speed test. The building counts as
+     * designed for a library only if every location's is. The floor area stays per location
+     * (`locations`), for the recap adds up each one's building or rooms.
+     *
+     * @param list<array{code:string}> $places
+     */
+    public static function institution(PDO $db, array $places): array
+    {
+        $profiles = self::all($db);
+        $each = [];
+        foreach ($places as $place) $each[$place['code']] = self::profile($profiles, $place['code']);
+        $measured = array_filter($each, static fn($s) => $s['bandwidth_mbps'] > 0 && $s['bandwidth_users'] > 0);
+        $designed = count(array_filter($each, static fn($s) => $s['designed']));
+        return array_merge(self::DEFAULTS, [
+            'designed' => $each && $designed === count($each),
+            'designed_count' => $designed,
+            'bandwidth_mbps' => array_sum(array_column($measured, 'bandwidth_mbps')),
+            'bandwidth_users' => (int) array_sum(array_column($measured, 'bandwidth_users')),
+            'bandwidth_coverage' => $measured && !array_filter($measured, static fn($s) => $s['bandwidth_coverage'] !== 'all') ? 'all' : 'partial',
+            'measured' => count($measured),
+            'evidenced' => $measured && !array_filter(array_keys($measured), static fn($code) => !is_array($each[$code]['evidence']) && !SupportDocuments::has($db, (string) $code, 'speedtest')),
+            'locations' => $each,
+        ]);
+    }
+
     /** Facility figures of one location ('' while the library is one unit). */
     public static function settings(PDO $db, string $library = ''): array
     {
@@ -406,17 +434,22 @@ final class Sarpras
 
     /**
      * The recap of one location, or of every room when $library is '' (the library as one unit).
+     * With $places, the locations of an institution, '' is the institution as one library: every
+     * room, item and area counted together, and the figures of Gedung & Jaringan of all its
+     * locations put together (institution()); only the floor area is broken down by location.
      *
+     * @param list<array{code:string,name:string}> $places
      * @return array{generated_at:string,settings:array,aspects:list<array>,summary:array,counts:array}
      */
-    public static function recap(PDO $db, Supervision $watch, string $library = ''): array
+    public static function recap(PDO $db, Supervision $watch, string $library = '', array $places = []): array
     {
-        $settings = self::settings($db, $library);
+        $places = $library === '' ? $places : [];
+        $settings = $places ? self::institution($db, $places) : self::settings($db, $library);
         // Counted from active members, not typed in: what the setting may still hold is ignored.
         $settings['sivitas'] = Sivitas::forLocation($db, $library);
         $today = date('Y-m-d');
         [$where, $args] = $library === '' ? ['', []] : [' WHERE l.slims_location_id=?', [$library]];
-        $query = $db->prepare('SELECT l.id, l.room_name, l.location_code, l.area_m2, (SELECT location_name FROM mst_location WHERE location_id=l.slims_location_id) library_name FROM inventory_locations l' . $where . ' ORDER BY l.room_name, l.id');
+        $query = $db->prepare('SELECT l.id, l.room_name, l.location_code, l.area_m2, l.slims_location_id, (SELECT location_name FROM mst_location WHERE location_id=l.slims_location_id) library_name FROM inventory_locations l' . $where . ' ORDER BY l.room_name, l.id');
         $query->execute($args);
         $rooms = $query->fetchAll(PDO::FETCH_ASSOC);
         $query = $db->prepare('SELECT i.id, i.location_id, i.item_name, i.category, i.item_type, i.item_condition FROM inventory_items i JOIN inventory_locations l ON l.id=i.location_id' . $where);
@@ -443,20 +476,41 @@ final class Sarpras
         $roomArea = 0.0; $measured = 0;
         foreach ($rooms as $room) if ($room['area_m2'] !== null) { $roomArea += (float) $room['area_m2']; $measured++; }
         $area = (float) $settings['building_area'] > 0 ? (float) $settings['building_area'] : $roomArea;
+        // The institution's floor area is that of each location: its building, or else its rooms.
+        $byPlace = [];
+        if ($places) {
+            $area = 0.0;
+            foreach ([...$places, ['code' => '', 'name' => 'Ruangan tanpa lokasi']] as $location) {
+                $inPlace = array_filter($rooms, static fn($room) => (string) ($room['slims_location_id'] ?? '') === $location['code'] || ($location['code'] === '' && !in_array((string) ($room['slims_location_id'] ?? ''), array_column($places, 'code'), true)));
+                if ($location['code'] === '' && !$inPlace) continue;
+                $building = (float) ($settings['locations'][$location['code']]['building_area'] ?? 0);
+                $roomSum = array_sum(array_map(static fn($room) => (float) ($room['area_m2'] ?? 0), $inPlace));
+                $placeArea = $building > 0 ? $building : $roomSum;
+                $area += $placeArea;
+                $sivitas = $location['code'] === '' ? null : Sivitas::forLocation($db, $location['code']);
+                $byPlace[] = [
+                    $location['name'],
+                    $placeArea > 0 ? self::fmt($placeArea, 2) . ' m² ' . ($building > 0 ? '(gedung)' : '(ruangan)') : '—',
+                    $sivitas === null ? '—' : self::fmt((float) $sivitas, 0),
+                    $sivitas && $placeArea > 0 ? self::fmt($placeArea / $sivitas, 2) : '—',
+                ];
+            }
+        }
         $ratio = $settings['sivitas'] > 0 && $area > 0 ? $area / $settings['sivitas'] : null;
         $large = $area > 750 || ($ratio !== null && $ratio > 0.5);
         $aspects[] = [
             'no' => 1, 'section' => 'Gedung dan ruang', 'title' => 'Luas gedung atau ruang perpustakaan',
             'value' => $area > 0 ? self::fmt($area, $area == floor($area) ? 0 : 2) . ' m²' . ($ratio !== null ? ' · ' . self::fmt($ratio, 2) . ' m²/sivitas' : '') : 'Belum diisi',
             'level' => $area <= 0 ? null : ($large && $settings['designed'] ? 'a' : ($large ? 'b' : ($area >= 750 || ($ratio !== null && $ratio >= 0.5) ? 'c' : 'd'))),
-            'basis' => (float) $settings['building_area'] > 0 ? 'Luas gedung dari menu Gedung & Jaringan.' : "Jumlah luas $measured dari " . count($rooms) . ' ruangan yang sudah diisi luasnya.',
+            'basis' => $places ? 'Jumlah luas ' . count($places) . ' lokasi: luas gedung dari Gedung & Jaringan, atau jumlah luas ruangannya bila luas gedung belum diisi.'
+                : ((float) $settings['building_area'] > 0 ? 'Luas gedung dari menu Gedung & Jaringan.' : "Jumlah luas $measured dari " . count($rooms) . ' ruangan yang sudah diisi luasnya.'),
             'checks' => [
                 ['label' => 'Luas lebih dari 750 m² atau lebih dari 0,5 m² per sivitas', 'ok' => $large],
                 ['label' => 'Ada sivitas (anggota aktif) yang dilayani', 'ok' => $settings['sivitas'] > 0],
-                ['label' => 'Gedung didesain khusus untuk perpustakaan', 'ok' => (bool) $settings['designed']],
+                ['label' => 'Gedung didesain khusus untuk perpustakaan' . ($places ? ' (' . $settings['designed_count'] . ' dari ' . count($places) . ' lokasi)' : ''), 'ok' => (bool) $settings['designed']],
             ],
-            'rows' => array_map(static fn($r) => [$r['room_name'], $r['area_m2'] === null ? '—' : self::fmt((float) $r['area_m2'], 2) . ' m²'], $rooms),
-            'columns' => ['Ruangan', 'Luas'],
+            'rows' => $places ? $byPlace : array_map(static fn($r) => [$r['room_name'], $r['area_m2'] === null ? '—' : self::fmt((float) $r['area_m2'], 2) . ' m²'], $rooms),
+            'columns' => $places ? ['Lokasi', 'Luas', 'Sivitas', 'm²/sivitas'] : ['Ruangan', 'Luas'],
             'fix' => 'Isi luas tiap ruangan di Ruangan & Barang, atau luas gedung di Gedung & Jaringan. Sivitas dihitung dari anggota aktif SLiMS; untuk beberapa lokasi, petakan anggota di Sivitas per Lokasi.',
             'sources' => ['inventory', 'facility'],
         ];
@@ -557,12 +611,12 @@ final class Sarpras
             'no' => 6, 'section' => 'Perangkat TI dan multimedia', 'title' => 'Ketersediaan jaringan internet',
             'value' => $perUser === null ? 'Belum diisi' : self::fmt($perUser, 2) . ' Mbps/orang · ' . mb_strtolower(self::COVERAGE[$settings['bandwidth_coverage']]),
             'level' => $perUser === null ? null : ($perUser > 5 && $all ? 'a' : ($perUser >= 4 && $all ? 'b' : ($perUser >= 3 ? 'c' : 'd'))),
-            'basis' => $perUser === null ? 'Isi bandwidth dan jumlah pengguna serentak di menu Gedung & Jaringan.' : self::fmt((float) $settings['bandwidth_mbps'], 0) . ' Mbps untuk ' . $settings['bandwidth_users'] . ' pengguna serentak' . ($settings['bandwidth_date'] ? ', diukur ' . PdfLayout::date($settings['bandwidth_date']) : '') . '.',
+            'basis' => $perUser === null ? 'Isi bandwidth dan jumlah pengguna serentak di menu Gedung & Jaringan.' : self::fmt((float) $settings['bandwidth_mbps'], 0) . ' Mbps untuk ' . $settings['bandwidth_users'] . ' pengguna serentak' . ($places ? ', jumlah ' . $settings['measured'] . ' dari ' . count($places) . ' lokasi yang sudah diukur' : ($settings['bandwidth_date'] ? ', diukur ' . PdfLayout::date($settings['bandwidth_date']) : '')) . '.',
             'checks' => [
                 ['label' => 'Lebih dari 5 Mbps per orang', 'ok' => $perUser !== null && $perUser > 5],
                 ['label' => 'Menjangkau seluruh area layanan', 'ok' => $all && $perUser !== null],
                 // A speed test among the supporting documents; before migration 18, the evidence file itself.
-                ['label' => 'Bukti pengukuran diunggah', 'ok' => is_array($settings['evidence']) || SupportDocuments::has($db, $library, 'speedtest')],
+                ['label' => 'Bukti pengukuran diunggah' . ($places ? ' di setiap lokasi yang diukur' : ''), 'ok' => $places ? $settings['evidenced'] : (is_array($settings['evidence']) || SupportDocuments::has($db, $library, 'speedtest'))],
             ],
             'rows' => [], 'columns' => [],
             'fix' => 'Ukur bandwidth saat jam sibuk, lalu isi angkanya di Gedung & Jaringan dan unggah hasil uji kecepatannya di Dokumen pendukung.',
@@ -664,59 +718,8 @@ final class Sarpras
 
     // ---- Institution ---------------------------------------------------------------------------
 
-    private const SCORES = ['a' => 4, 'b' => 3, 'c' => 2, 'd' => 1];
-
     /**
-     * One recap for the institution out of its locations' recaps, in the shape of a location's
-     * recap. An aspect takes the average of the locations that have data for it (Sangat baik 4 …
-     * Kurang 1, rounded to the nearest level, a half going up); locations without data are left
-     * out of the average and named beside it. Its rows are the locations, the weakest first.
-     *
-     * @param array<string,array> $recaps location code => its recap
-     * @param array<string,string> $names location code => its name
-     */
-    public static function combine(array $recaps, array $names): array
-    {
-        $aspects = [];
-        foreach ((reset($recaps) ?: ['aspects' => []])['aspects'] as $index => $base) {
-            if (!empty($base['shared'])) {
-                $aspects[] = $base;
-                continue;
-            }
-            $rows = [];
-            foreach ($recaps as $code => $recap) {
-                $aspect = $recap['aspects'][$index];
-                $rows[] = ['code' => (string) $code, 'name' => $names[$code] ?? (string) $code, 'level' => $aspect['level'], 'value' => $aspect['value']];
-            }
-            // Weakest first; locations without data come last.
-            usort($rows, static fn($x, $y) => [$x['level'] === null, $x['level'] === null ? 0 : self::SCORES[$x['level']], $x['name']] <=> [$y['level'] === null, $y['level'] === null ? 0 : self::SCORES[$y['level']], $y['name']]);
-            $scored = array_values(array_filter($rows, static fn($row) => $row['level'] !== null));
-            $empty = count($rows) - count($scored);
-            $average = $scored ? array_sum(array_map(static fn($row) => self::SCORES[$row['level']], $scored)) / count($scored) : null;
-            $spread = array_count_values(array_column($scored, 'level'));
-            $parts = [];
-            foreach (self::LEVELS as $level => $label) if (!empty($spread[$level])) $parts[] = $label . ' ' . $spread[$level];
-            if ($empty) $parts[] = $empty . ' belum ada data';
-            // Where to look first: the weakest locations.
-            $targets = array_filter($scored, static fn($row) => $row['level'] === $scored[0]['level']);
-            $aspects[] = [
-                'no' => $base['no'], 'section' => $base['section'], 'title' => $base['title'], 'name' => $base['name'],
-                'value' => $scored ? 'Rata-rata ' . count($scored) . ($empty ? ' dari ' . count($rows) : '') . ' lokasi' : 'Belum ada data',
-                'level' => $average === null ? null : ($average >= 3.5 ? 'a' : ($average >= 2.5 ? 'b' : ($average >= 1.5 ? 'c' : 'd'))),
-                'basis' => 'Dari ' . count($rows) . ' lokasi: ' . implode(' · ', $parts) . '.',
-                'checks' => [],
-                'rows' => array_map(static fn($row) => [$row['name'], $row['level'] === null ? 'Belum ada data' : self::LEVELS[$row['level']], $row['value']], $rows),
-                'columns' => ['Lokasi', 'Kondisi', 'Capaian'],
-                'fix' => $scored ? 'Buka rekap lokasi dengan kondisi terendah untuk melihat cara memperbaikinya.' : 'Belum ada lokasi yang memiliki data untuk aspek ini. Pilih lokasi di Perbandingan lokasi untuk melihat data yang perlu dilengkapi.',
-                'sources' => [],
-                'targets' => array_map(static fn($row) => ['code' => $row['code'], 'name' => $row['name']], array_slice(array_values($targets), 0, 3)),
-            ];
-        }
-        return ['generated_at' => date('Y-m-d H:i:s'), 'aspects' => $aspects, 'summary' => self::summary($aspects)];
-    }
-
-    /**
-     * Every location's recap in brief, and the institution's recap combined from them.
+     * Every location's recap in brief, and the institution's recap: all its locations counted as one.
      *
      * @param list<array{code:string,name:string,rooms:int}> $locations
      * @return array{locations:list<array>,recap:array}
@@ -727,7 +730,8 @@ final class Sarpras
         foreach ($locations as $location) $recaps[$location['code']] = self::recap($db, $watch, $location['code']);
         return [
             'locations' => array_map(static fn($location) => $location + ['summary' => $recaps[$location['code']]['summary']], $locations),
-            'recap' => self::combine($recaps, array_column($locations, 'name', 'code')),
+            // The institution as one library, not an average of its locations.
+            'recap' => self::recap($db, $watch, '', $locations),
         ];
     }
 

@@ -37,13 +37,11 @@ type Aspect = {
   columns: string[];
   fix: string;
   sources: Source[];
-  /** In the institution's recap: the locations to look at for this aspect. */
-  targets?: { code: string; name: string }[];
 };
 type Recap = {
   generated_at: string;
   aspects: Aspect[];
-  /** Data still missing from the rooms and items; a location's recap only. */
+  /** Data still missing from the rooms and items. */
   counts?: { rooms: number; items: number; uncategorized: number; unclassified_rooms: number; no_area: number };
 };
 type Location = { code: string; name: string; rooms: number };
@@ -271,18 +269,6 @@ function AspectRow({ aspect: x, levels, library }: { aspect: Aspect; levels: Rec
                   <ArrowRight data-icon="inline-end" />
                 </Button>
               ))}
-              {x.targets?.map((target) => (
-                <Button
-                  key={target.code}
-                  size="sm"
-                  variant="outline"
-                  className="bg-background"
-                  onClick={() => w.go({ view: "sarpras", library: target.code })}
-                >
-                  Buka {target.name}
-                  <ArrowRight data-icon="inline-end" />
-                </Button>
-              ))}
             </div>
           </div>
         )}
@@ -376,7 +362,7 @@ function Recap({ data }: { data: Extract<Data, { recap: Recap }> }) {
         <div className="flex flex-col gap-0.5">
           <h2 className="text-lg font-semibold tracking-tight">Kondisi gabungan</h2>
           <p className="text-sm text-muted-foreground">
-            Tiap aspek adalah rata-rata dari lokasi yang memiliki data. Buka sebuah aspek untuk melihat kondisi tiap lokasi.
+            Semua lokasi dihitung sebagai satu perpustakaan: ruangan, barang, dan areanya digabung, begitu pula angka Gedung & Jaringan. Luas dirinci per lokasi.
           </p>
         </div>
       )}

@@ -40,7 +40,7 @@ final class SarprasPdf
         $h .= $t::abstract(
             'Rekap ini menyajikan kondisi sarana dan prasarana ' . ($location !== '' ? self::e($location) : 'perpustakaan') . ', dihitung dari data inventaris ruangan dan barang, '
             . 'register perangkat lunak, data jaringan, serta riwayat pengawasan dan pemeliharaan pada tanggal ' . PdfLayout::date($date) . '. '
-            . ($locations ? 'Kondisi tiap aspek adalah rata-rata dari ' . count($locations) . ' lokasi perpustakaan; lokasi yang belum memiliki data untuk suatu aspek tidak ikut dirata-rata. ' : '')
+            . ($locations ? 'Ke-' . count($locations) . ' lokasi perpustakaan dihitung sebagai satu perpustakaan: ruangan, barang, dan areanya digabung, begitu pula data gedung dan jaringannya; luas dirinci per lokasi. ' : '')
             . 'Dari ' . count($recap['aspects']) . ' aspek yang direkap, <b>' . (int) $s['a'] . '</b> dalam kondisi Sangat baik, ' . (int) $s['b'] . ' Baik, ' . (int) $s['c'] . ' Cukup, dan ' . (int) $s['d'] . ' Kurang'
             . ((int) $s['empty'] ? ', sedangkan ' . (int) $s['empty'] . ' aspek belum memiliki data' : '') . '.'
         );

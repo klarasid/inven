@@ -12,7 +12,7 @@ const recap={generated_at:'2026-10-01 08:00:00',aspects:[aspect(1,'Luas gedung d
 const single={mode:'location',recap,location:null,locations:[],unassigned:0,levels}
 const places=[{code:'00',name:'Kampus Tembalang',rooms:5},{code:'10',name:'Kampus Tegal',rooms:1}]
 const overview={mode:'overview',levels,unassigned:2,locations:[{...places[0],summary:{a:4,b:2,c:1,d:1,empty:3}},{...places[1],summary:{a:0,b:1,c:0,d:2,empty:8}}],
- recap:{generated_at:'2026-10-01 08:00:00',aspects:[aspect(6,'Jaringan internet','c',[],{value:'Rata-rata 2 lokasi',rows:[['Kampus Tegal','Kurang','1 Mbps/orang'],['Kampus Tembalang','Baik','4 Mbps/orang']],columns:['Lokasi','Kondisi','Capaian'],targets:[{code:'10',name:'Kampus Tegal'}]})]}}
+ recap:{generated_at:'2026-10-01 08:00:00',aspects:[aspect(1,'Luas gedung dan ruang','d',['inventory','facility'],{value:'760 m² · 0,12 m²/sivitas',rows:[['Kampus Tembalang','600,00 m² (gedung)','5.000','0,12'],['Kampus Tegal','160,00 m² (ruangan)','1.200','0,13']],columns:['Lokasi','Luas','Sivitas','m²/sivitas']})],counts:{rooms:6,items:40,uncategorized:3,unclassified_rooms:0,no_area:0}}}
 const tegal={mode:'location',recap,location:places[1],locations:places,unassigned:0,levels}
 const pages={sarpras:'http://localhost/sarpras.php',software:'http://localhost/software.php',facility:'http://localhost/facility.php'}
 const context=(route:ContextValue['route']={view:'sarpras'}):ContextValue=>({config:{write:true,pages,today:'2026-10-01'} as ContextValue['config'],options:{} as ContextValue['options'],route,go:vi.fn(),back:vi.fn(),dirty:vi.fn(),refresh:vi.fn(),revision:0,mutate:vi.fn()})
@@ -65,7 +65,7 @@ test('the filter narrows the list to one state and back',async()=>{
  expect(screen.getByText('Luas gedung dan ruang')).toBeTruthy()
 })
 
-test('with several locations the recap opens on all of them: compared, then combined',async()=>{
+test('with several locations the recap opens on all of them: compared, then counted as one',async()=>{
  const fetch=serve(overview)
  const w=context();mount(w)
  await screen.findByText('Perbandingan lokasi')
@@ -76,11 +76,13 @@ test('with several locations the recap opens on all of them: compared, then comb
  // A location opens its own recap.
  fireEvent.click(screen.getByRole('button',{name:'Kampus Tegal'}))
  expect(w.go).toHaveBeenLastCalledWith({view:'sarpras',library:'10'})
- // A combined aspect lists its locations and points at the weakest.
- fireEvent.click(row('Jaringan internet'))
- expect(screen.getByText('1 Mbps/orang')).toBeTruthy()
- fireEvent.click(screen.getByRole('button',{name:'Buka Kampus Tegal'}))
- expect(w.go).toHaveBeenLastCalledWith({view:'sarpras',library:'10'})
+ // The institution is counted as one library; its floor area is broken down by location.
+ expect(screen.getByText(/Semua lokasi dihitung sebagai satu perpustakaan/)).toBeTruthy()
+ expect(screen.getByText('3 dari 40 barang belum berkategori')).toBeTruthy()
+ fireEvent.click(row('Luas gedung dan ruang'))
+ expect(screen.getByText('160,00 m² (ruangan)')).toBeTruthy()
+ fireEvent.click(screen.getByRole('button',{name:'Buka Gedung & Jaringan'}))
+ expect(w.go).toHaveBeenLastCalledWith({view:'facility'})
 })
 
 test('a location\'s recap is asked for by its code and carries the location to where data is entered',async()=>{
