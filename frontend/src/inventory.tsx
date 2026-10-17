@@ -77,6 +77,8 @@ import type { Page, Values, Photo, Route } from "./types";
 
 /** An item's categories as the server keeps them: comma-separated codes. */
 const categoryCodes = (category: unknown) => String(category || "").split(",").filter(Boolean);
+/** A category's name without its examples, for a table: "Perabot (meja, kursi, rak)" is "Perabot". */
+const shortCategory = (label: string) => label.replace(/\s*\(.*\)$/, "");
 
 /**
  * Item categories for Rekap Sarpras, with types suggested for the chosen ones. An item may have
@@ -423,6 +425,10 @@ function RoomItems() {
   const total = Object.values(counts).reduce((n, v) => n + Number(v), 0);
   const condition = String(w.route.condition || "");
   const filter = (value: string) => w.go({ ...w.route, condition: value, page: 1, item: undefined }, true);
+  // Items without a category, which Rekap Sarpras cannot count.
+  const uncategorizedOnly = w.route.category === "none";
+  const uncategorized = Number(data?.uncategorized || 0);
+  const categoriesOf = (r: Values) => categoryCodes(r.category).filter((code) => w.options.sarpras.categories[code]);
   const openItem = (id: unknown) => w.go({ ...w.route, item: String(id) }, true);
   return (
     <>
@@ -510,7 +516,20 @@ function RoomItems() {
               onClick={() => filter(condition === "RB" ? "" : "RB")}
             />
           </div>
-          <SearchBox placeholder="Cari nama, kode, atau merk barang…" />
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <SearchBox placeholder="Cari nama, kode, atau merk barang…" />
+            {(uncategorized > 0 || uncategorizedOnly) && (
+              <Button
+                variant={uncategorizedOnly ? "default" : "outline"}
+                aria-pressed={uncategorizedOnly}
+                className="shrink-0"
+                onClick={() => w.go({ ...w.route, category: uncategorizedOnly ? undefined : "none", page: 1, item: undefined }, true)}
+              >
+                <Tags data-icon="inline-start" />
+                Belum berkategori ({uncategorized})
+              </Button>
+            )}
+          </div>
           {pickedCount > 0 && (
             <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2">
               <span className="text-sm font-medium">{pickedCount} barang dipilih</span>
@@ -540,14 +559,16 @@ function RoomItems() {
           ) : data && !data.rows.length ? (
             <Blank
               icon={Package}
-              title={w.route.q || condition ? "Barang tidak ditemukan" : "Belum ada barang"}
+              title={uncategorizedOnly && !w.route.q && !condition ? "Semua barang sudah berkategori" : w.route.q || condition || uncategorizedOnly ? "Barang tidak ditemukan" : "Belum ada barang"}
               description={
-                w.route.q || condition
-                  ? "Ubah kata kunci atau pilih kondisi lain."
-                  : "Tambahkan barang pertama di ruangan ini."
+                uncategorizedOnly && !w.route.q && !condition
+                  ? "Rekap Sarpras sudah bisa menghitung semua barang di ruangan ini."
+                  : w.route.q || condition || uncategorizedOnly
+                    ? "Ubah kata kunci atau pilih kondisi lain."
+                    : "Tambahkan barang pertama di ruangan ini."
               }
             >
-              {w.config.write && !w.route.q && !condition && (
+              {w.config.write && !w.route.q && !condition && !uncategorizedOnly && (
                 <Button onClick={() => w.go({ view: "item-edit", room })}>
                   <Plus data-icon="inline-start" />
                   Tambah barang
@@ -580,6 +601,7 @@ function RoomItems() {
                         <span className="sr-only">Foto</span>
                       </TableHead>
                       <TableHead>Barang</TableHead>
+                      <TableHead className="hidden sm:table-cell">Kategori</TableHead>
                       <TableHead className="hidden md:table-cell">Merk / model</TableHead>
                       <TableHead>Kondisi</TableHead>
                       <TableHead className="hidden sm:table-cell">Jumlah / register</TableHead>
@@ -624,6 +646,27 @@ function RoomItems() {
                             {r.item_name}
                           </button>
                           <p className="text-xs text-muted-foreground tabular-nums">{r.item_code || "Tanpa kode"}</p>
+                          {!categoriesOf(r).length && (
+                            <Badge variant="warning" className="mt-1 sm:hidden">
+                              Belum berkategori
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="hidden max-w-56 whitespace-normal sm:table-cell">
+                          {categoriesOf(r).length ? (
+                            <>
+                              <div className="flex flex-wrap gap-1">
+                                {categoriesOf(r).map((code) => (
+                                  <Badge key={code} variant="outline">
+                                    {shortCategory(w.options.sarpras.categories[code])}
+                                  </Badge>
+                                ))}
+                              </div>
+                              {r.item_type && <p className="mt-1 text-xs text-muted-foreground">{String(r.item_type)}</p>}
+                            </>
+                          ) : (
+                            <Badge variant="warning">Belum berkategori</Badge>
+                          )}
                         </TableCell>
                         <TableCell className="hidden text-muted-foreground md:table-cell">{r.brand_model || "—"}</TableCell>
                         <TableCell>

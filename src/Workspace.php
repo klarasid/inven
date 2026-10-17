@@ -104,6 +104,8 @@ final class Workspace
             if($search!==''){$where[]=$isItem?'(i.item_name LIKE ? OR i.item_code LIKE ? OR i.brand_model LIKE ?)':'(l.room_name LIKE ? OR l.location_code LIKE ?)';$args=array_merge($args,array_fill(0,$isItem?3:2,'%'.$search.'%'));}
             $condition=(string)($g['condition']??'');
             if($isItem&&in_array($condition,['B','KB','RB'],true)){$where[]='i.item_condition=?';$args[]=$condition;}
+            // Items not given a category yet, for the Rekap Sarpras to count them.
+            if($isItem&&($g['category']??'')==='none')$where[]="(i.category IS NULL OR i.category='')";
             $from=$isItem?'FROM inventory_items i JOIN inventory_locations l ON l.id=i.location_id':'FROM inventory_locations l';
             $select=$isItem?'i.*,(SELECT MIN(p.id) FROM inventory_item_photos p WHERE p.item_id=i.id AND p.filename IS NOT NULL) photo_id,(SELECT COUNT(*) FROM inventory_item_photos p WHERE p.item_id=i.id) photo_count'
                 :"l.*,(SELECT COUNT(*) FROM inventory_items i WHERE i.location_id=l.id) item_count,(SELECT COUNT(*) FROM inventory_items i WHERE i.location_id=l.id AND i.item_condition<>'B') damaged_count,(SELECT location_name FROM mst_location WHERE location_id=l.slims_location_id) library_name";
@@ -113,6 +115,7 @@ final class Workspace
                 unset($row);
                 $result['room']=$w->query('SELECT l.*,(SELECT location_name FROM mst_location WHERE location_id=l.slims_location_id) library_name FROM inventory_locations l WHERE l.id=?',[$room])->fetch(\PDO::FETCH_ASSOC)?:null;
                 $result['conditions']=$w->query('SELECT item_condition,COUNT(*) FROM inventory_items WHERE location_id=? GROUP BY item_condition',[$room])->fetchAll(\PDO::FETCH_KEY_PAIR);
+                $result['uncategorized']=(int)$w->query("SELECT COUNT(*) FROM inventory_items WHERE location_id=? AND (category IS NULL OR category='')",[$room])->fetchColumn();
             }
             return $result;
         }

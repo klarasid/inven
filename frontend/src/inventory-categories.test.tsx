@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import React from 'react'
 import { afterEach, expect, test, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { CategoryFields } from './inventory'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { CategoryFields, InventoryList } from './inventory'
 import { WorkspaceContext, type ContextValue } from './context'
 
 const sarpras={areaTypes:{},areaGroups:{},categories:{komputer:'Komputer',multimedia:'Perangkat multimedia',keamanan:'Sarana keamanan dan keselamatan'},types:{komputer:['PC','Laptop'],multimedia:['Proyektor','Laptop'],keamanan:['APAR']}}
@@ -13,7 +13,7 @@ function mount(category:string,onCategory=vi.fn()){
 }
 const box=(name:string)=>screen.getByRole('checkbox',{name})
 const checked=(name:string)=>box(name).getAttribute('aria-checked')==='true'
-afterEach(cleanup)
+afterEach(()=>{cleanup();vi.unstubAllGlobals()})
 
 test('an item shows every category it has, and a second one is added beside the first',()=>{
  const {onCategory}=mount('komputer')
@@ -38,4 +38,40 @@ test('types are suggested for every chosen category, each once',()=>{
  const {view}=mount('komputer,multimedia')
  const suggestions=Array.from(view.container.querySelectorAll('datalist option'),(option)=>option.getAttribute('value'))
  expect(suggestions).toEqual(['PC','Laptop','Proyektor'])
+})
+
+const items={rows:[
+ {id:1,item_name:'PC OPAC',item_code:'INV-1',item_condition:'B',category:'komputer,multimedia',item_type:'Kiosk OPAC'},
+ {id:2,item_name:'Meja baca',item_code:'INV-2',item_condition:'B',category:null,item_type:''},
+],total:2,page:1,pages:1,room:{id:5,room_name:'Ruang baca'},conditions:{B:'2'},uncategorized:1}
+const room=(route:object,data:object=items)=>{
+ const fetch=vi.fn().mockResolvedValue({ok:true,headers:{get:()=>'application/json'},json:async()=>({ok:true,data})})
+ vi.stubGlobal('fetch',fetch)
+ const w={config:{write:true,api:'http://localhost/api'},options:{sarpras},route:{view:'inventory',room:5,...route},go:vi.fn(),back:vi.fn(),dirty:vi.fn(),refresh:vi.fn(),revision:0,mutate:vi.fn()} as unknown as ContextValue
+ render(<WorkspaceContext.Provider value={w}><InventoryList/></WorkspaceContext.Provider>)
+ return {fetch,w}
+}
+
+test("the items of a room show their categories, and those without one say so",async()=>{
+ room({})
+ const row=(await screen.findByText('PC OPAC')).closest('tr') as HTMLElement
+ expect(row.textContent).toContain('Komputer')
+ expect(row.textContent).toContain('Perangkat multimedia')
+ expect(row.textContent).toContain('Kiosk OPAC')
+ const uncategorized=screen.getByText('Meja baca').closest('tr') as HTMLElement
+ // Once beside the name for a narrow screen, once in its column.
+ expect(within(uncategorized).getAllByText('Belum berkategori')).toHaveLength(2)
+ expect(screen.getByRole('columnheader',{name:'Kategori'})).toBeTruthy()
+})
+
+test('the items without a category are listed on their own, and the list says when none is left',async()=>{
+ const {w}=room({})
+ fireEvent.click(await screen.findByRole('button',{name:'Belum berkategori (1)'}))
+ expect(w.go).toHaveBeenCalledWith({view:'inventory',room:5,category:'none',page:1,item:undefined},true)
+ cleanup()
+ const filtered=room({category:'none'},{...items,rows:[],total:0,uncategorized:0})
+ expect(await screen.findByText('Semua barang sudah berkategori')).toBeTruthy()
+ expect(String(filtered.fetch.mock.calls[0][0])).toContain('category=none')
+ // The filter stays at hand to be turned off.
+ expect(screen.getByRole('button',{name:'Belum berkategori (0)'}).getAttribute('aria-pressed')).toBe('true')
 })
