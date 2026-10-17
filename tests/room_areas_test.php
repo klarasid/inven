@@ -127,6 +127,7 @@ rejects(fn() => RoomAreas::deleteOutside($db, $toiletArea), 'area sebuah ruangan
 $withOutside = Sarpras::recap($db, $watch, '00');
 check($aspect($withOutside, 10)['rows'] === [['Area parkir', '1'], ['Dispenser air minum', '1'], ['Kantin / pantri', '1'], ['Toilet', '1']] && str_contains($aspect($withOutside, 10)['fix'], 'Area luar ruangan'), 'parkir dan kantin di luar ruangan dihitung sebagai fasilitas umum');
 check($aspect($withOutside, 2)['value'] === '4 dari 4 area dasar · 4 area pendukung' && end($aspect($withOutside, 2)['rows']) === ['Luar ruangan', 'Gazebo, Area parkir (Parkir motor), Kantin / pantri'], 'gazebo di luar ruangan dihitung sebagai area pendukung dan dirinci sebagai Luar ruangan');
+check(!in_array('Gazebo', array_column($aspect($withOutside, 4)['rows'], 0), true) && in_array('Area koleksi', array_column($aspect($withOutside, 4)['rows'], 0), true), 'perabot hanya dirinci untuk area di ruangan: gazebo di luar ruangan tidak menampung barang');
 check($withOutside['counts']['unclassified_rooms'] === 0 && $withOutside['counts']['rooms'] === 3, 'area luar ruangan tidak dihitung sebagai ruangan');
 check($aspect(Sarpras::recap($db, $watch, '10'), 10)['rows'] === [['Kantin / pantri', '1'], ['Musala', '1']], 'tiap lokasi hanya menghitung area luar ruangannya sendiri');
 RoomAreas::deleteOutside($db, $gazebo);

@@ -527,7 +527,8 @@ final class Sarpras
                 array_map(static fn($code) => ['label' => 'Perabot atau peralatan di ' . $place($code), 'ok' => in_array($code, $fBasic, true)], array_keys(array_filter(self::AREA_TYPES, static fn($f) => $f['group'] === 'dasar'))),
                 [['label' => 'Lebih dari 4 fungsi pendukung' . ($fSupport ? ': ' . implode(', ', array_map($label, $fSupport)) : ''), 'ok' => count($fSupport) > 4]]
             ),
-            'rows' => array_map(static fn($code) => [$label($code), $furnitureIn($code)], $present),
+            // Only the areas of rooms: no item stands in an area outside any room.
+            'rows' => array_map(static fn($code) => [$label($code), $furnitureIn($code)], array_merge(...$split(array_values(array_unique(array_merge(...array_values($roomFunctions ?: [[]]))))))),
             'columns' => ['Area', 'Perabot dan peralatan'],
             'fix' => 'Beri kategori Perabot atau Peralatan pada barang, dan catat area ruangannya di tab Area.',
             'sources' => ['inventory'],
