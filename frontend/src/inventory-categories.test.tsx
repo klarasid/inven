@@ -84,3 +84,23 @@ test("a room's trail names its library location, which opens the room list filte
  fireEvent.click(within(trail).getByRole('button',{name:'Perpustakaan Pusat'}))
  expect(w.go).toHaveBeenCalledWith({view:'inventory',library:'L1'})
 })
+
+test('the room list can be shown as a table, and the choice is remembered',async()=>{
+ localStorage.removeItem('inventory.roomLayout')
+ const rooms={rows:[{id:5,room_name:'Ruang baca',location_code:'00-RUANG-001',library_name:'Perpustakaan Pusat',area_m2:'120',item_count:'12',damaged_count:'3'}],total:1,page:1,pages:1}
+ const {w}=room({room:undefined},rooms)
+ expect(await screen.findByText('Ruang baca')).toBeTruthy()
+ expect(screen.queryByRole('table')).toBeNull()
+ fireEvent.click(screen.getByRole('radio',{name:'Tampilan tabel'}))
+ const row=(await screen.findByText('Ruang baca')).closest('tr') as HTMLElement
+ expect(row.textContent).toContain('00-RUANG-001')
+ expect(row.textContent).toContain('120 m²')
+ expect(row.textContent).toContain('12')
+ expect(localStorage.getItem('inventory.roomLayout')).toBe('table')
+ fireEvent.click(row)
+ expect(w.go).toHaveBeenCalledWith({view:'inventory',room:'5'})
+ cleanup()
+ room({room:undefined},rooms)
+ expect((await screen.findByText('Ruang baca')).closest('tr')).toBeTruthy()
+ localStorage.removeItem('inventory.roomLayout')
+})

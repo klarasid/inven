@@ -20,6 +20,8 @@ import {
   Tags,
   Images,
   X,
+  LayoutGrid,
+  List,
 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
@@ -235,12 +237,46 @@ function DeleteDialog({
   );
 }
 
+/** How the room list is shown, remembered in this browser. */
+type RoomLayout = "cards" | "table";
+const roomLayoutKey = "inventory.roomLayout";
+function savedRoomLayout(): RoomLayout {
+  try {
+    return localStorage.getItem(roomLayoutKey) === "table" ? "table" : "cards";
+  } catch {
+    return "cards";
+  }
+}
+
 function RoomGrid() {
   const w = useWorkspace();
   const { data, error, loading } = useData<Page<Values>>("rooms", w.route);
   const [selected, setSelected] = useState<Values>();
   const [list, setList] = useState<"catalog" | "areas">();
+  const [layout, setLayout] = useState<RoomLayout>(savedRoomLayout);
+  const chooseLayout = (next: string) => {
+    if (next !== "cards" && next !== "table") return;
+    setLayout(next);
+    try {
+      localStorage.setItem(roomLayoutKey, next);
+    } catch {
+      // The choice still holds until the page is reloaded.
+    }
+  };
   const open = (id: unknown) => w.go({ view: "inventory", room: String(id) });
+  const roomActions = (r: Values) =>
+    w.config.write && (
+      <Actions
+        items={[
+          {
+            label: "Ubah ruangan",
+            icon: Pencil,
+            run: () => w.go({ view: "room-edit", record: String(r.id) }),
+          },
+          { label: "Hapus ruangan", icon: Trash2, destructive: true, run: () => setSelected(r) },
+        ]}
+      />
+    );
   return (
     <>
       <PageHeader
@@ -283,6 +319,21 @@ function RoomGrid() {
       <div className="flex flex-col gap-2 sm:flex-row">
         <SearchBox placeholder="Cari nama atau kode ruangan…" />
         <LibraryFilter />
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          aria-label="Tampilan daftar ruangan"
+          value={layout}
+          onValueChange={chooseLayout}
+          className="shrink-0 self-start"
+        >
+          <ToggleGroupItem value="cards" aria-label="Tampilan kartu" title="Tampilan kartu">
+            <LayoutGrid />
+          </ToggleGroupItem>
+          <ToggleGroupItem value="table" aria-label="Tampilan tabel" title="Tampilan tabel">
+            <List />
+          </ToggleGroupItem>
+        </ToggleGroup>
       </div>
       <ErrorBox message={error} />
       {loading ? (
@@ -304,6 +355,61 @@ function RoomGrid() {
             </Button>
           )}
         </Blank>
+      ) : data && layout === "table" ? (
+        <div className="overflow-hidden rounded-xl border">
+          <Table>
+            <TableHeader className="bg-muted/50">
+              <TableRow>
+                <TableHead>Ruangan</TableHead>
+                <TableHead className="hidden md:table-cell">Lokasi perpustakaan</TableHead>
+                <TableHead className="hidden text-right sm:table-cell">Luas</TableHead>
+                <TableHead className="text-right">Barang</TableHead>
+                <TableHead className="hidden sm:table-cell">Perlu perhatian</TableHead>
+                <TableHead className="w-12">
+                  <span className="sr-only">Tindakan</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.rows.map((r) => (
+                <TableRow key={String(r.id)} className="cursor-pointer" onClick={() => open(r.id)}>
+                  <TableCell className="max-w-72 whitespace-normal">
+                    <button
+                      type="button"
+                      className="text-left font-medium hover:underline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        open(r.id);
+                      }}
+                    >
+                      {r.room_name}
+                    </button>
+                    <p className="text-xs text-muted-foreground tabular-nums">{r.location_code || "Tanpa kode"}</p>
+                    <p className="text-xs text-muted-foreground md:hidden">{r.library_name || "Lokasi belum ditentukan"}</p>
+                  </TableCell>
+                  <TableCell className="hidden text-muted-foreground md:table-cell">
+                    {r.library_name || "Lokasi belum ditentukan"}
+                  </TableCell>
+                  <TableCell className="hidden text-right tabular-nums sm:table-cell">
+                    {Number(r.area_m2) ? `${Number(r.area_m2).toLocaleString("id-ID")} m²` : "—"}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{Number(r.item_count || 0)}</TableCell>
+                  <TableCell className="hidden sm:table-cell">
+                    {Number(r.damaged_count) > 0 ? (
+                      <Badge variant="warning">
+                        <TriangleAlert />
+                        {r.damaged_count}
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>{roomActions(r)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       ) : (
         data && (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -332,18 +438,7 @@ function RoomGrid() {
                         </p>
                       </div>
                     </div>
-                    {w.config.write && (
-                      <Actions
-                        items={[
-                          {
-                            label: "Ubah ruangan",
-                            icon: Pencil,
-                            run: () => w.go({ view: "room-edit", record: String(r.id) }),
-                          },
-                          { label: "Hapus ruangan", icon: Trash2, destructive: true, run: () => setSelected(r) },
-                        ]}
-                      />
-                    )}
+                    {roomActions(r)}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="secondary">
