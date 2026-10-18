@@ -72,6 +72,7 @@ import {
   StatCard,
   ActionBar,
   previewPdf,
+  type Crumb,
 } from "./shared";
 import type { Page, Values, Photo, Route } from "./types";
 
@@ -140,6 +141,22 @@ const roomTabs = { items: "Barang", areas: "Area", plans: "Denah" } as const;
 
 const home: Route = { view: "inventory" };
 const homeCrumb = { label: "Ruangan & Barang", route: home };
+
+/**
+ * Trail to a room: Ruangan & Barang › <lokasi perpustakaan> › <ruangan>. The location opens the
+ * room list filtered to it, so a librarian who filtered first gets back to that list in one click.
+ */
+function useRoomCrumbs(roomId: unknown, withRoom = true): Crumb[] {
+  const w = useWorkspace();
+  const room = w.options.rooms.find((r) => String(r.id) === String(roomId ?? ""));
+  if (!room) return [homeCrumb];
+  const library = w.options.libraries.find((l) => String(l.location_id) === String(room.slims_location_id ?? ""));
+  return [
+    homeCrumb,
+    ...(library ? [{ label: library.location_name, route: { view: "inventory", library: String(library.location_id) } }] : []),
+    ...(withRoom ? [{ label: room.room_name, route: { view: "inventory", room: String(room.id) } }] : []),
+  ];
+}
 
 export function InventoryList() {
   const w = useWorkspace();
@@ -430,10 +447,11 @@ function RoomItems() {
   const uncategorized = Number(data?.uncategorized || 0);
   const categoriesOf = (r: Values) => categoryCodes(r.category).filter((code) => w.options.sarpras.categories[code]);
   const openItem = (id: unknown) => w.go({ ...w.route, item: String(id) }, true);
+  const crumbs = useRoomCrumbs(room, false);
   return (
     <>
       <PageHeader
-        crumbs={[homeCrumb]}
+        crumbs={crumbs}
         title={String(info?.room_name || "Memuat ruangan…")}
         meta={
           info && (
@@ -946,19 +964,14 @@ function ExistingInventory() {
   const { data, error } = useData<{ record: Values; photos: Photo[] }>(item ? "item" : "room", {
     record: w.route.record,
   });
+  const crumbs = useRoomCrumbs(data?.record.location_id);
   if (error) return <ErrorBox message={error} />;
   if (!data) return <Loading />;
   if (w.route.view === "item-detail" || (item && !w.config.write))
     return (
       <>
         <PageHeader
-          crumbs={[
-            homeCrumb,
-            {
-              label: w.options.rooms.find((r) => String(r.id) === String(data.record.location_id))?.room_name || "Ruangan",
-              route: { view: "inventory", room: String(data.record.location_id) },
-            },
-          ]}
+          crumbs={crumbs}
           title={String(data.record.item_name)}
           meta={<Condition value={data.record.item_condition} />}
           actions={
@@ -1009,7 +1022,6 @@ function InventoryEditor({ record, photos: initialPhotos = [] }: { record?: Valu
     setValues((v) => ({ ...v, [key]: value }));
     w.dirty(true);
   };
-  const roomName = w.options.rooms.find((r) => String(r.id) === String(values.location_id))?.room_name;
 
   async function code() {
     setBusy(true);
@@ -1092,13 +1104,8 @@ function InventoryEditor({ record, photos: initialPhotos = [] }: { record?: Valu
       onChange={(v) => update(key, v)}
     />
   );
-  // Trail follows where the record lives: Ruangan & Barang › <ruangan> › <halaman ini>.
-  const parentRoom = item ? values.location_id && roomName : record && record.room_name;
-  const parentId = item ? values.location_id : record?.id;
-  const crumbs = [
-    homeCrumb,
-    ...(parentRoom ? [{ label: String(parentRoom), route: { view: "inventory", room: String(parentId) } }] : []),
-  ];
+  // Trail follows where the record lives: Ruangan & Barang › <lokasi> › <ruangan> › <halaman ini>.
+  const crumbs = useRoomCrumbs(item ? values.location_id : record?.id);
 
   return (
     <>

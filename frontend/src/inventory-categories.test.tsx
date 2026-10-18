@@ -47,7 +47,7 @@ const items={rows:[
 const room=(route:object,data:object=items)=>{
  const fetch=vi.fn().mockResolvedValue({ok:true,headers:{get:()=>'application/json'},json:async()=>({ok:true,data})})
  vi.stubGlobal('fetch',fetch)
- const w={config:{write:true,api:'http://localhost/api'},options:{sarpras},route:{view:'inventory',room:5,...route},go:vi.fn(),back:vi.fn(),dirty:vi.fn(),refresh:vi.fn(),revision:0,mutate:vi.fn()} as unknown as ContextValue
+ const w={config:{write:true,api:'http://localhost/api'},options:{sarpras,rooms:[{id:5,room_name:'Ruang baca',slims_location_id:'L1'}],libraries:[{location_id:'L1',location_name:'Perpustakaan Pusat'}]},route:{view:'inventory',room:5,...route},go:vi.fn(),back:vi.fn(),dirty:vi.fn(),refresh:vi.fn(),revision:0,mutate:vi.fn()} as unknown as ContextValue
  render(<WorkspaceContext.Provider value={w}><InventoryList/></WorkspaceContext.Provider>)
  return {fetch,w}
 }
@@ -74,4 +74,13 @@ test('the items without a category are listed on their own, and the list says wh
  expect(String(filtered.fetch.mock.calls[0][0])).toContain('category=none')
  // The filter stays at hand to be turned off.
  expect(screen.getByRole('button',{name:'Belum berkategori (0)'}).getAttribute('aria-pressed')).toBe('true')
+})
+
+test("a room's trail names its library location, which opens the room list filtered to it",async()=>{
+ const {w}=room({})
+ await screen.findByText('PC OPAC')
+ const trail=screen.getByRole('navigation',{name:'breadcrumb'})
+ expect(trail.textContent).toContain('Ruangan & Barang')
+ fireEvent.click(within(trail).getByRole('button',{name:'Perpustakaan Pusat'}))
+ expect(w.go).toHaveBeenCalledWith({view:'inventory',library:'L1'})
 })
