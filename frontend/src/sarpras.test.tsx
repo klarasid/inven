@@ -108,11 +108,11 @@ test('with no rooms yet the recap says where to start',async()=>{
 
 test('computer checks show counts without breaking them down by room',async()=>{
  const computers=aspect(5,'Komputer untuk mendukung fungsi layanan','c',['inventory'],{
-  checks:[{label:'Komputer di area baca',ok:true,note:'12 komputer berfungsi:\n8 komputer — Kampus Tembalang\n4 komputer — Kampus Blora'},{label:'Komputer di area koleksi',ok:false,note:'Belum ada komputer yang berfungsi'}]})
+  checks:[{label:'Komputer di area baca',ok:true,note:'12 komputer berfungsi di ruangan yang memuat area ini:\n8 komputer — Kampus Tembalang\n4 komputer — Kampus Blora'},{label:'Komputer di area koleksi',ok:false,note:'Belum ada komputer yang berfungsi'}]})
  serve({...single,recap:{...recap,aspects:[computers]}})
  mount(context())
  fireEvent.click(await screen.findByText('Komputer untuk mendukung fungsi layanan'))
- const breakdown=await screen.findByText((_,element)=>element?.textContent==='12 komputer berfungsi:\n8 komputer — Kampus Tembalang\n4 komputer — Kampus Blora')
+ const breakdown=await screen.findByText((_,element)=>element?.textContent==='12 komputer berfungsi di ruangan yang memuat area ini:\n8 komputer — Kampus Tembalang\n4 komputer — Kampus Blora')
  expect(breakdown.className).toContain('whitespace-pre-line')
  expect(screen.getByText('Belum ada komputer yang berfungsi')).toBeTruthy()
  expect(screen.queryByText('Rincian (2)')).toBeNull()

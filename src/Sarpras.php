@@ -593,6 +593,7 @@ final class Sarpras
         $indoor = array_values(array_filter($present, static fn($code) => empty(self::AREA_TYPES[$code]['open'])));
         $computerPct = self::pct(count(array_intersect($withComputer, $indoor)), count($indoor));
         $computers = count(array_filter($items, static fn($i) => in_array('komputer', $i['categories'], true)));
+        $broken = count(array_filter($items, static fn($i) => in_array('komputer', $i['categories'], true) && $i['item_condition'] === 'RB'));
         // How many working computers serve each area, grouped by library for an institution recap.
         $roomLibraries = [];
         foreach ($rooms as $room) $roomLibraries[(int) $room['id']] = (string) ($room['slims_location_id'] ?? '');
@@ -610,7 +611,7 @@ final class Sarpras
                 }
             }
             if ($total === 0) return 'Belum ada komputer yang berfungsi';
-            if (!$places) return $total . ' komputer berfungsi';
+            if (!$places) return $total . ' komputer berfungsi di ruangan yang memuat area ini';
             $parts = [];
             foreach ($places as $place) {
                 $count = $byLibrary[$place['code']] ?? 0;
@@ -621,13 +622,13 @@ final class Sarpras
                 $name = $library === '' ? 'Ruangan tanpa lokasi' : 'Lokasi ' . $library;
                 $parts[] = $count . ' komputer — ' . $name;
             }
-            return $total . " komputer berfungsi:\n" . implode("\n", $parts);
+            return $total . " komputer berfungsi di ruangan yang memuat area ini:\n" . implode("\n", $parts);
         };
         $aspects[] = [
             'no' => 5, 'section' => 'Perangkat TI dan multimedia', 'title' => 'Komputer untuk mendukung fungsi layanan',
             'value' => $computerPct === null ? 'Belum ada area layanan' : self::fmt($computerPct, 1) . '% fungsi layanan',
             'level' => $computers === 0 ? ($indoor ? 'd' : null) : self::percentLevel($computerPct),
-            'basis' => "$computers komputer; " . count(array_intersect($withComputer, $indoor)) . ' dari ' . count($indoor) . ' fungsi layanan memiliki komputer yang berfungsi. Komputer di ruangan yang memiliki beberapa area dihitung pada tiap areanya.',
+            'basis' => "$computers komputer (" . ($computers - $broken) . " berfungsi, $broken rusak berat); " . count(array_intersect($withComputer, $indoor)) . ' dari ' . count($indoor) . ' fungsi layanan memiliki komputer yang berfungsi. Satu komputer dihitung pada tiap area di ruangannya, jadi jumlah per area tidak boleh dijumlahkan dan bisa melebihi total komputer.',
             'checks' => array_map(static fn($code) => ['label' => 'Komputer di ' . $place($code), 'ok' => in_array($code, $withComputer, true), 'note' => $computersIn($code)], $indoor),
             'rows' => [], 'columns' => [],
             'fix' => 'Beri kategori Komputer pada PC dan laptop layanan, lalu pastikan area ruangannya tercatat di tab Area.',
