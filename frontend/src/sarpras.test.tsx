@@ -105,3 +105,15 @@ test('with no rooms yet the recap says where to start',async()=>{
  fireEvent.click(screen.getByRole('button',{name:'Buka Ruangan & Barang'}))
  expect(w.go).toHaveBeenLastCalledWith({view:'inventory'})
 })
+
+test('each check of the computers says how many there are and in which rooms',async()=>{
+ const computers=aspect(5,'Komputer untuk mendukung fungsi layanan','c',['inventory'],{
+  checks:[{label:'Komputer di area baca',ok:true,note:'12 komputer: Ruang Baca 8, Ruang Referensi 4'},{label:'Komputer di area koleksi',ok:false,note:'Belum ada komputer yang berfungsi'}],
+  rows:[['Ruang Baca','Area baca','8'],['Ruang Referensi','Area baca, Area koleksi','4 (+1 rusak berat)']],columns:['Ruangan','Area','Komputer berfungsi']})
+ serve({...single,recap:{...recap,aspects:[computers]}})
+ mount(context())
+ fireEvent.click(await screen.findByText('Komputer untuk mendukung fungsi layanan'))
+ expect(await screen.findByText('12 komputer: Ruang Baca 8, Ruang Referensi 4')).toBeTruthy()
+ expect(screen.getByText('Belum ada komputer yang berfungsi')).toBeTruthy()
+ expect(screen.getByText('4 (+1 rusak berat)')).toBeTruthy()
+})

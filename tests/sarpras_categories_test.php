@@ -85,6 +85,8 @@ $aspect = static function (int $no) use ($recap): array {
 
 check(str_starts_with($aspect(5)['basis'], '2 komputer;') && str_contains($aspect(5)['basis'], '1 dari 2 fungsi layanan'), 'barang berkategori komputer dan multimedia dihitung sebagai komputer');
 check(array_column($aspect(5)['checks'], 'ok', 'label') == ['Komputer di area baca' => true, 'Komputer di area koleksi' => false], 'komputer yang rusak berat tidak melayani fungsi ruangannya');
+check(array_column($aspect(5)['checks'], 'note', 'label') == ['Komputer di area baca' => '1 komputer: Ruang Baca 1', 'Komputer di area koleksi' => 'Belum ada komputer yang berfungsi'], 'tiap syarat komputer menyebut jumlahnya dan ruangan tempatnya');
+check($aspect(5)['columns'] === ['Ruangan', 'Area', 'Komputer berfungsi'] && $aspect(5)['rows'] === [['Ruang Baca', 'Area baca', '1'], ['Ruang Koleksi', 'Area koleksi', '0 (+1 rusak berat)']], 'komputer dirinci per ruangan, dengan yang rusak berat disebutkan');
 check($aspect(7)['value'] === '2 jenis' && $aspect(7)['rows'] === [['PC', '1'], ['Proyektor', '1']], 'barang yang sama juga dihitung sebagai perangkat multimedia');
 check($aspect(4)['basis'] !== '' && str_starts_with($aspect(4)['basis'], '1 barang'), 'kategori lain tidak ikut terhitung');
 check($aspect(4)['columns'] === ['Area', 'Perabot dan peralatan'] && $aspect(4)['rows'] === [['Area baca', '—'], ['Area koleksi', 'Meja (1)']], 'perabot dan peralatan dirinci per area ruangannya');

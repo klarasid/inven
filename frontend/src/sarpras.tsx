@@ -32,7 +32,8 @@ type Aspect = {
   value: string;
   level: Level | null;
   basis: string;
-  checks: { label: string; ok: boolean }[];
+  /** note: what was found for this check, e.g. how many computers serve an area and in which rooms. */
+  checks: { label: string; ok: boolean; note?: string }[];
   rows: string[][];
   columns: string[];
   fix: string;
@@ -244,7 +245,10 @@ function AspectRow({ aspect: x, levels, library }: { aspect: Aspect; levels: Rec
                   ) : (
                     <XCircle className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-label="Belum terpenuhi" />
                   )}
-                  <span className={c.ok ? undefined : "text-muted-foreground"}>{c.label}</span>
+                  <span className="flex flex-col gap-0.5">
+                    <span className={c.ok ? undefined : "text-muted-foreground"}>{c.label}</span>
+                    {c.note && <span className="text-xs text-muted-foreground">{c.note}</span>}
+                  </span>
                 </li>
               ))}
             </ul>
