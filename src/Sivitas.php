@@ -11,8 +11,10 @@ use RuntimeException;
 require_once __DIR__ . '/Sarpras.php';
 
 /**
- * Sivitas: the people a library serves, counted from SLiMS's active members (not pending, not
- * expired), less the member types the library leaves out (an external member is not sivitas).
+ * Sivitas: the people a library serves, counted from SLiMS's active members, less the member types
+ * the library leaves out (an external member is not sivitas). Active by one of two rules (RULES):
+ * not pending and not expired, or as SLiMS's member report counts them, every member whose
+ * membership runs past today, pending ones included (a pending member may only be suspended).
  *
  * SLiMS does not record where a member belongs. Where the library has several locations, each
  * member is placed by, in turn: their Institusi (member.inst_name, free text, compared by key so
@@ -26,6 +28,12 @@ final class Sivitas
 {
     public const SETTING = 'inventory_sivitas';
     public const BASES = ['institution', 'type'];
+
+    /** Who counts as an active member. */
+    public const RULES = [
+        'sivitas' => 'Tidak tertunda dan belum kedaluwarsa',
+        'slims' => 'Seperti laporan Keanggotaan SLiMS',
+    ];
 
     /** Words that name no place: they appear in most location names, so they decide nothing. */
     private const COMMON_WORDS = ['perpustakaan', 'perpus', 'kampus', 'campus', 'ruang', 'room', 'reference', 'referensi', 'library', 'gedung', 'pusat', 'cabang', 'unit', 'lantai', 'sekolah', 'program', 'studi'];
@@ -47,7 +55,7 @@ final class Sivitas
 
     // ---- Settings and mappings ----------------------------------------------------------------
 
-    /** @return array{default:string,excluded:list<int>} */
+    /** @return array{default:string,excluded:list<int>,rule:string} */
     public static function settings(PDO $db): array
     {
         $query = $db->prepare('SELECT setting_value FROM setting WHERE setting_name=?');
@@ -58,10 +66,11 @@ final class Sivitas
         return [
             'default' => is_string($stored['default'] ?? null) ? $stored['default'] : '',
             'excluded' => array_values(array_map('intval', is_array($stored['excluded'] ?? null) ? $stored['excluded'] : [])),
+            'rule' => isset(self::RULES[$stored['rule'] ?? null]) ? (string) $stored['rule'] : 'sivitas',
         ];
     }
 
-    /** @param array{default?:mixed,excluded?:mixed} $input */
+    /** @param array{default?:mixed,excluded?:mixed,rule?:mixed} $input */
     public static function saveSettings(PDO $db, array $input): array
     {
         $default = trim((string) ($input['default'] ?? ''));
@@ -71,7 +80,9 @@ final class Sivitas
         $excluded = array_values(array_unique(array_map('intval', $excluded)));
         if (array_diff($excluded, $types)) throw new RuntimeException('Tipe anggota tidak dikenal.');
         sort($excluded);
-        $settings = ['default' => $default, 'excluded' => $excluded];
+        $rule = is_string($input['rule'] ?? null) && $input['rule'] !== '' ? $input['rule'] : self::settings($db)['rule'];
+        if (!isset(self::RULES[$rule])) throw new RuntimeException('Aturan anggota aktif tidak dikenal.');
+        $settings = ['default' => $default, 'excluded' => $excluded, 'rule' => $rule];
         $value = serialize($settings);
         $update = $db->prepare('UPDATE setting SET setting_value=? WHERE setting_name=?');
         $update->execute([$value, self::SETTING]);
@@ -129,9 +140,15 @@ final class Sivitas
 
     // ---- Counting ------------------------------------------------------------------------------
 
-    /** The member filter: not pending, and not expired today. */
-    private static function active(string $alias = ''): string
+    /**
+     * The member filter, by the library's rule, taking today's date as its one parameter.
+     * 'sivitas': not pending, and not expired today (no expiry date never expires).
+     * 'slims': as admin/modules/reporting/member_report.php counts active members, membership
+     * running past today, pending or not; no expiry date does not count.
+     */
+    private static function active(PDO $db, string $alias = ''): string
     {
+        if (self::settings($db)['rule'] === 'slims') return "{$alias}expire_date > ?";
         return "COALESCE({$alias}is_pending, 0) = 0 AND ({$alias}expire_date IS NULL OR {$alias}expire_date >= ?)";
     }
 
@@ -160,7 +177,7 @@ final class Sivitas
     {
         $place = self::placer($db);
         $single = self::single($db);
-        $query = $db->prepare('SELECT inst_name, member_type_id, COUNT(*) n FROM member WHERE ' . self::active() . ' GROUP BY inst_name, member_type_id');
+        $query = $db->prepare('SELECT inst_name, member_type_id, COUNT(*) n FROM member WHERE ' . self::active($db) . ' GROUP BY inst_name, member_type_id');
         $query->execute([$today ?? date('Y-m-d')]);
         $result = ['total' => 0, 'unmapped' => 0, 'single' => $single, 'locations' => []];
         foreach ($query->fetchAll(PDO::FETCH_ASSOC) as $row) {
@@ -244,7 +261,7 @@ final class Sivitas
         $inScope = self::scope($db, $scope, $single);
         $place = self::placer($db);
         $types = array_column(self::types($db, $today), 'name', 'id');
-        $query = $db->prepare('SELECT inst_name, member_type_id, COUNT(*) n FROM member WHERE ' . self::active() . ' GROUP BY inst_name, member_type_id');
+        $query = $db->prepare('SELECT inst_name, member_type_id, COUNT(*) n FROM member WHERE ' . self::active($db) . ' GROUP BY inst_name, member_type_id');
         $query->execute([$today ?? date('Y-m-d')]);
         $total = 0;
         $locations = $basis = $institutions = $byType = [];
@@ -294,7 +311,7 @@ final class Sivitas
      * The members behind one count, by name, with where they were placed and why. $limit 0 lists
      * them all; $search narrows by name, member ID or Institusi.
      *
-     * @return array{total:int,rows:list<array{id:string,name:string,institution:string,type:string,location:string,basis:string,expires:?string}>}
+     * @return array{total:int,rows:list<array{id:string,name:string,institution:string,type:string,location:string,basis:string,expires:?string,pending:bool}>}
      */
     public static function members(PDO $db, string $scope, int $limit = 0, string $search = '', ?string $today = null): array
     {
@@ -303,7 +320,7 @@ final class Sivitas
         $place = self::placer($db);
         $names = array_column(self::locations($db), 'name', 'code');
         $types = array_column(self::types($db, $today), 'name', 'id');
-        $sql = 'SELECT member_id, member_name, inst_name, member_type_id, expire_date FROM member WHERE ' . self::active();
+        $sql = 'SELECT member_id, member_name, inst_name, member_type_id, expire_date, is_pending FROM member WHERE ' . self::active($db);
         $args = [$today ?? date('Y-m-d')];
         $search = trim($search);
         if ($search !== '') {
@@ -331,6 +348,8 @@ final class Sivitas
                 'location' => $single ? '' : ($placed['location'] === '' ? 'Belum dipetakan' : (string) ($names[$placed['location']] ?? $placed['location'])),
                 'basis' => $single ? '' : self::BASIS_LABELS[$placed['basis']],
                 'expires' => $row['expire_date'] === null ? null : (string) $row['expire_date'],
+                // Counted only by the rule of SLiMS's report.
+                'pending' => (bool) (int) ($row['is_pending'] ?? 0),
             ];
         }
         return ['total' => $total, 'rows' => $rows];
@@ -349,9 +368,9 @@ final class Sivitas
         $single = self::single($db);
         $sheets = [];
         if ($members) {
-            $list = [array_merge(['No.', 'ID anggota', 'Nama', 'Institusi', 'Tipe anggota'], $single ? [] : ['Lokasi', 'Dipetakan lewat'], ['Berlaku sampai'])];
+            $list = [array_merge(['No.', 'ID anggota', 'Nama', 'Institusi', 'Tipe anggota'], $single ? [] : ['Lokasi', 'Dipetakan lewat'], ['Berlaku sampai', 'Status'])];
             foreach (self::members($db, $scope, 0, '', $today)['rows'] as $n => $row) {
-                $list[] = array_merge([$n + 1, $row['id'], $row['name'], $row['institution'], $row['type']], $single ? [] : [$row['location'], $row['basis']], [(string) $row['expires']]);
+                $list[] = array_merge([$n + 1, $row['id'], $row['name'], $row['institution'], $row['type']], $single ? [] : [$row['location'], $row['basis']], [(string) $row['expires'], $row['pending'] ? 'Tertunda' : 'Aktif']);
             }
             $sheets['Anggota'] = $list;
         }
@@ -377,7 +396,7 @@ final class Sivitas
     /** Member types, with how many active members each has. @return list<array{id:int,name:string,active:int}> */
     public static function types(PDO $db, ?string $today = null): array
     {
-        $query = $db->prepare('SELECT t.member_type_id id, t.member_type_name name, (SELECT COUNT(*) FROM member m WHERE m.member_type_id=t.member_type_id AND ' . self::active('m.') . ') active FROM mst_member_type t ORDER BY t.member_type_name, t.member_type_id');
+        $query = $db->prepare('SELECT t.member_type_id id, t.member_type_name name, (SELECT COUNT(*) FROM member m WHERE m.member_type_id=t.member_type_id AND ' . self::active($db, 'm.') . ') active FROM mst_member_type t ORDER BY t.member_type_name, t.member_type_id');
         $query->execute([$today ?? date('Y-m-d')]);
         return array_map(static fn(array $row) => ['id' => (int) $row['id'], 'name' => (string) $row['name'], 'active' => (int) $row['active']], $query->fetchAll(PDO::FETCH_ASSOC));
     }
@@ -393,7 +412,7 @@ final class Sivitas
         $excluded = self::settings($db)['excluded'];
         $skip = $excluded ? ' AND member_type_id NOT IN (' . implode(',', $excluded) . ')' : '';
         // Spellings told apart exactly: MySQL would otherwise fold "Gizi" and "gizi" into one row.
-        $query = $db->prepare('SELECT MIN(inst_name) value, COUNT(*) members, SUM(CASE WHEN ' . self::active() . $skip . ' THEN 1 ELSE 0 END) active FROM member GROUP BY ' . self::exact($db, 'inst_name'));
+        $query = $db->prepare('SELECT MIN(inst_name) value, COUNT(*) members, SUM(CASE WHEN ' . self::active($db) . $skip . ' THEN 1 ELSE 0 END) active FROM member GROUP BY ' . self::exact($db, 'inst_name'));
         $query->execute([$today ?? date('Y-m-d')]);
         $groups = [];
         foreach ($query->fetchAll(PDO::FETCH_ASSOC) as $row) {

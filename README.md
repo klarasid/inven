@@ -119,7 +119,12 @@ Rekap dihitung dari data yang sudah ada, jadi lengkapi dulu klasifikasinya:
 
 #### Sivitas per Lokasi
 
-Jumlah sivitas tidak diketik, tetapi dihitung dari anggota SLiMS yang **aktif**: tidak tertunda dan belum kedaluwarsa. Hilangkan centang tipe anggota yang bukan sivitas, misalnya anggota luar. Perpustakaan yang ruangannya berada di satu lokasi menghitung semua anggota aktif untuk lokasi itu tanpa pengaturan lain.
+Jumlah sivitas tidak diketik, tetapi dihitung dari anggota SLiMS yang **aktif**. Pilih aturannya di panel **Yang dihitung**:
+
+- **Tidak tertunda dan belum kedaluwarsa** (bawaan): anggota tertunda tidak dihitung; anggota yang kedaluwarsa hari ini atau tanpa tanggal kedaluwarsa tetap dihitung.
+- **Seperti laporan Keanggotaan SLiMS**: semua anggota yang masa berlakunya lewat dari hari ini, termasuk anggota tertunda (misalnya yang sedang menjalani sanksi). Hasilnya sama dengan **Total Anggota Aktif** di Laporan → Keanggotaan bila semua tipe anggota dicentang.
+
+Hilangkan centang tipe anggota yang bukan sivitas, misalnya anggota luar. Perpustakaan yang ruangannya berada di satu lokasi menghitung semua anggota aktif untuk lokasi itu tanpa pengaturan lain.
 
 SLiMS tidak mencatat lokasi anggota. Bila ruangan tersebar di beberapa lokasi, setiap anggota ditempatkan menurut urutan berikut:
 

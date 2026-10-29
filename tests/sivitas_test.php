@@ -153,4 +153,20 @@ $zip->open($file);
 check($zip->getFromName('xl/worksheets/sheet2.xml') === false && !str_contains((string) $zip->getFromName('xl/worksheets/sheet1.xml'), 'Anggota M1'), 'without member access the workbook holds the breakdown alone');
 $zip->close();
 unlink($file);
+
+// The rule of SLiMS's member report: membership past today, pending or not; no expiry date not counted.
+check(Sivitas::settings($db)['rule'] === 'sivitas', 'the rule is not pending and not expired until chosen otherwise');
+$db->exec("INSERT INTO member (member_id, member_type_id, inst_name, is_pending, expire_date, member_name) VALUES ('R1', 1, 'Gizi', 0, NULL, 'Tanpa tanggal')");
+$before = Sivitas::counts($db)['total'];
+$rule = static fn (): int => (int) $db->query("SELECT COUNT(*) FROM member WHERE expire_date > '" . $today . "' AND member_type_id <> 4")->fetchColumn();
+Sivitas::saveSettings($db, ['excluded' => ['4'], 'rule' => 'slims']);
+check(Sivitas::settings($db)['rule'] === 'slims' && Sivitas::counts($db)['total'] === $rule(), 'by the rule of SLiMS, the count is what its member report counts, less the left-out types');
+$ids = array_column(Sivitas::members($db, 'all')['rows'], 'pending', 'id');
+check(($ids['M3'] ?? null) === true && !isset($ids['M9']) && !isset($ids['R1']) && ($ids['M1'] ?? null) === false, 'pending members count and are marked; those expiring today or with no expiry date do not');
+check(array_column(Sivitas::types($db), 'active', 'name')['Mahasiswa'] === (int) $db->query("SELECT COUNT(*) FROM member WHERE member_type_id = 1 AND expire_date > '" . $today . "'")->fetchColumn(), 'the active members of each type follow the rule');
+Sivitas::saveSettings($db, ['excluded' => ['4']]);
+check(Sivitas::settings($db)['rule'] === 'slims', 'saving without a rule keeps the one chosen');
+Sivitas::saveSettings($db, ['excluded' => ['4'], 'rule' => 'sivitas']);
+check(Sivitas::counts($db)['total'] === $before, 'going back counts as before');
+rejects(static fn () => Sivitas::saveSettings($db, ['rule' => 'semua']), 'an unknown rule is refused');
 echo "ok   done\n";

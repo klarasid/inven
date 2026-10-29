@@ -111,3 +111,16 @@ test('without Membership read access, a card shows its breakdown but no member n
  expect(within(sheet).getByText('Gizi')).toBeTruthy()
  expect(within(sheet).queryByText('Ayu')).toBeNull()
 })
+
+test('counts active members by the rule of SLiMS member report once chosen',async()=>{
+ const fetch=serve(data())
+ mount()
+ const choice=await screen.findByText('Seperti laporan Keanggotaan SLiMS')
+ expect(screen.queryByText(/centang semua tipe anggota/)).toBeNull()
+ fireEvent.click(choice.closest('button')!)
+ expect(screen.getByText(/centang semua tipe anggota/)).toBeTruthy()
+ fireEvent.click(screen.getByRole('button',{name:'Simpan'}))
+ await waitFor(()=>expect(posted(fetch)).toHaveLength(1))
+ const body=posted(fetch)[0]
+ expect([body.get('action'),body.get('rule')]).toEqual(['counting','slims'])
+})

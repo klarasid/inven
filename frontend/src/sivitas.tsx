@@ -10,6 +10,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Switch } from "./components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "./components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "./components/ui/toggle-group";
 import { useWorkspace } from "./context";
 import { dateLabel, url } from "./api";
 import { Blank, Choice, ErrorBox, Loading, PageHeader, Panel, StatCard } from "./shared";
@@ -29,7 +30,7 @@ type Similar = { variants: { value: string; members: number }[]; suggestion: str
 type Fix = { id: number; from: string[]; to: string; count: number; created_at: string; undone_at: string | null; by: string };
 type Data = {
   counts: { total: number; unmapped: number; single: boolean; locations: (Location & { count: number })[] };
-  settings: { default: string; excluded: number[] };
+  settings: { default: string; excluded: number[]; rule?: Rule };
   types: { id: number; name: string; active: number; location: string; excluded: boolean }[];
   institutions: Institution[];
   similar: Similar[];
@@ -43,8 +44,25 @@ type Data = {
   csrf: string;
 };
 type Run = (values: Record<string, unknown>, done?: () => void) => Promise<void>;
+type Rule = "sivitas" | "slims";
 
-type Member = { id: string; name: string; institution: string; type: string; location: string; basis: string; expires: string | null };
+/** Who counts as an active member, as the server's Sivitas::RULES. */
+const rules: { value: Rule; title: string; text: string; panel: string }[] = [
+  {
+    value: "sivitas",
+    title: "Tidak tertunda dan belum kedaluwarsa",
+    text: "Anggota tertunda tidak dihitung. Yang kedaluwarsa hari ini dan yang tanpa tanggal kedaluwarsa tetap dihitung.",
+    panel: "Anggota aktif: tidak tertunda dan belum kedaluwarsa.",
+  },
+  {
+    value: "slims",
+    title: "Seperti laporan Keanggotaan SLiMS",
+    text: "Masa berlaku lewat dari hari ini, termasuk anggota tertunda. Sama dengan Total Anggota Aktif di Laporan → Keanggotaan.",
+    panel: "Anggota aktif mengikuti laporan Keanggotaan SLiMS: masa berlakunya lewat dari hari ini, termasuk yang tertunda.",
+  },
+];
+
+type Member = { id: string; name: string; institution: string; type: string; location: string; basis: string; expires: string | null; pending?: boolean };
 /** What one card counts: every sivitas ("all"), those placed nowhere ("unmapped"), or a location's code. */
 type Detail = {
   scope: string;
@@ -80,20 +98,47 @@ function LocationChoice({ data, value, onChange, disabled }: { data: Data; value
 function Counting({ data, run, busy }: { data: Data; run: Run; busy: boolean }) {
   const [excluded, setExcluded] = useState(data.settings.excluded);
   const [fallback, setFallback] = useState(data.settings.default);
-  const changed = JSON.stringify([...excluded].sort()) !== JSON.stringify([...data.settings.excluded].sort()) || fallback !== data.settings.default;
+  const saved: Rule = data.settings.rule ?? "sivitas";
+  const [rule, setRule] = useState<Rule>(saved);
+  const changed =
+    JSON.stringify([...excluded].sort()) !== JSON.stringify([...data.settings.excluded].sort()) || fallback !== data.settings.default || rule !== saved;
   return (
     <Panel
       title="Yang dihitung"
-      description="Anggota aktif: tidak tertunda dan belum kedaluwarsa. Hilangkan centang tipe anggota yang bukan sivitas, misalnya anggota luar."
+      description={`${rules.find((r) => r.value === saved)!.panel} Hilangkan centang tipe anggota yang bukan sivitas, misalnya anggota luar.`}
       action={
         data.write && (
-          <Button size="sm" disabled={busy || !changed} onClick={() => run({ action: "counting", excluded, default: fallback })}>
+          <Button size="sm" disabled={busy || !changed} onClick={() => run({ action: "counting", excluded, default: fallback, rule })}>
             Simpan
           </Button>
         )
       }
     >
       <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
+          <span className="text-sm font-medium">Anggota aktif</span>
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            aria-label="Aturan anggota aktif"
+            className="grid w-full sm:grid-cols-2"
+            value={rule}
+            disabled={!data.write}
+            onValueChange={(v) => v && setRule(v as Rule)}
+          >
+            {rules.map((r) => (
+              <ToggleGroupItem key={r.value} value={r.value} className="h-auto flex-col items-start gap-0 px-3 py-2 text-left">
+                <span className="font-medium whitespace-normal">{r.title}</span>
+                <span className="text-xs font-normal whitespace-normal text-muted-foreground">{r.text}</span>
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+          {rule === "slims" && (
+            <p className="text-xs text-muted-foreground">
+              Agar jumlahnya sama persis dengan laporan SLiMS, centang semua tipe anggota di bawah: laporan SLiMS menghitung semua tipe.
+            </p>
+          )}
+        </div>
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {data.types.map((t) => (
             <label key={t.id} className="flex items-center gap-2 rounded-lg border p-2.5 text-sm">
@@ -500,7 +545,14 @@ function CardDetail({ data, scope, onClose }: { data: Data; scope: string; onClo
                             {members.rows.map((m) => (
                               <TableRow key={m.id}>
                                 <TableCell className="max-w-56 whitespace-normal">
-                                  <div className="font-medium">{m.name || "—"}</div>
+                                  <div className="font-medium">
+                                    {m.name || "—"}
+                                    {m.pending && (
+                                      <Badge variant="secondary" className="ml-1.5">
+                                        Tertunda
+                                      </Badge>
+                                    )}
+                                  </div>
                                   <div className="text-xs text-muted-foreground tabular-nums">{m.id}</div>
                                 </TableCell>
                                 <TableCell className="max-w-56 whitespace-normal">

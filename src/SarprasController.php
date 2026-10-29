@@ -184,7 +184,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $log(count($values) . ' ' . $what . ($location === '' ? ' dilepas dari lokasinya.' : ' dipetakan ke lokasi ' . $location . '.'), 'Update');
             $json(['ok' => true, 'message' => $location === '' ? 'Pemetaan dihapus.' : count($values) . ' ' . $what . ' dipetakan.']);
         } elseif ($page === 'sivitas' && $action === 'counting') {
-            Sivitas::saveSettings($db, ['default' => $_POST['default'] ?? '', 'excluded' => $_POST['excluded'] ?? []]);
+            Sivitas::saveSettings($db, ['default' => $_POST['default'] ?? '', 'excluded' => $_POST['excluded'] ?? [], 'rule' => $_POST['rule'] ?? '']);
             $log('Pengaturan hitungan sivitas diperbarui.', 'Update');
             $json(['ok' => true, 'message' => 'Pengaturan sivitas tersimpan.']);
         } elseif ($page === 'sivitas' && ($action === 'merge' || $action === 'undo')) {
