@@ -148,6 +148,7 @@ Di **Ruangan & Barang**, klik **Cetak daftar → Daftar inventaris berfoto** unt
 Dokumen lain dicetak dari halamannya masing-masing, dengan pilihan gaya yang sama:
 
 - **Daftar area dan fasilitas**: Ruangan & Barang → **Cetak daftar**.
+- **Daftar area dan luas ruangan**, tanpa foto: Ruangan & Barang → **Cetak daftar**. Memuat tiap ruangan dengan luasnya dan area di dalamnya, jumlah luas per lokasi perpustakaan, dan area di luar ruangan. Luas dicatat per ruangan; area tidak memiliki luas sendiri.
 - **Daftar perangkat lunak**: Perangkat Lunak → **Cetak daftar**.
 - **Jadwal pemeriksaan**: Jadwal → **Cetak jadwal**.
 - **Checklist pemeriksaan** sebagai lembar isian: Checklist → **Cetak checklist terjadwal**, atau **Cetak lembar isian** di halaman satu checklist.

@@ -64,6 +64,32 @@ export function AreaListDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   );
 }
 
+/** Daftar area dan luas ruangan: rooms, their floor area and the areas inside, without photos. */
+export function RoomSizesDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const w = useWorkspace();
+  const library = String(w.route.library || "");
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Cetak daftar area dan luas ruangan</DialogTitle>
+          <DialogDescription>
+            {library
+              ? "Ruangan di lokasi perpustakaan yang sedang disaring, dengan luas dan area di dalamnya, serta area di luar ruangan. Tanpa foto."
+              : "Ruangan di semua lokasi perpustakaan, dengan luas dan area di dalamnya, jumlah luas per lokasi, serta area di luar ruangan. Tanpa foto. Untuk satu lokasi, saring dulu daftar ruangan."}
+          </DialogDescription>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          Luas yang dicetak adalah luas tiap ruangan dari isian Luas (m²) ruangan. Ruangan yang belum diisi luasnya ditandai "—".
+        </p>
+        <DialogFooter>
+          <Pdf label="Cetak PDF" href={printAddress(w.config.inventory, "print_room_sizes", { library })} />
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /** Daftar inventaris berfoto: what it lists and how, then the print menu for its style. */
 export function CatalogDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const w = useWorkspace();

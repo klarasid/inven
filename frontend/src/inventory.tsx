@@ -35,7 +35,7 @@ import { Checkbox } from "./components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { RoomAreasTab, RoomPlansTab } from "./room-areas";
 import { LabelDialog } from "./labels";
-import { AreaListDialog, CatalogDialog } from "./catalog";
+import { AreaListDialog, CatalogDialog, RoomSizesDialog } from "./catalog";
 import {
   Dialog,
   DialogContent,
@@ -252,7 +252,7 @@ function RoomGrid() {
   const w = useWorkspace();
   const { data, error, loading } = useData<Page<Values>>("rooms", w.route);
   const [selected, setSelected] = useState<Values>();
-  const [list, setList] = useState<"catalog" | "areas">();
+  const [list, setList] = useState<"catalog" | "areas" | "sizes">();
   const [layout, setLayout] = useState<RoomLayout>(savedRoomLayout);
   const chooseLayout = (next: string) => {
     if (next !== "cards" && next !== "table") return;
@@ -302,6 +302,10 @@ function RoomGrid() {
                     <span className="font-medium">Daftar area dan fasilitas</span>
                     <span className="text-xs text-muted-foreground">Area tiap ruangan dan di luar ruangan, luas ruangan, dan fotonya.</span>
                   </DropdownMenuItem>
+                  <DropdownMenuItem className="flex flex-col items-start gap-0.5" onSelect={() => setList("sizes")}>
+                    <span className="font-medium">Daftar area dan luas ruangan</span>
+                    <span className="text-xs text-muted-foreground">Ruangan, luasnya, dan area di dalamnya, dengan jumlah luas per lokasi. Tanpa foto.</span>
+                  </DropdownMenuItem>
                 </DropdownMenuGroup>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -316,6 +320,7 @@ function RoomGrid() {
       />
       <CatalogDialog open={list === "catalog"} onOpenChange={(open) => setList(open ? "catalog" : undefined)} />
       <AreaListDialog open={list === "areas"} onOpenChange={(open) => setList(open ? "areas" : undefined)} />
+      <RoomSizesDialog open={list === "sizes"} onOpenChange={(open) => setList(open ? "sizes" : undefined)} />
       <div className="flex flex-col gap-2 sm:flex-row">
         <SearchBox placeholder="Cari nama atau kode ruangan…" />
         <LibraryFilter />

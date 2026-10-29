@@ -1,7 +1,7 @@
 <?php
 
 // The lists and sheets as PDF, from their print buttons in SLiMS: daftar inventaris berfoto, daftar
-// area dan fasilitas, daftar perangkat lunak, jadwal and checklist pemeriksaan. The same documents
+// area dan fasilitas, daftar area dan luas ruangan, daftar perangkat lunak, jadwal and checklist pemeriksaan. The same documents
 // the Klaras InvenSync API shares (Documents), in the style picked from the print menu.
 defined('INDEX_AUTH') || die('Direct access not allowed!');
 require LIB . 'ip_based_access.inc.php';
@@ -66,6 +66,10 @@ try {
         case 'print_areas':
             $document = $documents->areas(new \SLiMS\Plugins\Inventory\PhotoStorage(), (string) ($_GET['group'] ?? ''), $library, $libraryName, $printedBy, $style);
             $printed = 'Daftar area dan fasilitas dicetak (' . $document['count'] . ' area).';
+            break;
+        case 'print_room_sizes':
+            $document = $documents->roomSizes($library, $libraryName, $printedBy, $style);
+            $printed = 'Daftar area dan luas ruangan dicetak (' . $document['count'] . ' ruangan).';
             break;
         case 'print_software':
             $document = $documents->software($printedBy, $style);

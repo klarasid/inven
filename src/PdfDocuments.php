@@ -14,7 +14,7 @@ require_once __DIR__ . '/PdfLayout.php';
 final class PdfDocuments
 {
     public const SETTING = 'inventory_pdf_documents';
-    public const TYPES = ['period' => 'Laporan periode', 'inspection' => 'Dokumen pemeriksaan', 'report' => 'Laporan kerusakan', 'sarpras' => 'Rekap sarpras', 'catalog' => 'Daftar inventaris berfoto', 'areas' => 'Daftar area dan fasilitas', 'software' => 'Daftar perangkat lunak', 'schedules' => 'Jadwal pemeriksaan', 'checklists' => 'Checklist pemeriksaan'];
+    public const TYPES = ['period' => 'Laporan periode', 'inspection' => 'Dokumen pemeriksaan', 'report' => 'Laporan kerusakan', 'sarpras' => 'Rekap sarpras', 'catalog' => 'Daftar inventaris berfoto', 'areas' => 'Daftar area dan fasilitas', 'rooms' => 'Daftar area dan luas ruangan', 'software' => 'Daftar perangkat lunak', 'schedules' => 'Jadwal pemeriksaan', 'checklists' => 'Checklist pemeriksaan'];
     public const DEFAULTS = [
         'period' => ['number' => 'LAP-SARPRAS/{dari}-{sampai}', 'revision' => '00', 'issued' => ''],
         'inspection' => ['number' => 'PMR-{id}', 'revision' => '00', 'issued' => ''],
@@ -22,6 +22,7 @@ final class PdfDocuments
         'sarpras' => ['number' => 'REKAP-SARPRAS/{romawi}/{tahun}', 'revision' => '00', 'issued' => ''],
         'catalog' => ['number' => 'INV-FOTO/{romawi}/{tahun}', 'revision' => '00', 'issued' => ''],
         'areas' => ['number' => 'AREA/{romawi}/{tahun}', 'revision' => '00', 'issued' => ''],
+        'rooms' => ['number' => 'LUAS-RUANG/{romawi}/{tahun}', 'revision' => '00', 'issued' => ''],
         'software' => ['number' => 'PERANGKAT-LUNAK/{romawi}/{tahun}', 'revision' => '00', 'issued' => ''],
         'schedules' => ['number' => 'JADWAL-PMR/{tahun}', 'revision' => '00', 'issued' => ''],
         'checklists' => ['number' => 'CHECKLIST-PMR/{tahun}', 'revision' => '00', 'issued' => ''],

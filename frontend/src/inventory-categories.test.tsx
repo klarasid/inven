@@ -104,3 +104,17 @@ test('the room list can be shown as a table, and the choice is remembered',async
  expect((await screen.findByText('Ruang baca')).closest('tr')).toBeTruthy()
  localStorage.removeItem('inventory.roomLayout')
 })
+
+test('the print menu offers the areas with the floor area of their rooms, without photos',async()=>{
+ const rooms={rows:[{id:5,room_name:'Ruang baca',location_code:'',library_name:'Perpustakaan Pusat',area_m2:'120',item_count:'12',damaged_count:'0'}],total:1,page:1,pages:1}
+ vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:true,headers:{get:()=>'application/json'},json:async()=>({ok:true,data:rooms})}))
+ const w={config:{write:true,api:'http://localhost/api',inventory:'http://localhost/inventory'},options:{sarpras,rooms:[],libraries:[{location_id:'L1',location_name:'Perpustakaan Pusat'}]},route:{view:'inventory',library:'L1'},go:vi.fn(),back:vi.fn(),dirty:vi.fn(),refresh:vi.fn(),revision:0,mutate:vi.fn()} as unknown as ContextValue
+ render(<WorkspaceContext.Provider value={w}><InventoryList/></WorkspaceContext.Provider>)
+ await screen.findByText('Ruang baca')
+ fireEvent.keyDown(screen.getByRole('button',{name:/Cetak daftar/}),{key:'Enter'})
+ fireEvent.click(screen.getByRole('menuitem',{name:/Daftar area dan luas ruangan/}))
+ const dialog=screen.getByRole('dialog')
+ expect(within(dialog).getByText('Cetak daftar area dan luas ruangan')).toBeTruthy()
+ expect(within(dialog).getByText(/lokasi perpustakaan yang sedang disaring/).textContent).toContain('Tanpa foto')
+ expect(within(dialog).getByText('Cetak PDF')).toBeTruthy()
+},15000)

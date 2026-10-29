@@ -200,6 +200,24 @@ final class Documents
     }
 
     /**
+     * Daftar area dan luas ruangan: the rooms with their floor area and the areas inside them, by
+     * library location, without photos.
+     *
+     * @return array{filename: string, bytes: string, count: int}
+     */
+    public function roomSizes(string $library, string $libraryName, string $printedBy, string $style = ''): array
+    {
+        self::ensureRuntime();
+        require_once __DIR__ . '/RoomSizes.php';
+        $list = RoomSizes::build($this->db, $library);
+        $style = $this->style($style);
+        $pdf = WatchPdf::mpdf($this->tempDir, 'Daftar Area dan Luas Ruangan', $style);
+        self::write($pdf, RoomSizes::html($list, ['library_name' => $libraryName, 'printed_by' => $printedBy, 'documents' => PdfDocuments::load($this->db)], $style));
+
+        return ['filename' => 'daftar-area-dan-luas-ruangan' . ($library !== '' ? '-' . self::slug($library, 'lokasi') : '') . '.pdf', 'bytes' => $pdf->Output('', 'S'), 'count' => $list['rooms']];
+    }
+
+    /**
      * Daftar perangkat lunak: the software register by use, with each application's licence.
      *
      * @return array{filename: string, bytes: string, count: int}
