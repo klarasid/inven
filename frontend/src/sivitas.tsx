@@ -1,16 +1,17 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { MapPin, Sparkles, Undo2, Users, Wand2 } from "lucide-react";
+import { Download, MapPin, Sparkles, Undo2, Users, Wand2 } from "lucide-react";
 import { Alert, AlertDescription } from "./components/ui/alert";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
 import { Checkbox } from "./components/ui/checkbox";
 import { Input } from "./components/ui/input";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "./components/ui/sheet";
 import { Switch } from "./components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { useWorkspace } from "./context";
-import { dateLabel } from "./api";
+import { dateLabel, url } from "./api";
 import { Blank, Choice, ErrorBox, Loading, PageHeader, Panel, StatCard } from "./shared";
 import { Confirm, usePage } from "./settings";
 
@@ -36,10 +37,27 @@ type Data = {
   locations: Location[];
   /** Whether this librarian may rewrite Institusi in SLiMS (Membership write access). */
   fix: boolean;
+  /** Whether a card's details may list members by name (Membership read access). */
+  members?: boolean;
   write: boolean;
   csrf: string;
 };
 type Run = (values: Record<string, unknown>, done?: () => void) => Promise<void>;
+
+type Member = { id: string; name: string; institution: string; type: string; location: string; basis: string; expires: string | null };
+/** What one card counts: every sivitas ("all"), those placed nowhere ("unmapped"), or a location's code. */
+type Detail = {
+  scope: string;
+  label: string;
+  total: number;
+  locations: (Location & { count: number })[];
+  basis: { basis: string; label: string; count: number }[];
+  institutions: { label: string; count: number }[];
+  types: { name: string; count: number }[];
+  /** null without Membership read access: the breakdown comes alone. */
+  members: { total: number; rows: Member[] } | null;
+  shown: number;
+};
 
 const number = (n: number) => n.toLocaleString("id-ID");
 /** What to send for an Institusi group: a spelling of it, so the server derives the same key. */
@@ -363,6 +381,157 @@ function Fixes({ data, busy, merge, undo }: { data: Data; busy: boolean; merge: 
   );
 }
 
+/** Rows of a breakdown, each with its share of the card's count. */
+function Breakdown({ title, rows, total, limit = 0 }: { title: string; rows: { label: string; count: number }[]; total: number; limit?: number }) {
+  const [all, setAll] = useState(false);
+  if (rows.length === 0) return null;
+  const shown = limit && !all ? rows.slice(0, limit) : rows;
+  return (
+    <section className="flex flex-col gap-2">
+      <h3 className="text-sm font-medium">{title}</h3>
+      <ul className="flex flex-col gap-1.5">
+        {shown.map((row, index) => (
+          <li key={`${row.label}-${index}`} className="flex flex-col gap-1">
+            <div className="flex items-baseline justify-between gap-3 text-sm">
+              <span className={row.label ? "min-w-0 break-words" : "text-muted-foreground italic"}>{row.label || "Tanpa institusi"}</span>
+              <span className="shrink-0 tabular-nums">{number(row.count)}</span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden>
+              <div className="h-full rounded-full bg-primary" style={{ width: `${total ? Math.max(1, (row.count / total) * 100) : 0}%` }} />
+            </div>
+          </li>
+        ))}
+      </ul>
+      {limit > 0 && rows.length > limit && (
+        <Button variant="ghost" size="sm" className="self-start" onClick={() => setAll((now) => !now)}>
+          {all ? "Tampilkan lebih sedikit" : `Tampilkan semua ${number(rows.length)}`}
+        </Button>
+      )}
+    </section>
+  );
+}
+
+/** What a card's count is made of, with its members where the librarian may see them, and a workbook to take away. */
+function CardDetail({ data, scope, onClose }: { data: Data; scope: string; onClose: () => void }) {
+  const w = useWorkspace();
+  const page = w.config.pages!.sivitas;
+  const [query, setQuery] = useState("");
+  const [search, setSearch] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(query.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [query]);
+  const { data: fresh, error } = usePage<Detail>(page, search ? { detail: scope, q: search } : { detail: scope });
+  // While a search loads, the last answer stays on screen.
+  const [kept, setKept] = useState<Detail>();
+  useEffect(() => {
+    if (fresh) setKept(fresh);
+  }, [fresh]);
+  const detail = fresh ?? kept;
+  const everyone = scope === "all" && !data.counts.single;
+  const members = detail?.members;
+  return (
+    <Sheet open onOpenChange={(open) => !open && onClose()}>
+      <SheetContent className="flex w-full flex-col gap-0 sm:max-w-2xl">
+        <SheetHeader className="pr-12">
+          <SheetTitle>{detail?.label ?? "Rincian sivitas"}</SheetTitle>
+          <SheetDescription>
+            {detail ? `${number(detail.total)} anggota aktif yang dihitung sebagai sivitas, per ${dateLabel(w.config.today)}.` : "Memuat rincian…"}
+          </SheetDescription>
+          <div className="pt-2">
+            <Button variant="outline" size="sm" asChild>
+              <a className="notAJAX" href={url(page, { download: scope })} download>
+                <Download data-icon="inline-start" />
+                Unduh Excel
+              </a>
+            </Button>
+          </div>
+        </SheetHeader>
+        <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-4 pb-6">
+          <ErrorBox message={error} />
+          {!detail && !error && <Loading />}
+          {detail && detail.total === 0 && !search && (
+            <Blank icon={Users} title="Tidak ada anggota" description="Belum ada anggota aktif yang dihitung di sini." />
+          )}
+          {detail && (detail.total > 0 || search) && (
+            <>
+              <div className="grid gap-6 md:grid-cols-2">
+                {everyone && <Breakdown title="Per lokasi" rows={detail.locations.map((l) => ({ label: l.name, count: l.count }))} total={detail.total} />}
+                {!data.counts.single && <Breakdown title="Dipetakan lewat" rows={detail.basis} total={detail.total} />}
+                <Breakdown title="Tipe anggota" rows={detail.types.map((t) => ({ label: t.name, count: t.count }))} total={detail.total} />
+                <Breakdown title="Institusi" rows={detail.institutions} total={detail.total} limit={8} />
+              </div>
+              <section className="flex flex-col gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-sm font-medium">Anggota</h3>
+                  {members && (
+                    <Input
+                      className="w-full sm:max-w-64"
+                      placeholder="Cari nama, ID, atau institusi"
+                      aria-label="Cari anggota"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                    />
+                  )}
+                </div>
+                {members === null ? (
+                  <Alert>
+                    <AlertDescription>
+                      Daftar anggota memerlukan hak baca Keanggotaan. Unduhan Excel hanya memuat ringkasannya.
+                    </AlertDescription>
+                  </Alert>
+                ) : members && members.rows.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Tidak ada anggota yang cocok dengan "{search}".</p>
+                ) : (
+                  members && (
+                    <>
+                      <div className="overflow-x-auto rounded-xl border">
+                        <Table>
+                          <TableHeader className="bg-muted/50">
+                            <TableRow>
+                              <TableHead>Anggota</TableHead>
+                              <TableHead>Institusi</TableHead>
+                              <TableHead className="hidden sm:table-cell">Tipe</TableHead>
+                              {everyone && <TableHead className="hidden md:table-cell">Lokasi</TableHead>}
+                              <TableHead className="hidden text-right sm:table-cell">Berlaku sampai</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {members.rows.map((m) => (
+                              <TableRow key={m.id}>
+                                <TableCell className="max-w-56 whitespace-normal">
+                                  <div className="font-medium">{m.name || "—"}</div>
+                                  <div className="text-xs text-muted-foreground tabular-nums">{m.id}</div>
+                                </TableCell>
+                                <TableCell className="max-w-56 whitespace-normal">
+                                  {m.institution || <span className="text-muted-foreground italic">Tanpa institusi</span>}
+                                  {m.basis && !everyone && scope !== "unmapped" && <div className="text-xs text-muted-foreground">Lewat {m.basis.toLowerCase()}</div>}
+                                </TableCell>
+                                <TableCell className="hidden sm:table-cell">{m.type}</TableCell>
+                                {everyone && <TableCell className="hidden md:table-cell">{m.location}</TableCell>}
+                                <TableCell className="hidden text-right tabular-nums sm:table-cell">{m.expires ? dateLabel(m.expires) : "—"}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                      {members.total > members.rows.length && (
+                        <p className="text-sm text-muted-foreground">
+                          Menampilkan {number(members.rows.length)} dari {number(members.total)} anggota. Cari untuk mempersempit, atau unduh Excel untuk daftar lengkapnya.
+                        </p>
+                      )}
+                    </>
+                  )
+                )}
+              </section>
+            </>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 export function SivitasPage() {
   const w = useWorkspace();
   const { data, error, reload, post } = usePage<Data>(w.config.pages!.sivitas);
@@ -370,6 +539,7 @@ export function SivitasPage() {
   const [tab, setTab] = useState("institutions");
   const [merging, setMerging] = useState<{ from: string[]; to: string } | null>(null);
   const [undoing, setUndoing] = useState<Fix | null>(null);
+  const [card, setCard] = useState<string | null>(null);
 
   const run: Run = async (values, done) => {
     if (!data) return;
@@ -411,7 +581,7 @@ export function SivitasPage() {
       {header}
       <ErrorBox message={error} />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Sivitas" value={number(data.counts.total)} icon={Users} hint="Anggota aktif yang dihitung" />
+        <StatCard label="Sivitas" value={number(data.counts.total)} icon={Users} hint="Anggota aktif yang dihitung" onClick={() => setCard("all")} />
         {!data.counts.single && (
           <StatCard
             label="Belum dipetakan"
@@ -419,13 +589,16 @@ export function SivitasPage() {
             icon={MapPin}
             tone={data.counts.unmapped > 0 ? "warning" : "success"}
             hint={data.counts.unmapped > 0 ? "Tidak dihitung ke lokasi mana pun" : "Semua sudah punya lokasi"}
+            onClick={() => setCard("unmapped")}
           />
         )}
         {!data.counts.single &&
           data.counts.locations
             .filter((l) => l.count > 0)
-            .map((l) => <StatCard key={l.code} label={l.name} value={number(l.count)} />)}
+            .map((l) => <StatCard key={l.code} label={l.name} value={number(l.count)} onClick={() => setCard(l.code)} />)}
       </div>
+      <p className="-mt-2 text-xs text-muted-foreground">Klik kartu untuk melihat rincian anggotanya dan mengunduhnya sebagai Excel.</p>
+      {card !== null && <CardDetail key={card} data={data} scope={card} onClose={() => setCard(null)} />}
       {data.counts.single && (
         <Alert>
           <AlertDescription>Ruangan perpustakaan ini berada di satu lokasi, jadi semua sivitas dihitung untuknya. Pemetaan baru diperlukan bila ruangan tersebar di beberapa lokasi.</AlertDescription>

@@ -129,6 +129,8 @@ SLiMS tidak mencatat lokasi anggota. Bila ruangan tersebar di beberapa lokasi, s
 
 Anggota lainnya tampil sebagai **belum dipetakan** dan tidak dihitung untuk lokasi mana pun.
 
+Klik kartu di bagian atas halaman (**Sivitas**, **Belum dipetakan**, atau kartu sebuah lokasi) untuk melihat rinciannya: jumlah per lokasi, cara anggota dipetakan, per tipe anggota, per institusi, dan daftar anggotanya yang dapat dicari. Klik **Unduh Excel** untuk mengambil daftar lengkap beserta ringkasannya. Daftar anggota memuat nama dan ID anggota SLiMS, sehingga hanya tampil bagi petugas yang juga memiliki hak baca **Keanggotaan**; petugas lain hanya melihat dan mengunduh ringkasannya.
+
 Isian Institusi di SLiMS berupa teks bebas, sehingga satu program studi bisa tertulis dengan beberapa ejaan. Tab **Perbaiki institusi** mengelompokkan ejaan yang mirip (berbeda huruf besar-kecil, spasi, tanda baca, atau salah ketik satu-dua huruf). Ejaan dengan jenjang atau nomor berbeda, misalnya D-III dan D-IV atau Kelas 7A dan 7B, tidak dikelompokkan. Pilih ejaan yang benar, lalu klik **Gabungkan**; Institusi anggota di SLiMS ikut diperbaiki. Anda juga dapat memilih beberapa baris di tab Institusi lalu klik **Gabungkan ejaan**. Setiap perbaikan tercatat di **Riwayat perbaikan** dan dapat diurungkan; anggota yang institusinya diubah lagi sejak itu tidak ikut dikembalikan. Memperbaiki institusi memerlukan hak tulis **Keanggotaan** selain hak tulis Stock Take.
 
 Rekap dihitung per **lokasi perpustakaan** (lokasi SLiMS yang dipilih pada tiap ruangan). Perpustakaan dengan satu lokasi langsung melihat rekapnya. Bila ruangan tersebar di beberapa lokasi:

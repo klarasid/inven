@@ -310,6 +310,46 @@ if ($page === 'facility' && isset($_GET['document'])) {
     exit;
 }
 
+// The members behind one of the page's counts (?detail=<scope>, ?download=<scope>): 'all',
+// 'unmapped' or a location code. Names and member IDs are SLiMS member data, so they need
+// Membership read access too; without it the breakdown comes alone.
+if ($page === 'sivitas' && (isset($_GET['detail']) || isset($_GET['download']))) {
+    $canSeeMembers = utility::havePrivilege('membership', 'r');
+    $download = isset($_GET['download']);
+    $scope = trim((string) ($download ? $_GET['download'] : $_GET['detail']));
+    try {
+        if ($download) {
+            session_write_close();
+            $book = Sivitas::workbook($db, $scope, $canSeeMembers);
+            $log('Data sivitas ' . Sivitas::scopeLabel($db, $scope) . ' diunduh (' . $book['count'] . ' anggota' . ($canSeeMembers ? '' : ', tanpa daftar anggota') . ').', 'Print');
+            header('Cache-Control: private, no-store');
+            header('X-Content-Type-Options: nosniff');
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment; filename="' . $book['filename'] . '"');
+            header('Content-Length: ' . strlen($book['bytes']));
+            echo $book['bytes'];
+        } else {
+            $members = $canSeeMembers ? Sivitas::members($db, $scope, Sivitas::SHOWN_MEMBERS, (string) ($_GET['q'] ?? '')) : null;
+            $json(['ok' => true, 'data' => Sivitas::detail($db, $scope) + ['members' => $members, 'shown' => Sivitas::SHOWN_MEMBERS]]);
+        }
+    } catch (Throwable $error) {
+        $known = $error instanceof RuntimeException && !$error instanceof PDOException;
+        if (!$known) {
+            error_log('[sarpras] sivitas detail: ' . $error->getMessage());
+            $report($error);
+        }
+        $message = $known ? $error->getMessage() : ($isSchema($error) ? $schemaMessage : 'Rincian sivitas belum bisa dibaca. Periksa log PHP.');
+        if ($download) {
+            http_response_code($known ? 422 : 500);
+            header('Content-Type: text/plain; charset=utf-8');
+            echo $message;
+        } else {
+            $json(['ok' => false, 'message' => $message], $known ? 422 : 500);
+        }
+    }
+    exit;
+}
+
 $watch = static fn() => new \SLiMS\Plugins\Inventory\Supervision($db, new \SLiMS\Plugins\Inventory\PhotoStorage(SB . 'images/inventaris-barang/pengawasan'));
 
 if ($page === 'recap' && isset($_GET['pdf'])) {
@@ -381,6 +421,8 @@ if (($_GET['format'] ?? '') === 'json') {
                 'fixes' => Sivitas::fixes($db),
                 'locations' => $locations,
                 'fix' => $canFixMembers,
+                // Whether the cards' details may list members by name (Membership read access).
+                'members' => utility::havePrivilege('membership', 'r'),
             ] + $access]);
         } elseif ($page === 'facility') {
             if ($places === null) $places = Sarpras::locations($db);

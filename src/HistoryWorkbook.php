@@ -90,7 +90,8 @@ final class HistoryWorkbook
             return $sheets;
         } finally {$zip->close();}
     }
-    public static function write(array $sheets): string {
+    /** $numbers: write int and float values as numbers rather than text. */
+    public static function write(array $sheets, bool $numbers=false): string {
         $path=tempnam(sys_get_temp_dir(),'inventory-xlsx-'); $zip=new \ZipArchive();
         try {
             if($zip->open($path,\ZipArchive::OVERWRITE)!==true) throw new \RuntimeException('Template tidak dapat dibuat.');
@@ -107,7 +108,9 @@ final class HistoryWorkbook
                     $xml.='<row r="'.($n+1).'">';
                     foreach(array_values($row) as $c=>$value) {
                         $col='';for($v=$c+1;$v>0;$v=intdiv($v-1,26))$col=chr(65+($v-1)%26).$col;
-                        $xml.='<c r="'.$col.($n+1).'" t="inlineStr"><is><t xml:space="preserve">'.$esc($value).'</t></is></c>';
+                        $xml.=$numbers&&(is_int($value)||is_float($value))
+                            ? '<c r="'.$col.($n+1).'"><v>'.$value.'</v></c>'
+                            : '<c r="'.$col.($n+1).'" t="inlineStr"><is><t xml:space="preserve">'.$esc($value).'</t></is></c>';
                     }$xml.='</row>';
                 }
                 $zip->addFromString('xl/worksheets/sheet'.$i.'.xml',$xml.'</sheetData></worksheet>');

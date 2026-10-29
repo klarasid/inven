@@ -158,29 +158,211 @@ final class Sivitas
      */
     public static function counts(PDO $db, ?string $today = null): array
     {
-        $settings = self::settings($db);
-        $maps = self::maps($db);
+        $place = self::placer($db);
         $single = self::single($db);
-        $excluded = array_flip($settings['excluded']);
         $query = $db->prepare('SELECT inst_name, member_type_id, COUNT(*) n FROM member WHERE ' . self::active() . ' GROUP BY inst_name, member_type_id');
         $query->execute([$today ?? date('Y-m-d')]);
         $result = ['total' => 0, 'unmapped' => 0, 'single' => $single, 'locations' => []];
         foreach ($query->fetchAll(PDO::FETCH_ASSOC) as $row) {
-            if (isset($excluded[(int) $row['member_type_id']])) continue;
+            $placed = $place($row);
+            if ($placed === null) continue;
             $count = (int) $row['n'];
             $result['total'] += $count;
             if ($single) continue;
-            $location = $maps['institution'][self::key((string) $row['inst_name'])]
-                ?? $maps['type'][(string) (int) $row['member_type_id']]
-                ?? ($settings['default'] !== '' ? $settings['default'] : null);
-            if ($location === null) {
+            if ($placed['location'] === '') {
                 $result['unmapped'] += $count;
             } else {
-                $result['locations'][$location] = ($result['locations'][$location] ?? 0) + $count;
+                $result['locations'][$placed['location']] = ($result['locations'][$placed['location']] ?? 0) + $count;
             }
         }
         ksort($result['locations'], SORT_STRING);
         return $result;
+    }
+
+    /**
+     * Where an active member goes, from their Institusi and member type: null for a member type
+     * left out, else the location ('' for none) and what placed them there ('institution',
+     * 'type', 'default' or '' for nothing).
+     *
+     * @return callable(array{inst_name:?string,member_type_id:mixed}):?array{location:string,basis:string}
+     */
+    private static function placer(PDO $db): callable
+    {
+        $settings = self::settings($db);
+        $maps = self::maps($db);
+        $excluded = array_flip($settings['excluded']);
+        return static function (array $row) use ($settings, $maps, $excluded): ?array {
+            if (isset($excluded[(int) $row['member_type_id']])) return null;
+            $institution = $maps['institution'][self::key((string) $row['inst_name'])] ?? null;
+            if ($institution !== null) return ['location' => $institution, 'basis' => 'institution'];
+            $type = $maps['type'][(string) (int) $row['member_type_id']] ?? null;
+            if ($type !== null) return ['location' => $type, 'basis' => 'type'];
+            if ($settings['default'] !== '') return ['location' => $settings['default'], 'basis' => 'default'];
+            return ['location' => '', 'basis' => ''];
+        };
+    }
+
+    // ---- What a count is made of ---------------------------------------------------------------
+
+    /** How a member came to their location, as the page and the workbook say it. */
+    public const BASIS_LABELS = ['institution' => 'Institusi', 'type' => 'Tipe anggota', 'default' => 'Lokasi bawaan', '' => 'Belum dipetakan'];
+
+    /** Above this many rows the page lists only the first; the workbook has them all. */
+    public const SHOWN_MEMBERS = 100;
+
+    /**
+     * The members behind one count: 'all' (every sivitas), 'unmapped', or a location code.
+     * Refuses a scope that is no count on the page.
+     */
+    private static function scope(PDO $db, string $scope, bool $single): callable
+    {
+        if ($scope === 'all') return static fn(array $placed): bool => true;
+        if ($single) throw new RuntimeException('Perpustakaan ini dihitung sebagai satu lokasi. Buka rincian semua sivitas.');
+        if ($scope === 'unmapped') return static fn(array $placed): bool => $placed['location'] === '';
+        if (!in_array($scope, array_column(self::locations($db), 'code'), true)) throw new RuntimeException('Lokasi perpustakaan tidak dikenal.');
+        return static fn(array $placed): bool => $placed['location'] === $scope;
+    }
+
+    /** What a scope is called on the page and in the workbook. */
+    public static function scopeLabel(PDO $db, string $scope): string
+    {
+        if ($scope === 'all') return 'Semua sivitas';
+        if ($scope === 'unmapped') return 'Belum dipetakan';
+        foreach (self::locations($db) as $location) if ($location['code'] === $scope) return $location['name'];
+        return $scope;
+    }
+
+    /**
+     * One count broken down: by location (for every sivitas), by what placed the members there,
+     * by Institusi and by member type. Counts only, no member's name.
+     *
+     * @return array{scope:string,label:string,total:int,locations:list<array{code:string,name:string,count:int}>,basis:list<array{basis:string,label:string,count:int}>,institutions:list<array{label:string,count:int}>,types:list<array{name:string,count:int}>}
+     */
+    public static function detail(PDO $db, string $scope, ?string $today = null): array
+    {
+        $single = self::single($db);
+        $inScope = self::scope($db, $scope, $single);
+        $place = self::placer($db);
+        $types = array_column(self::types($db, $today), 'name', 'id');
+        $query = $db->prepare('SELECT inst_name, member_type_id, COUNT(*) n FROM member WHERE ' . self::active() . ' GROUP BY inst_name, member_type_id');
+        $query->execute([$today ?? date('Y-m-d')]);
+        $total = 0;
+        $locations = $basis = $institutions = $byType = [];
+        foreach ($query->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $placed = $place($row);
+            if ($placed === null) continue;
+            if ($single) $placed = ['location' => '', 'basis' => ''];
+            if (!$inScope($placed)) continue;
+            $count = (int) $row['n'];
+            $total += $count;
+            $locations[$placed['location']] = ($locations[$placed['location']] ?? 0) + $count;
+            $basis[$placed['basis']] = ($basis[$placed['basis']] ?? 0) + $count;
+            $key = self::key((string) $row['inst_name']);
+            $institutions[$key] ??= ['label' => '', 'count' => 0, 'spellings' => []];
+            $institutions[$key]['count'] += $count;
+            $spelling = trim((string) $row['inst_name']);
+            $institutions[$key]['spellings'][$spelling] = ($institutions[$key]['spellings'][$spelling] ?? 0) + $count;
+            $type = (int) $row['member_type_id'];
+            $byType[$type] = ($byType[$type] ?? 0) + $count;
+        }
+        $institutions = array_map(static function (array $group): array {
+            // Named by the spelling most of its members have, as the Institusi tab does.
+            arsort($group['spellings']);
+            return ['label' => (string) array_key_first($group['spellings']), 'count' => $group['count']];
+        }, array_values($institutions));
+        usort($institutions, static fn($a, $b) => [$b['count'], $a['label']] <=> [$a['count'], $b['label']]);
+        $named = [];
+        foreach ($byType as $id => $count) $named[] = ['name' => (string) ($types[$id] ?? 'Tipe #' . $id), 'count' => $count];
+        usort($named, static fn($a, $b) => [$b['count'], $a['name']] <=> [$a['count'], $b['name']]);
+        $places = [];
+        if (!$single) {
+            foreach (self::locations($db) as $location) {
+                if (isset($locations[$location['code']])) $places[] = $location + ['count' => $locations[$location['code']]];
+            }
+            if (isset($locations[''])) $places[] = ['code' => '', 'name' => 'Belum dipetakan', 'count' => $locations['']];
+        }
+        $reasons = [];
+        if (!$single) {
+            foreach (self::BASIS_LABELS as $code => $label) {
+                if (isset($basis[$code])) $reasons[] = ['basis' => (string) $code, 'label' => $label, 'count' => $basis[$code]];
+            }
+        }
+        return ['scope' => $scope, 'label' => self::scopeLabel($db, $scope), 'total' => $total, 'locations' => $places, 'basis' => $reasons, 'institutions' => $institutions, 'types' => $named];
+    }
+
+    /**
+     * The members behind one count, by name, with where they were placed and why. $limit 0 lists
+     * them all; $search narrows by name, member ID or Institusi.
+     *
+     * @return array{total:int,rows:list<array{id:string,name:string,institution:string,type:string,location:string,basis:string,expires:?string}>}
+     */
+    public static function members(PDO $db, string $scope, int $limit = 0, string $search = '', ?string $today = null): array
+    {
+        $single = self::single($db);
+        $inScope = self::scope($db, $scope, $single);
+        $place = self::placer($db);
+        $names = array_column(self::locations($db), 'name', 'code');
+        $types = array_column(self::types($db, $today), 'name', 'id');
+        $sql = 'SELECT member_id, member_name, inst_name, member_type_id, expire_date FROM member WHERE ' . self::active();
+        $args = [$today ?? date('Y-m-d')];
+        $search = trim($search);
+        if ($search !== '') {
+            // '!' escapes the wildcards alike on MySQL and SQLite, whatever the SQL mode.
+            $sql .= " AND (member_name LIKE ? ESCAPE '!' OR member_id LIKE ? ESCAPE '!' OR inst_name LIKE ? ESCAPE '!')";
+            $like = '%' . strtr($search, ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
+            array_push($args, $like, $like, $like);
+        }
+        $query = $db->prepare($sql . ' ORDER BY member_name, member_id');
+        $query->execute($args);
+        $total = 0;
+        $rows = [];
+        while ($row = $query->fetch(PDO::FETCH_ASSOC)) {
+            $placed = $place($row);
+            if ($placed === null) continue;
+            if ($single) $placed = ['location' => '', 'basis' => ''];
+            if (!$inScope($placed)) continue;
+            $total++;
+            if ($limit > 0 && count($rows) >= $limit) continue;
+            $rows[] = [
+                'id' => (string) $row['member_id'],
+                'name' => (string) $row['member_name'],
+                'institution' => trim((string) $row['inst_name']),
+                'type' => (string) ($types[(int) $row['member_type_id']] ?? ''),
+                'location' => $single ? '' : ($placed['location'] === '' ? 'Belum dipetakan' : (string) ($names[$placed['location']] ?? $placed['location'])),
+                'basis' => $single ? '' : self::BASIS_LABELS[$placed['basis']],
+                'expires' => $row['expire_date'] === null ? null : (string) $row['expire_date'],
+            ];
+        }
+        return ['total' => $total, 'rows' => $rows];
+    }
+
+    /**
+     * One count as an Excel workbook: the members, then the breakdown. $members false leaves the
+     * member list out, for staff who may not see SLiMS's member data.
+     *
+     * @return array{filename:string,bytes:string,count:int}
+     */
+    public static function workbook(PDO $db, string $scope, bool $members = true, ?string $today = null): array
+    {
+        require_once __DIR__ . '/HistoryWorkbook.php';
+        $detail = self::detail($db, $scope, $today);
+        $single = self::single($db);
+        $sheets = [];
+        if ($members) {
+            $list = [array_merge(['No.', 'ID anggota', 'Nama', 'Institusi', 'Tipe anggota'], $single ? [] : ['Lokasi', 'Dipetakan lewat'], ['Berlaku sampai'])];
+            foreach (self::members($db, $scope, 0, '', $today)['rows'] as $n => $row) {
+                $list[] = array_merge([$n + 1, $row['id'], $row['name'], $row['institution'], $row['type']], $single ? [] : [$row['location'], $row['basis']], [(string) $row['expires']]);
+            }
+            $sheets['Anggota'] = $list;
+        }
+        $summary = [['Rincian', 'Uraian', 'Jumlah'], ['Sivitas', $detail['label'], $detail['total']]];
+        foreach ($detail['locations'] as $row) $summary[] = ['Lokasi', $row['name'], $row['count']];
+        foreach ($detail['basis'] as $row) $summary[] = ['Dipetakan lewat', $row['label'], $row['count']];
+        foreach ($detail['types'] as $row) $summary[] = ['Tipe anggota', $row['name'], $row['count']];
+        foreach ($detail['institutions'] as $row) $summary[] = ['Institusi', $row['label'] === '' ? 'Tanpa institusi' : $row['label'], $row['count']];
+        $sheets['Ringkasan'] = $summary;
+        $slug = strtolower(trim((string) preg_replace('/[^A-Za-z0-9]+/', '-', $detail['label']), '-')) ?: 'lokasi';
+        return ['filename' => 'sivitas-' . $slug . '-' . date('Ymd', strtotime($today ?? 'today')) . '.xlsx', 'bytes' => HistoryWorkbook::write($sheets, true), 'count' => $detail['total']];
     }
 
     /** Sivitas of one location, or of the whole library ('' or a library that is one unit). */

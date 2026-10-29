@@ -82,3 +82,32 @@ test('a library that is one unit needs no mapping',async()=>{
  expect(screen.queryByRole('tab',{name:'Institusi'})).toBeNull()
  expect(screen.queryByText('Tidak dihitung ke lokasi mana pun')).toBeNull()
 })
+
+const detail=(more:object={})=>({scope:'00',label:'Kampus Tembalang',total:80,locations:[],basis:[{basis:'institution',label:'Institusi',count:80}],
+ institutions:[{label:'Gizi',count:50},{label:'',count:30}],types:[{name:'Mahasiswa',count:80}],
+ members:{total:80,rows:[{id:'M1',name:'Ayu',institution:'Gizi',type:'Mahasiswa',location:'Kampus Tembalang',basis:'Institusi',expires:'2027-01-01'}]},shown:100,...more})
+
+test('a location card opens what it counts, with its members and a workbook to download',async()=>{
+ const fetch=vi.fn((target:string)=>Promise.resolve(reply({ok:true,data:new URL(target).searchParams.has('detail')?detail():data()})))
+ vi.stubGlobal('fetch',fetch)
+ mount()
+ fireEvent.click(await screen.findByRole('button',{name:/Kampus Tembalang/}))
+ const sheet=await screen.findByRole('dialog')
+ expect(await within(sheet).findByText('Ayu')).toBeTruthy()
+ expect(within(sheet).getByText('Tanpa institusi')).toBeTruthy()
+ expect(within(sheet).getByText(/Menampilkan 1 dari 80 anggota/)).toBeTruthy()
+ const asked=new URL(fetch.mock.calls.map(([target])=>target).find((target)=>target.includes('detail='))!)
+ expect([asked.searchParams.get('detail'),asked.searchParams.get('format')]).toEqual(['00','json'])
+ const link=within(sheet).getByRole('link',{name:/Unduh Excel/})
+ expect(new URL(link.getAttribute('href')!).searchParams.get('download')).toBe('00')
+})
+
+test('without Membership read access, a card shows its breakdown but no member names',async()=>{
+ vi.stubGlobal('fetch',vi.fn((target:string)=>Promise.resolve(reply({ok:true,data:new URL(target).searchParams.has('detail')?detail({scope:'unmapped',label:'Belum dipetakan',total:40,members:null}):data()}))))
+ mount()
+ fireEvent.click(await screen.findByRole('button',{name:/Belum dipetakan/}))
+ const sheet=await screen.findByRole('dialog')
+ expect(await within(sheet).findByText(/memerlukan hak baca Keanggotaan/)).toBeTruthy()
+ expect(within(sheet).getByText('Gizi')).toBeTruthy()
+ expect(within(sheet).queryByText('Ayu')).toBeNull()
+})
