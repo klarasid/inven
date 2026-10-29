@@ -247,7 +247,7 @@ function AspectRow({ aspect: x, levels, library }: { aspect: Aspect; levels: Rec
                   )}
                   <span className="flex flex-col gap-0.5">
                     <span className={c.ok ? undefined : "text-muted-foreground"}>{c.label}</span>
-                    {c.note && <span className="text-xs text-muted-foreground">{c.note}</span>}
+                    {c.note && <span className="whitespace-pre-line text-xs text-muted-foreground">{c.note}</span>}
                   </span>
                 </li>
               ))}

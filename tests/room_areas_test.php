@@ -113,6 +113,8 @@ $db->prepare('INSERT INTO setting VALUES (?, ?)')->execute([Sarpras::SETTING, se
     '00' => ['building_area' => 500.0, 'designed' => true, 'bandwidth_mbps' => 100.0, 'bandwidth_users' => 20, 'bandwidth_coverage' => 'all'],
     '10' => ['designed' => false, 'bandwidth_mbps' => 30.0, 'bandwidth_users' => 10, 'bandwidth_coverage' => 'partial'],
 ]])]);
+$db->exec("INSERT INTO inventory_items (id, location_id, item_name, category, item_type, item_condition) VALUES
+    (5, 4, 'PC layanan Kampus Dua', 'komputer', 'PC', 'B')");
 $db->exec('UPDATE inventory_locations SET area_m2 = 80 WHERE id = 4');
 $places = [['code' => '00', 'name' => 'Kampus Utama'], ['code' => '10', 'name' => 'Kampus Dua']];
 $institution = Sarpras::recap($db, $watch, '', $places);
@@ -120,6 +122,7 @@ check($aspect($institution, 1)['columns'] === ['Lokasi', 'Luas', 'Sivitas', 'm²
 check(str_contains(array_column($aspect($institution, 1)['checks'], 'label')[2], '1 dari 2 lokasi') && !$aspect($institution, 1)['checks'][2]['ok'], 'gedung institusi dianggap didesain untuk perpustakaan hanya bila semua lokasinya');
 check($aspect($institution, 10)['rows'] === [['Dispenser air minum', '1'], ['Musala', '1'], ['Toilet', '1']] && $aspect($institution, 10)['value'] === '3 jenis', 'fasilitas umum institusi dihitung dari semua lokasi bersama, bukan dirata-rata');
 check($aspect($institution, 2)['value'] === '4 dari 4 area dasar · 3 area pendukung' && count($aspect($institution, 2)['rows']) === 4, 'area layanan institusi dihitung dari semua ruangan');
+check(array_column($aspect($institution, 5)['checks'], 'note', 'label')['Komputer di area baca'] === "2 komputer berfungsi:\n1 komputer — Kampus Utama\n1 komputer — Kampus Dua", 'komputer fungsi layanan institusi dirinci per lokasi, bukan per ruangan');
 check($aspect($institution, 6)['value'] === '4,33 Mbps/orang · sebagian area layanan' && str_contains($aspect($institution, 6)['basis'], '130 Mbps untuk 30 pengguna serentak, jumlah 2 dari 2 lokasi'), 'internet institusi dijumlahkan, dan menjangkau seluruh area hanya bila tiap lokasi menjangkaunya');
 check(!isset($aspect($institution, 1)['targets']) && $institution['counts']['rooms'] === 4, 'rekap institusi berbentuk rekap satu perpustakaan, dengan semua ruangannya');
 $db->exec("DELETE FROM setting WHERE setting_name = '" . Sarpras::SETTING . "'");
