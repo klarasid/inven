@@ -63,8 +63,13 @@ check($names($areas) === [
 $summary = InventoryCatalog::summary($areas);
 check($summary['items'] === 3 && $summary['groups'][2] === ['label' => 'Gazebo', 'items' => 1, 'with_photos' => 1] && $summary['groups'][3]['with_photos'] === 0, 'ringkasan menghitung barang dan foto tiap kelompok');
 
+// By room: one group per room that holds a listed item, still narrowed by category.
+$rooms = InventoryCatalog::build($db, 'room', ['perabot', 'peralatan']);
+check(array_sum(array_map(static fn($g) => count($g['items']), $rooms['groups'])) === $rooms['items'] && count(array_unique(array_column($rooms['groups'], 'label'))) === count($rooms['groups']),
+    'tiap barang tercantum sekali, pada ruangan tempatnya dicatat');
+
 // What is refused.
-rejects(static fn () => InventoryCatalog::build($db, 'ruangan', []), 'pengelompokan lain ditolak', 'kategori atau area');
+rejects(static fn () => InventoryCatalog::build($db, 'ruangan', []), 'pengelompokan lain ditolak', 'kategori, area, atau ruangan');
 rejects(static fn () => InventoryCatalog::build($db, 'category', ['mebel']), 'kategori yang tidak dikenal ditolak', 'Kategori barang tidak valid');
 rejects(static fn () => InventoryCatalog::build($db, 'category', [], '', 'dua'), 'pilihan foto lain ditolak', 'satu foto per barang atau semua foto');
 $db->exec('INSERT INTO inventory_items (id, location_id, item_name, item_code, item_condition) WITH RECURSIVE n(i) AS (SELECT 100 UNION ALL SELECT i + 1 FROM n WHERE i < 600) SELECT i, 3, \'Kursi\', \'K-\' || i, \'B\' FROM n');

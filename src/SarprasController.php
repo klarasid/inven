@@ -3,7 +3,7 @@
  * The three Stock Take pages around the library's facilities, each loaded through its own menu
  * file, which sets $inventorySarprasPage:
  *
- *   recap     Rekap Sarpras: eleven aspects computed from the inventory, the software register,
+ *   recap     Rekap Sarpras: thirteen aspects computed from the inventory, the software register,
  *             the facility figures and supervision history. Read only; also serves the PDF
  *             (?pdf=<style>).
  *   software  Perangkat Lunak: the register of software the library runs, and the files that

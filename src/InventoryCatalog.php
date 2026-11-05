@@ -24,7 +24,7 @@ final class InventoryCatalog
 {
     public const MAX_ITEMS = 500;
     public const MAX_PHOTOS = 500;
-    public const GROUPINGS = ['category' => 'Kategori', 'area' => 'Area'];
+    public const GROUPINGS = ['category' => 'Kategori', 'area' => 'Area', 'room' => 'Ruangan'];
     /** How many photos of an item are printed: its first, or all of them (a photo of it in use among them). */
     public const PHOTOS = ['first' => 'Satu foto per barang', 'all' => 'Semua foto'];
     private const THUMBNAIL = 320;
@@ -35,7 +35,7 @@ final class InventoryCatalog
      */
     public static function build(PDO $db, string $group, array $categories, string $library = '', string $photos = 'first'): array
     {
-        if (!isset(self::GROUPINGS[$group])) throw new RuntimeException('Pilih pengelompokan menurut kategori atau area.');
+        if (!isset(self::GROUPINGS[$group])) throw new RuntimeException('Pilih pengelompokan menurut kategori, area, atau ruangan.');
         if (!isset(self::PHOTOS[$photos])) throw new RuntimeException('Pilih satu foto per barang atau semua foto.');
         if (array_diff($categories, array_keys(Sarpras::CATEGORIES))) throw new RuntimeException('Kategori barang tidak valid.');
         $categories = array_values(array_filter(array_keys(Sarpras::CATEGORIES), static fn($code) => in_array($code, $categories, true)));
@@ -66,7 +66,11 @@ final class InventoryCatalog
             throw new RuntimeException('Daftar memuat lebih dari ' . self::MAX_PHOTOS . ' foto. Saring menurut kategori atau lokasi perpustakaan, atau cetak satu foto per barang.');
         }
 
-        $groups = $group === 'area' ? self::byArea($db, $items, $library) : self::byCategory($items, $categories);
+        $groups = match ($group) {
+            'area' => self::byArea($db, $items, $library),
+            'room' => self::byRoom($db, $items, $library),
+            default => self::byCategory($items, $categories),
+        };
         return [
             'group' => $group, 'library' => $library, 'categories' => $categories, 'photos' => $photos,
             'items' => count($items),
@@ -84,6 +88,19 @@ final class InventoryCatalog
             $groups[] = ['label' => Sarpras::CATEGORIES[$code], 'items' => array_values(array_filter($items, static fn($item) => in_array($code, $item['categories'], true)))];
         }
         $groups[] = ['label' => 'Belum berkategori', 'items' => array_values(array_filter($items, static fn($item) => !$item['categories']))];
+        return $groups;
+    }
+
+    /** One group per room, in the order of their names: every room that holds a listed item. @return list<array{label:string,items:list<array<string,mixed>>}> */
+    private static function byRoom(PDO $db, array $items, string $library): array
+    {
+        $where = $library === '' ? '' : ' WHERE slims_location_id = ?';
+        $query = $db->prepare('SELECT id, room_name FROM inventory_locations' . $where . ' ORDER BY room_name, id');
+        $query->execute($library === '' ? [] : [$library]);
+        $groups = [];
+        foreach ($query->fetchAll(PDO::FETCH_ASSOC) as $room) {
+            $groups[] = ['label' => (string) $room['room_name'], 'items' => array_values(array_filter($items, static fn($item) => (int) $item['location_id'] === (int) $room['id']))];
+        }
         return $groups;
     }
 

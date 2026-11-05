@@ -13,7 +13,7 @@ require_once __DIR__ . '/Sivitas.php';
 require_once __DIR__ . '/SupportDocuments.php';
 
 /**
- * Rekap Sarpras: eleven aspects of the library's facilities, each computed from the inventory
+ * Rekap Sarpras: thirteen aspects of the library's facilities, each computed from the inventory
  * (room area, the areas inside rooms, item categories and conditions), the software register, the figures
  * kept in the `inventory_sarpras` setting (building, bandwidth), sivitas counted from SLiMS's
  * active members (Sivitas), and supervision history. Each
@@ -34,6 +34,7 @@ final class Sarpras
         1 => 'Luas gedung dan ruang', 2 => 'Area layanan', 3 => 'Kondisi barang', 4 => 'Perabot dan peralatan',
         5 => 'Komputer layanan', 6 => 'Jaringan internet', 7 => 'Perangkat multimedia', 8 => 'Lisensi perangkat lunak',
         9 => 'Keamanan dan keselamatan', 10 => 'Fasilitas umum', 11 => 'Pemeriksaan rutin dan tindak lanjut',
+        12 => 'Sarana akses', 13 => 'Sarana kenyamanan',
     ];
 
     /**
@@ -94,8 +95,8 @@ final class Sarpras
     public const TYPES = [
         'komputer' => ['PC', 'Laptop', 'Server', 'Kiosk OPAC', 'Thin client'],
         'multimedia' => ['Komputer multimedia', 'Proyektor', 'Layar proyektor', 'Televisi / monitor besar', 'Panel interaktif', 'Pengeras suara', 'Headphone', 'Pemutar audio', 'Mikrofon', 'Perekam suara', 'Kamera', 'Pemindai (scanner)', 'Printer', 'Printer 3D', 'Perangkat VR'],
-        // No aspect scores these yet: the category is there so the inventory can list them.
-        'kenyamanan' => ['AC / penyejuk udara', 'Kipas angin', 'Lampu penerangan', 'Tempat sampah', 'Stopkontak / colokan listrik', 'Tirai / gorden', 'Pengharum ruangan'],
+        // Scored by aspect 13 (Sarana kenyamanan) and, for the socket, aspect 12 (Sarana akses).
+        'kenyamanan' => ['AC / penyejuk udara', 'Kipas angin', 'Lampu penerangan', 'Tempat sampah', 'Stopkontak / colokan listrik', 'Perlengkapan kebersihan', 'Tirai / gorden', 'Pengharum ruangan'],
         'keamanan' => ['CCTV', 'Security gate', 'Gerbang / perangkat RFID', 'Mesin peminjaman mandiri', 'Loker penitipan', 'APAR', 'Alarm kebakaran', 'Detektor asap', 'Hidran', 'Rambu dan jalur evakuasi', 'Pintu darurat', 'Lampu darurat', 'Kotak P3K'],
         // Toilets, prayer rooms and the like are areas of a room (AREA_TYPES), not items.
         'fasilitas_umum' => ['Penunjuk arah / papan petunjuk', 'Akses difabel (ramp)', 'Wi-Fi publik', 'Dispenser air minum', 'Stasiun pengisian daya', 'Tempat sampah terpilah'],
@@ -727,6 +728,78 @@ final class Sarpras
             'columns' => ['Ruangan tanpa jadwal', 'Perpustakaan'],
             'fix' => 'Buat jadwal untuk ruangan yang belum, selesaikan pemeriksaan tepat waktu, dan catat pekerjaan untuk setiap temuan.',
             'sources' => ['schedules'],
+        ];
+
+        // Working items (not Rusak berat) of any category whose type or name contains one of the words.
+        $findItems = static function (array $words) use ($items): array {
+            return array_values(array_filter($items, static function (array $item) use ($words): bool {
+                if ($item['item_condition'] === 'RB') return false;
+                $text = mb_strtolower(trim((string) $item['item_type']) . ' ' . trim((string) $item['item_name']));
+                foreach ($words as $word) if (str_contains($text, $word)) return true;
+                return false;
+            }));
+        };
+        $hasItem = static fn(array $words): bool => (bool) $findItems($words);
+        $roomNames = array_column($rooms, 'room_name', 'id');
+        // One printed row per facility: whether it is there, how many, and in which rooms.
+        $facilityRow = static function (string $name, array $words) use ($findItems, $roomNames): array {
+            $found = $findItems($words);
+            if (!$found) return [$name, 'Belum ada', '—'];
+            $in = array_unique(array_map(static fn($i) => (string) ($roomNames[(int) $i['location_id']] ?? '—'), $found));
+            sort($in);
+            return [$name, 'Ada', count($found) . ' barang · ' . implode(', ', $in)];
+        };
+        // Four things to have: all four a, three b, two c, fewer d; null while nothing is recorded.
+        $presence = static fn(array $checks, bool $any): ?string => !$any ? null : (($n = count(array_filter(array_column($checks, 'ok')))) === 4 ? 'a' : ($n === 3 ? 'b' : ($n === 2 ? 'c' : 'd')));
+
+        // 12. Sarana akses: OPAC computer, internet, Wi-Fi, power sockets
+        $accessChecks = [
+            ['label' => 'Komputer OPAC', 'ok' => $hasItem(['opac'])],
+            ['label' => 'Jaringan internet', 'ok' => $perUser !== null],
+            ['label' => 'Wi-Fi', 'ok' => $hasItem(['wi-fi', 'wifi', 'access point'])],
+            ['label' => 'Colokan listrik', 'ok' => $hasItem(['colokan', 'stopkontak', 'stop kontak'])],
+        ];
+        $accessOk = count(array_filter(array_column($accessChecks, 'ok')));
+        $aspects[] = [
+            'no' => 12, 'section' => 'Sarana akses', 'title' => 'Sarana akses: komputer OPAC, jaringan internet, Wi-Fi, dan colokan listrik',
+            'value' => "$accessOk dari 4 sarana tersedia",
+            'level' => $presence($accessChecks, $items || $perUser !== null),
+            'basis' => 'Komputer OPAC, Wi-Fi, dan colokan listrik dari barang yang berfungsi (tidak Rusak berat), dikenali dari jenis atau namanya. Jaringan internet dari bandwidth di Gedung & Jaringan.',
+            'checks' => $accessChecks,
+            'rows' => [
+                $facilityRow('Komputer OPAC', ['opac']),
+                $perUser !== null ? ['Jaringan internet', 'Ada', self::fmt((float) $settings['bandwidth_mbps'], 0) . ' Mbps untuk ' . $settings['bandwidth_users'] . ' pengguna serentak'] : ['Jaringan internet', 'Belum ada', '—'],
+                $facilityRow('Wi-Fi', ['wi-fi', 'wifi', 'access point']),
+                $facilityRow('Colokan listrik', ['colokan', 'stopkontak', 'stop kontak']),
+            ],
+            'columns' => ['Sarana', 'Ketersediaan', 'Rincian'],
+            'fix' => 'Catat barang seperti Kiosk OPAC, Wi-Fi publik atau access point, dan Stopkontak / colokan listrik di Ruangan & Barang, lalu isi bandwidth di Gedung & Jaringan.',
+            'sources' => ['inventory', 'facility'],
+        ];
+
+        // 13. Sarana kenyamanan: lighting, air conditioning, cleanliness, bins
+        $comfortChecks = [
+            ['label' => 'Pencahayaan', 'ok' => $hasItem(['penerangan', 'pencahayaan'])],
+            ['label' => 'AC / penyejuk udara', 'ok' => $hasItem(['ac /', 'penyejuk', 'air conditioner'])],
+            ['label' => 'Kebersihan', 'ok' => $hasItem(['kebersihan', 'pembersih', 'sapu', 'vacuum'])],
+            ['label' => 'Tempat sampah', 'ok' => $hasItem(['tempat sampah', 'tong sampah'])],
+        ];
+        $comfortOk = count(array_filter(array_column($comfortChecks, 'ok')));
+        $aspects[] = [
+            'no' => 13, 'section' => 'Sarana kenyamanan', 'title' => 'Sarana kenyamanan: pencahayaan, AC, kebersihan, dan tempat sampah',
+            'value' => "$comfortOk dari 4 sarana tersedia",
+            'level' => $presence($comfortChecks, (bool) $items),
+            'basis' => 'Dari barang yang berfungsi (tidak Rusak berat), dikenali dari jenis atau namanya.',
+            'checks' => $comfortChecks,
+            'rows' => [
+                $facilityRow('Pencahayaan', ['penerangan', 'pencahayaan']),
+                $facilityRow('AC / penyejuk udara', ['ac /', 'penyejuk', 'air conditioner']),
+                $facilityRow('Kebersihan', ['kebersihan', 'pembersih', 'sapu', 'vacuum']),
+                $facilityRow('Tempat sampah', ['tempat sampah', 'tong sampah']),
+            ],
+            'columns' => ['Sarana', 'Ketersediaan', 'Rincian'],
+            'fix' => 'Beri kategori Sarana kenyamanan pada barang, lalu isi jenisnya: Lampu penerangan, AC / penyejuk udara, Perlengkapan kebersihan, Tempat sampah.',
+            'sources' => ['inventory'],
         ];
 
         foreach ($aspects as &$aspect) $aspect['name'] = self::NAMES[$aspect['no']];

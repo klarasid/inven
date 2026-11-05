@@ -10,6 +10,7 @@ import { Pdf } from "./shared";
 const groupings = [
   { value: "category", title: "Kategori", text: "Perabot, komputer, sarana keamanan, dan lainnya." },
   { value: "area", title: "Area", text: "Area koleksi, area baca, gazebo, dan lainnya." },
+  { value: "room", title: "Ruangan", text: "Satu bagian per ruangan, sesuai tempat barangnya dicatat." },
 ];
 const photoChoices = [
   { value: "first", title: "Satu foto", text: "Foto pertama tiap barang." },
@@ -114,7 +115,7 @@ export function CatalogDialog({ open, onOpenChange }: { open: boolean; onOpenCha
           <ToggleGroup
             type="single"
             variant="outline"
-            className="grid w-full grid-cols-2"
+            className="grid w-full grid-cols-3"
             value={group}
             onValueChange={(v) => v && setGroup(v)}
           >

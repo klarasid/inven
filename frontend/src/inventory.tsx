@@ -296,7 +296,7 @@ function RoomGrid() {
                 <DropdownMenuGroup>
                   <DropdownMenuItem className="flex flex-col items-start gap-0.5" onSelect={() => setList("catalog")}>
                     <span className="font-medium">Daftar inventaris berfoto</span>
-                    <span className="text-xs text-muted-foreground">Barang beserta fotonya, per kategori atau area.</span>
+                    <span className="text-xs text-muted-foreground">Barang beserta fotonya, per kategori, area, atau ruangan.</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem className="flex flex-col items-start gap-0.5" onSelect={() => setList("areas")}>
                     <span className="font-medium">Daftar area dan fasilitas</span>

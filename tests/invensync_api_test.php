@@ -356,7 +356,7 @@ try {
     $db->exec('UPDATE inventory_locations SET area_m2 = 120.5 WHERE id = 1');
     $db->exec("INSERT INTO inventory_room_areas (location_id, type, name, created_at, updated_at) VALUES (1, 'baca', '', NOW(), NOW()), (1, 'literasi', 'Pojok baca', NOW(), NOW())");
     $sarpras = call('GET', 'SarprasController@show', headers: bearer($agentToken))['body']['data'];
-    check($sarpras['scope'] === 'location' && $sarpras['library'] === 'P01' && count($sarpras['aspects']) === 11, 'Rekap Sarpras comes for the one library location');
+    check($sarpras['scope'] === 'location' && $sarpras['library'] === 'P01' && count($sarpras['aspects']) === 13, 'Rekap Sarpras comes for the one library location');
     check($sarpras['aspects'][0]['columns'] === ['Ruangan', 'Luas'] && $sarpras['aspects'][0]['rows'] === [['Ruang baca umum', '120,50 m²'], ['Ruang referensi', '—']], 'the size of each room comes with the building aspect');
     check($sarpras['aspects'][1]['rows'] === [['Ruang baca umum', 'Area baca, Area literasi / pojok baca (Pojok baca)'], ['Ruang referensi', '—']], 'the areas of each room come with the service area aspect');
 
