@@ -65,6 +65,12 @@ try {
             $document = $documents->catalog(new \SLiMS\Plugins\Inventory\PhotoStorage(), (string) ($_GET['group'] ?? 'category'), $categories, $library, (string) ($_GET['photos'] ?? 'first'), $libraryName, $printedBy, $style);
             $printed = 'Daftar inventaris berfoto dicetak (' . $document['count'] . ' barang).';
             break;
+        case 'download_catalog_photos':
+            $categories = array_values(array_filter(array_map('trim', explode(',', (string) ($_GET['categories'] ?? '')))));
+            $document = $documents->catalogPhotos(new \SLiMS\Plugins\Inventory\PhotoStorage(), (string) ($_GET['group'] ?? 'category'), $categories, $library, (string) ($_GET['photos'] ?? 'first'));
+            $printed = 'Foto inventaris diunduh (' . $document['count'] . ' foto).';
+            $zip = true;
+            break;
         case 'print_areas':
             $document = $documents->areas(new \SLiMS\Plugins\Inventory\PhotoStorage(), (string) ($_GET['group'] ?? ''), $library, $libraryName, $printedBy, $style);
             $printed = 'Daftar area dan fasilitas dicetak (' . $document['count'] . ' area).';
@@ -88,9 +94,9 @@ try {
         default:
             throw new RuntimeException('Dokumen tidak dikenal.');
     }
-    inventory_document_log($printed, 'Print');
-    header('Content-Type: application/pdf');
-    header('Content-Disposition: inline; filename="' . $document['filename'] . '"');
+    inventory_document_log($printed, empty($zip) ? 'Print' : 'Download');
+    header('Content-Type: ' . (empty($zip) ? 'application/pdf' : 'application/zip'));
+    header('Content-Disposition: ' . (empty($zip) ? 'inline' : 'attachment') . '; filename="' . $document['filename'] . '"');
     header('Content-Length: ' . strlen($document['bytes']));
     echo $document['bytes'];
 } catch (RuntimeException $exception) {

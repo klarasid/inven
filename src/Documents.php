@@ -208,6 +208,20 @@ final class Documents
     }
 
     /**
+     * The photos of the daftar inventaris berfoto as a ZIP, with the same filters as the printed list.
+     *
+     * @return array{filename: string, bytes: string, count: int}
+     */
+    public function catalogPhotos(PhotoStorage $storage, string $group, array $categories, string $library, string $photos): array
+    {
+        require_once __DIR__ . '/InventoryCatalog.php';
+        $catalog = InventoryCatalog::build($this->db, $group, $categories, $library, $photos);
+        $zip = InventoryCatalog::archive($catalog, static fn (string $filename): ?string => $storage->read($filename), $this->tempDir);
+
+        return ['filename' => 'foto-inventaris-' . self::slug($group . '-' . $library, $group) . '.zip', 'bytes' => $zip['bytes'], 'count' => $zip['files']];
+    }
+
+    /**
      * Daftar area dan fasilitas: the areas inside the rooms with their rooms and photos, by group.
      *
      * @return array{filename: string, bytes: string, count: int}

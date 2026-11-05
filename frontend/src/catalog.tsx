@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Field, FieldLabel, FieldDescription } from "./components/ui/field";
 import { ToggleGroup, ToggleGroupItem } from "./components/ui/toggle-group";
+import { Download } from "lucide-react";
+import { Button } from "./components/ui/button";
 import { Checkbox } from "./components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "./components/ui/dialog";
 import { useWorkspace } from "./context";
@@ -99,6 +101,7 @@ export function CatalogDialog({ open, onOpenChange }: { open: boolean; onOpenCha
   const [categories, setCategories] = useState<string[]>([]);
   const library = String(w.route.library || "");
   const target = printAddress(w.config.inventory, "print_catalog", { group, photos, categories: categories.join(","), library });
+  const zipTarget = url(w.config.inventory, { workspace: "", action: "download_catalog_photos", group, photos, categories: categories.join(","), library });
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -162,6 +165,12 @@ export function CatalogDialog({ open, onOpenChange }: { open: boolean; onOpenCha
           </FieldDescription>
         </Field>
         <DialogFooter>
+          <Button variant="outline" asChild>
+            <a className="notAJAX" href={zipTarget}>
+              <Download data-icon="inline-start" />
+              Unduh foto (ZIP)
+            </a>
+          </Button>
           <Pdf label="Cetak PDF" href={target} />
         </DialogFooter>
       </DialogContent>

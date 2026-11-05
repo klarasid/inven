@@ -142,6 +142,51 @@ final class InventoryCatalog
         return $catalog;
     }
 
+    /**
+     * The photos of the list as they were uploaded, in a ZIP: a folder per group, a file per photo named
+     * after its item (name, code, number). An item listed under several groups is in each folder, as in
+     * the printed list. Photos that cannot be read are left out.
+     *
+     * @param  callable(string): ?string  $readPhoto  the bytes of a stored photo, by its filename
+     * @return array{bytes:string,files:int}
+     */
+    public static function archive(array $catalog, callable $readPhoto, string $tempDir): array
+    {
+        if (!class_exists(\ZipArchive::class)) throw new RuntimeException('Ekstensi ZIP PHP belum aktif di server.');
+        $clean = static function (string $text, string $fallback): string {
+            $text = trim((string) preg_replace('/[^\p{L}\p{N}._ ()-]+/u', '-', $text), " .-");
+            return mb_substr($text, 0, 60) ?: $fallback;
+        };
+        $path = tempnam($tempDir, 'foto');
+        if ($path === false) throw new RuntimeException('Berkas ZIP sementara tidak dapat dibuat.');
+        $zip = new \ZipArchive();
+        try {
+            if ($zip->open($path, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) throw new RuntimeException('Berkas ZIP tidak dapat dibuat.');
+            $files = 0;
+            $used = [];
+            foreach ($catalog['groups'] as $entry) {
+                $folder = $clean((string) $entry['label'], 'kelompok');
+                foreach ($entry['items'] as $item) {
+                    foreach ($item['photos'] as $number => $filename) {
+                        $bytes = $readPhoto($filename);
+                        if ($bytes === null || $bytes === '') continue;
+                        $base = $folder . '/' . $clean(trim($item['item_name'] . ' ' . $item['item_code']), 'barang') . '-' . ($number + 1);
+                        $name = $base . '.jpg';
+                        for ($copy = 2; isset($used[$name]); $copy++) $name = $base . '-' . $copy . '.jpg';
+                        $used[$name] = true;
+                        $zip->addFromString($name, $bytes);
+                        $files++;
+                    }
+                }
+            }
+            if ($files === 0) throw new RuntimeException('Tidak ada foto pada daftar ini.');
+            $zip->close();
+            return ['bytes' => (string) file_get_contents($path), 'files' => $files];
+        } finally {
+            @unlink($path);
+        }
+    }
+
     /** A photo small enough to print a few hundred of, as a JPEG data URI; null when it cannot be read. */
     public static function thumbnail(?string $bytes): ?string
     {

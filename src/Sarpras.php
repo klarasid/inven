@@ -85,6 +85,8 @@ final class Sarpras
         'peralatan' => 'Peralatan perpustakaan',
         'komputer' => 'Komputer',
         'multimedia' => 'Perangkat multimedia',
+        'layanan' => 'Sarana layanan',
+        'akses' => 'Sarana akses',
         'kenyamanan' => 'Sarana kenyamanan',
         'keamanan' => 'Sarana keamanan dan keselamatan',
         'fasilitas_umum' => 'Fasilitas umum',
@@ -95,6 +97,9 @@ final class Sarpras
     public const TYPES = [
         'komputer' => ['PC', 'Laptop', 'Server', 'Kiosk OPAC', 'Thin client'],
         'multimedia' => ['Komputer multimedia', 'Proyektor', 'Layar proyektor', 'Televisi / monitor besar', 'Panel interaktif', 'Pengeras suara', 'Headphone', 'Pemutar audio', 'Mikrofon', 'Perekam suara', 'Kamera', 'Pemindai (scanner)', 'Printer', 'Printer 3D', 'Perangkat VR'],
+        // Sarana layanan and Sarana akses: the category lists them for the inventory and the printed lists; aspect 12 reads the access ones by their type.
+        'layanan' => ['Meja layanan sirkulasi', 'Meja layanan referensi', 'Mesin peminjaman mandiri', 'Book drop', 'Papan informasi', 'Kotak saran', 'Mesin antrean'],
+        'akses' => ['Kiosk OPAC', 'Komputer OPAC', 'Wi-Fi / access point', 'Router', 'Switch jaringan', 'Stopkontak / colokan listrik', 'Stasiun pengisian daya'],
         // Scored by aspect 13 (Sarana kenyamanan) and, for the socket, aspect 12 (Sarana akses).
         'kenyamanan' => ['AC / penyejuk udara', 'Kipas angin', 'Lampu penerangan', 'Tempat sampah', 'Stopkontak / colokan listrik', 'Perlengkapan kebersihan', 'Tirai / gorden', 'Pengharum ruangan'],
         'keamanan' => ['CCTV', 'Security gate', 'Gerbang / perangkat RFID', 'Mesin peminjaman mandiri', 'Loker penitipan', 'APAR', 'Alarm kebakaran', 'Detektor asap', 'Hidran', 'Rambu dan jalur evakuasi', 'Pintu darurat', 'Lampu darurat', 'Kotak P3K'],
@@ -773,7 +778,7 @@ final class Sarpras
                 $facilityRow('Colokan listrik', ['colokan', 'stopkontak', 'stop kontak']),
             ],
             'columns' => ['Sarana', 'Ketersediaan', 'Rincian'],
-            'fix' => 'Catat barang seperti Kiosk OPAC, Wi-Fi publik atau access point, dan Stopkontak / colokan listrik di Ruangan & Barang, lalu isi bandwidth di Gedung & Jaringan.',
+            'fix' => 'Catat barang berkategori Sarana akses di Ruangan & Barang, misalnya Kiosk OPAC, Wi-Fi / access point, dan Stopkontak / colokan listrik, lalu isi bandwidth di Gedung & Jaringan.',
             'sources' => ['inventory', 'facility'],
         ];
 
