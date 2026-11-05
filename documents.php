@@ -71,6 +71,11 @@ try {
             $printed = 'Foto inventaris diunduh (' . $document['count'] . ' foto).';
             $zip = true;
             break;
+        case 'download_area_photos':
+            $document = $documents->areaPhotos(new \SLiMS\Plugins\Inventory\PhotoStorage(), (string) ($_GET['group'] ?? ''), $library);
+            $printed = 'Foto area dan fasilitas diunduh (' . $document['count'] . ' foto).';
+            $zip = true;
+            break;
         case 'print_areas':
             $document = $documents->areas(new \SLiMS\Plugins\Inventory\PhotoStorage(), (string) ($_GET['group'] ?? ''), $library, $libraryName, $printedBy, $style);
             $printed = 'Daftar area dan fasilitas dicetak (' . $document['count'] . ' area).';

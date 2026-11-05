@@ -222,6 +222,21 @@ final class Documents
     }
 
     /**
+     * The photos of the daftar area dan fasilitas as a ZIP, with the same filters as the printed list.
+     *
+     * @return array{filename: string, bytes: string, count: int}
+     */
+    public function areaPhotos(PhotoStorage $itemPhotos, string $group, string $library): array
+    {
+        require_once __DIR__ . '/AreaCatalog.php';
+        $catalog = AreaCatalog::build($this->db, $group, $library);
+        $areaPhotos = AreaPhotos::storage();
+        $zip = AreaCatalog::archive($catalog, static fn (string $filename): ?string => $areaPhotos->read($filename), static fn (string $filename): ?string => $itemPhotos->read($filename), $this->tempDir);
+
+        return ['filename' => 'foto-area-dan-fasilitas' . ($group !== '' ? '-' . $group : '') . '.zip', 'bytes' => $zip['bytes'], 'count' => $zip['files']];
+    }
+
+    /**
      * Daftar area dan fasilitas: the areas inside the rooms with their rooms and photos, by group.
      *
      * @return array{filename: string, bytes: string, count: int}

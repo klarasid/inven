@@ -31,7 +31,7 @@ final class AreaCatalog
     {
         if ($group !== '' && !isset(Sarpras::AREA_GROUPS[$group])) throw new RuntimeException('Pilih kelompok area: layanan dasar, pendukung, atau fasilitas umum.');
         // An area outside any room has no room and names its library itself.
-        $sql = 'SELECT a.id, a.type, a.name, l.id AS room_id, l.room_name, l.area_m2 FROM inventory_room_areas a LEFT JOIN inventory_locations l ON l.id = a.location_id'
+        $sql = 'SELECT a.id, a.type, a.name, l.id AS room_id, l.room_name, l.location_code, l.area_m2 FROM inventory_room_areas a LEFT JOIN inventory_locations l ON l.id = a.location_id'
             . ' WHERE (l.id IS NOT NULL OR a.location_id IS NULL)%s ORDER BY l.room_name, l.id, a.id';
         try {
             $query = $db->prepare(sprintf($sql, $library === '' ? '' : ' AND COALESCE(l.slims_location_id, a.slims_location_id) = ?'));
@@ -78,6 +78,33 @@ final class AreaCatalog
             'photo_count' => $photoCount,
             'groups' => $groups,
         ];
+    }
+
+    /**
+     * The photos of the list as they were uploaded, in a ZIP: a folder per group, a file per photo named
+     * after its area (room code, kind, name, number) or, for public facilities kept as items, after the item.
+     *
+     * @param  callable(string): ?string  $readAreaPhoto
+     * @param  callable(string): ?string  $readItemPhoto
+     * @return array{bytes:string,files:int}
+     */
+    public static function archive(array $catalog, callable $readAreaPhoto, callable $readItemPhoto, string $tempDir): array
+    {
+        $photos = [];
+        foreach ($catalog['groups'] as $entry) {
+            foreach ($entry['areas'] as $area) {
+                $parts = array_map(static fn(string $part): string => InventoryCatalog::fileName($part, ''), [(string) ($area['location_code'] ?? ''), (string) $area['label'], (string) $area['name']]);
+                foreach ($area['photos'] as $number => $filename) {
+                    $photos[] = [(string) $entry['label'], implode('-', array_filter($parts, 'strlen')) . '-' . ($number + 1), $filename, $readAreaPhoto];
+                }
+            }
+            foreach ($entry['items'] as $item) {
+                foreach ($item['photos'] as $number => $filename) {
+                    $photos[] = [(string) $entry['label'], InventoryCatalog::photoName($item, $number), $filename, $readItemPhoto];
+                }
+            }
+        }
+        return InventoryCatalog::zip($photos, $tempDir);
     }
 
     /**

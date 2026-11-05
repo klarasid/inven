@@ -17,12 +17,12 @@ function rejects(callable $run, string $label, string $message): void
 $db = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 foreach ([
     'CREATE TABLE mst_location (location_id TEXT PRIMARY KEY, location_name TEXT)',
-    'CREATE TABLE inventory_locations (id INTEGER PRIMARY KEY, room_name TEXT, area_m2 REAL, slims_location_id TEXT)',
+    'CREATE TABLE inventory_locations (id INTEGER PRIMARY KEY, room_name TEXT, area_m2 REAL, slims_location_id TEXT, location_code TEXT)',
     'CREATE TABLE inventory_room_areas (id INTEGER PRIMARY KEY, location_id INTEGER, slims_location_id TEXT, type TEXT, name TEXT NOT NULL DEFAULT \'\')',
     'CREATE TABLE inventory_area_photos (id INTEGER PRIMARY KEY, area_id INTEGER, filename TEXT, created_by INTEGER, created_at TEXT)',
     'CREATE TABLE inventory_items (id INTEGER PRIMARY KEY, location_id INTEGER, item_name TEXT, brand_model TEXT NOT NULL DEFAULT \'\', item_code TEXT, quantity_register TEXT NOT NULL DEFAULT \'1\', item_condition TEXT, category TEXT, item_type TEXT NOT NULL DEFAULT \'\')',
     'CREATE TABLE inventory_item_photos (id INTEGER PRIMARY KEY, item_id INTEGER, filename TEXT)',
-    "INSERT INTO inventory_locations VALUES (1, 'Ruang Baca', 120.5, 'P01'), (2, 'Lantai Dasar', NULL, 'P01'), (3, 'Halaman Kampus 2', 400, 'P02')",
+    "INSERT INTO inventory_locations (id, room_name, area_m2, slims_location_id) VALUES (1, 'Ruang Baca', 120.5, 'P01'), (2, 'Lantai Dasar', NULL, 'P01'), (3, 'Halaman Kampus 2', 400, 'P02')",
     "INSERT INTO inventory_room_areas (id, location_id, type, name) VALUES (1, 1, 'baca', ''), (2, 1, 'koleksi', ''), (3, 2, 'toilet', 'Toilet <pria>'), (4, 2, 'musala', ''), (5, 3, 'parkir', ''), (6, 3, 'gazebo', ''), (7, 2, 'tidak_dikenal', '')",
     "INSERT INTO inventory_area_photos (area_id, filename, created_at) VALUES (3, 'toilet-a.jpg', '2026-10-01'), (3, 'toilet-b.jpg', '2026-10-01'), (1, 'baca.jpg', '2026-10-01')",
     "INSERT INTO inventory_items (id, location_id, item_name, item_code, item_condition, category, item_type) VALUES (1, 2, 'Papan petunjuk lantai', 'INV-1', 'B', 'fasilitas_umum', 'Penunjuk arah / papan petunjuk'), (2, 1, 'Meja baca', 'INV-2', 'B', 'perabot', '')",

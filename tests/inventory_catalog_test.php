@@ -18,11 +18,11 @@ $db = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_
 foreach ([
     'CREATE TABLE mst_location (location_id TEXT PRIMARY KEY, location_name TEXT)',
     "INSERT INTO mst_location VALUES ('P01', 'Perpustakaan Pusat'), ('P02', 'Perpustakaan Kampus 2')",
-    'CREATE TABLE inventory_locations (id INTEGER PRIMARY KEY, room_name TEXT, slims_location_id TEXT)',
+    'CREATE TABLE inventory_locations (id INTEGER PRIMARY KEY, room_name TEXT, slims_location_id TEXT, location_code TEXT)',
     'CREATE TABLE inventory_room_areas (id INTEGER PRIMARY KEY, location_id INTEGER, slims_location_id TEXT, type TEXT, name TEXT NOT NULL DEFAULT \'\')',
     'CREATE TABLE inventory_items (id INTEGER PRIMARY KEY, location_id INTEGER, item_name TEXT, brand_model TEXT NOT NULL DEFAULT \'\', item_code TEXT, quantity_register TEXT NOT NULL DEFAULT \'1\', item_condition TEXT, category TEXT, item_type TEXT NOT NULL DEFAULT \'\')',
     'CREATE TABLE inventory_item_photos (id INTEGER PRIMARY KEY, item_id INTEGER, filename TEXT)',
-    "INSERT INTO inventory_locations VALUES (1, 'Ruang Baca', 'P01'), (2, 'Halaman', 'P01'), (3, 'Gudang Kampus 2', 'P02')",
+    "INSERT INTO inventory_locations (id, room_name, slims_location_id) VALUES (1, 'Ruang Baca', 'P01'), (2, 'Halaman', 'P01'), (3, 'Gudang Kampus 2', 'P02')",
     // The reading room is also where the collection stands; the yard holds a gazebo; the store has no area.
     "INSERT INTO inventory_room_areas (location_id, type) VALUES (1, 'koleksi'), (1, 'baca'), (2, 'gazebo')",
     "INSERT INTO inventory_items (id, location_id, item_name, item_code, item_condition, category, item_type) VALUES

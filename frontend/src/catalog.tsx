@@ -57,6 +57,15 @@ export function AreaListDialog({ open, onOpenChange }: { open: boolean; onOpenCh
           </ToggleGroup>
         </Field>
         <DialogFooter>
+          <Button variant="outline" asChild>
+            <a
+              className="notAJAX"
+              href={url(w.config.inventory, { workspace: "", action: "download_area_photos", group: group === "all" ? "" : group, library })}
+            >
+              <Download data-icon="inline-start" />
+              Unduh foto (ZIP)
+            </a>
+          </Button>
           <Pdf
             label="Cetak PDF"
             href={printAddress(w.config.inventory, "print_areas", { group: group === "all" ? "" : group, library })}
