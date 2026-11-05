@@ -48,7 +48,7 @@ final class InventoryCatalog
         $filenames = [];
         foreach ($query->fetchAll(PDO::FETCH_ASSOC) as $row) $filenames[(int) $row['item_id']][] = (string) $row['filename'];
 
-        $query = $db->prepare('SELECT i.id, i.location_id, i.item_name, i.brand_model, i.item_code, i.quantity_register, i.item_condition, i.category, i.item_type, l.room_name, (SELECT location_name FROM mst_location WHERE location_id = l.slims_location_id) library_name'
+        $query = $db->prepare('SELECT i.id, i.location_id, i.item_name, i.brand_model, i.item_code, i.quantity_register, i.item_condition, i.category, i.item_type, l.room_name, l.location_code, (SELECT location_name FROM mst_location WHERE location_id = l.slims_location_id) library_name'
             . ' FROM inventory_items i JOIN inventory_locations l ON l.id = i.location_id' . $where . ' ORDER BY i.item_name, i.item_code, i.id');
         $query->execute($args);
         $items = [];
@@ -144,7 +144,7 @@ final class InventoryCatalog
 
     /**
      * The photos of the list as they were uploaded, in a ZIP: a folder per group, a file per photo named
-     * after its item (name, code, number). An item listed under several groups is in each folder, as in
+     * after its item (room code, inventory code, name, number). An item listed under several groups is in each folder, as in
      * the printed list. Photos that cannot be read are left out.
      *
      * @param  callable(string): ?string  $readPhoto  the bytes of a stored photo, by its filename
@@ -170,7 +170,7 @@ final class InventoryCatalog
                     foreach ($item['photos'] as $number => $filename) {
                         $bytes = $readPhoto($filename);
                         if ($bytes === null || $bytes === '') continue;
-                        $base = $folder . '/' . $clean(trim($item['item_name'] . ' ' . $item['item_code']), 'barang') . '-' . ($number + 1);
+                        $base = $folder . '/' . implode('-', array_filter([$clean((string) ($item['location_code'] ?? ''), ''), $clean((string) $item['item_code'], ''), $clean((string) $item['item_name'], 'barang')], 'strlen')) . '-' . ($number + 1);
                         $name = $base . '.jpg';
                         for ($copy = 2; isset($used[$name]); $copy++) $name = $base . '-' . $copy . '.jpg';
                         $used[$name] = true;
