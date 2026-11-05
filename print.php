@@ -51,6 +51,8 @@ if (count($pdfRequests) >= 10) {
 }
 $pdfRequests[] = $now;
 $_SESSION['inventory_pdf_requests'] = $pdfRequests;
+$signerName = (string) ($_SESSION['realname'] ?? '');
+$signerId = (int) ($_SESSION['uid'] ?? 0) ?: null;
 session_write_close();
 
 try {
@@ -122,6 +124,12 @@ try {
         $pdf->SetAuthor((string) ($sysconf['library_name'] ?? 'SLiMS'));
     }
     $pdf->WriteHTML($html);
+    // Electronic signature with a QR code to verify the card; printing goes on without it if it cannot be made.
+    require_once __DIR__ . '/src/DocumentSignature.php';
+    \SLiMS\Plugins\Inventory\DocumentSignature::stamp(
+        $pdf, $db, 'kir', 'Kartu Inventaris Ruangan - ' . $location['room_name'], trim((string) ($location['slims_location_name'] ?? '')),
+        $signerName, $signerId, $html, count($items)
+    );
 
     $safeRoom = preg_replace('/[^A-Za-z0-9_-]+/', '-', (string) $location['room_name']);
     $safeRoom = trim((string) $safeRoom, '-') ?: 'lokasi';

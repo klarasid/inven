@@ -379,6 +379,11 @@ if ($page === 'recap' && isset($_GET['pdf'])) {
         $html = \SLiMS\Plugins\Inventory\SarprasPdf::render($recap, $context, $style);
         $pdf = \SLiMS\Plugins\Inventory\WatchPdf::mpdf(SB . FLS . DS . 'cache', 'Rekap Sarana dan Prasarana', $style);
         $pdf->WriteHTML($html);
+        require_once __DIR__ . '/DocumentSignature.php';
+        \SLiMS\Plugins\Inventory\DocumentSignature::stamp(
+            $pdf, $db, 'sarpras', 'Rekap Sarana dan Prasarana Perpustakaan', $several && $library === '' ? 'Semua lokasi' : (string) ($place()['name'] ?? ''),
+            (string) ($_SESSION['realname'] ?? ''), (int) ($_SESSION['uid'] ?? 0) ?: null, $html, count($recap['aspects'])
+        );
         $log('Rekap Sarpras' . ($library !== '' ? ' lokasi ' . $library : '') . ' dicetak.', 'Print');
         \SLiMS\Plugins\Inventory\Telemetry::count('sarpras_pdf');
         $pdf->Output('rekap-sarpras-' . ($library !== '' ? $library . '-' : '') . date('Ymd') . '.pdf', 'I');

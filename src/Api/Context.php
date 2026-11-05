@@ -44,7 +44,9 @@ final class Context
 
     public function documents(): Documents
     {
-        return new Documents($this->db, defined('SB') && defined('FLS') ? SB . FLS . DIRECTORY_SEPARATOR . 'cache' : sys_get_temp_dir());
+        $documents = new Documents($this->db, defined('SB') && defined('FLS') ? SB . FLS . DIRECTORY_SEPARATOR . 'cache' : sys_get_temp_dir());
+        $documents->sign = true;
+        return $documents;
     }
 
     /** The library's name as SLiMS shows it. */

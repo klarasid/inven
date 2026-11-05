@@ -39,6 +39,8 @@ foreach ([
 
 // Public item page for label QR codes: index.php?p=info_barang (not listed in OPAC navigation).
 Plugins::registerMenu('opac', 'Info Barang', __DIR__ . '/opac.php', 'Informasi barang inventaris dari label QR.');
+// Verification page for the QR code of a signed document: index.php?p=verifikasi_dokumen&c=<code>.
+Plugins::registerMenu('opac', 'Verifikasi Dokumen', __DIR__ . '/verifikasi.php', 'Memeriksa keaslian dokumen inventaris yang ditandatangani secara elektronik.');
 
 // Klaras InvenSync, the mobile app: index.php?p=api/invensync/v1/…
 // The API runs on SLiMS Connect (licence, tokens, HTTP), which needs PHP 8.1, so nothing of it

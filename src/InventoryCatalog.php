@@ -31,7 +31,7 @@ final class InventoryCatalog
 
     /**
      * @param  list<string>  $categories  Sarpras::CATEGORIES codes to keep; none keeps every item
-     * @return array{group:string,library:string,categories:list<string>,photos:string,items:int,with_photos:int,photo_count:int,groups:list<array{label:string,items:list<array<string,mixed>>}>}
+     * @return array{group:string,library:string,library_name:string,categories:list<string>,photos:string,items:int,with_photos:int,photo_count:int,groups:list<array{label:string,items:list<array<string,mixed>>}>}
      */
     public static function build(PDO $db, string $group, array $categories, string $library = '', string $photos = 'first'): array
     {
@@ -66,13 +66,17 @@ final class InventoryCatalog
             throw new RuntimeException('Daftar memuat lebih dari ' . self::MAX_PHOTOS . ' foto. Saring menurut kategori atau lokasi perpustakaan, atau cetak satu foto per barang.');
         }
 
+        $name = $db->prepare('SELECT location_name FROM mst_location WHERE location_id = ?');
+        $name->execute([$library]);
+        $libraryName = $library === '' ? '' : (string) ($name->fetchColumn() ?: $library);
+
         $groups = match ($group) {
             'area' => self::byArea($db, $items, $library),
             'room' => self::byRoom($db, $items, $library),
             default => self::byCategory($items, $categories),
         };
         return [
-            'group' => $group, 'library' => $library, 'categories' => $categories, 'photos' => $photos,
+            'group' => $group, 'library' => $library, 'library_name' => $libraryName, 'categories' => $categories, 'photos' => $photos,
             'items' => count($items),
             'with_photos' => count(array_filter($items, static fn($item) => (bool) $item['photos'])),
             'photo_count' => $photoCount,
@@ -126,7 +130,7 @@ final class InventoryCatalog
     /**
      * What the list holds, without the items themselves.
      *
-     * @return array{group:string,library:string,categories:list<string>,photos:string,items:int,with_photos:int,photo_count:int,groups:list<array{label:string,items:int,with_photos:int}>}
+     * @return array{group:string,library:string,library_name:string,categories:list<string>,photos:string,items:int,with_photos:int,photo_count:int,groups:list<array{label:string,items:int,with_photos:int}>}
      */
     public static function summary(array $catalog): array
     {
@@ -176,6 +180,7 @@ final class InventoryCatalog
         $today = date('Y-m-d');
         $scope = array_filter([
             (string) ($context['library_name'] ?? ''),
+            $catalog['library'] !== '' ? 'Lokasi: ' . ($catalog['library_name'] ?? '') : '',
             $catalog['categories'] ? implode(', ', array_map(static fn($code) => Sarpras::CATEGORIES[$code], $catalog['categories'])) : 'Semua kategori',
             'dikelompokkan menurut ' . mb_strtolower(self::GROUPINGS[$catalog['group']]),
         ]);
@@ -191,6 +196,7 @@ final class InventoryCatalog
         );
         $h .= $t::facts([
             'Jumlah barang' => (string) $catalog['items'],
+            'Lokasi' => $catalog['library'] !== '' ? $e($catalog['library_name'] ?? '') : 'Semua lokasi',
             'Barang berfoto' => $catalog['with_photos'] . ' dari ' . $catalog['items'] . ($all ? ' · ' . $catalog['photo_count'] . ' foto' : ''),
             'Dicetak oleh' => $e($context['printed_by'] ?? ''),
             'Tanggal' => PdfLayout::date($today),

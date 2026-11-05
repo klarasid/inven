@@ -160,6 +160,10 @@ Dokumen lain dicetak dari halamannya masing-masing, dengan pilihan gaya yang sam
 - **Jadwal pemeriksaan**: Jadwal → **Cetak jadwal**.
 - **Checklist pemeriksaan** sebagai lembar isian: Checklist → **Cetak checklist terjadwal**, atau **Cetak lembar isian** di halaman satu checklist.
 
+### Tanda tangan elektronik dan verifikasi
+
+KIR, Daftar inventaris berfoto, Rekap Sarpras, Daftar area dan fasilitas, Daftar area dan luas ruangan, serta Daftar perangkat lunak ditutup dengan blok **Ditandatangani secara elektronik**: kode QR, nama petugas yang mencetak, waktu, kode dokumen, dan awal sidik jari isi (SHA-256). Kode QR membuka halaman publik `index.php?p=verifikasi_dokumen&c=<kode>` yang menampilkan jenis dokumen, penandatangan, tanggal, dan sidik jari lengkap, tanpa isi dokumennya. Mencetak ulang isi yang sama oleh petugas yang sama memakai kode yang sama. Bila catatan tanda tangan tidak bisa dibuat, dokumen tetap tercetak tanpa blok itu. Data tercatat di tabel `inventory_signed_documents` (migrasi 25).
+
 ### Label QR code
 
 Pada halaman ruangan, klik **Cetak label**. Anda dapat memilih ukuran lembar (A4 3×8, A4 2×7, atau stiker 50×30 mm) dan label pertama yang masih kosong. QR code dapat mengarah ke:

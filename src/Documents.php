@@ -36,6 +36,19 @@ final class Documents
      * The WatchPdf style a document is typeset in: the one asked for (`latex`, `iso`, `kop` or
      * `kop:<id>`), or with none the default saved in Pengaturan Cetak.
      */
+    /** Whether the documents carry an electronic signature with a QR code (DocumentSignature). */
+    public bool $sign = false;
+    /** The SLiMS user id of the signer, when known. */
+    public ?int $signerId = null;
+
+    /** Signs the document and adds its block to the PDF, when signing is on. */
+    private function seal(\Mpdf\Mpdf $pdf, string $type, string $title, string $scope, string $signer, string $html, int $count): void
+    {
+        if (!$this->sign) return;
+        require_once __DIR__ . '/DocumentSignature.php';
+        DocumentSignature::stamp($pdf, $this->db, $type, $title, $scope, $signer, $this->signerId, $html, $count);
+    }
+
     private function style(string $requested): string
     {
         require_once __DIR__ . '/WatchPdf.php';
@@ -108,6 +121,7 @@ final class Documents
             $pdf->SetAuthor($author);
         }
         $pdf->WriteHTML($html);
+        $this->seal($pdf, 'kir', $title, trim((string) ($location['slims_location_name'] ?? '')), $author, $html, count($items));
         Telemetry::count('kir_pdf');
 
         return ['filename' => 'kartu-inventaris-' . self::slug((string) $location['room_name'], 'ruangan') . '.pdf', 'bytes' => $pdf->Output('', 'S'), 'count' => count($items)];
@@ -176,7 +190,9 @@ final class Documents
         $style = $this->style($style);
         $context = ['library_name' => $libraryName, 'printed_by' => $printedBy, 'documents' => PdfDocuments::load($this->db)];
         $pdf = WatchPdf::mpdf($this->tempDir, 'Daftar Inventaris Berfoto', $style);
-        self::write($pdf, InventoryCatalog::html($catalog, static fn (string $filename): ?string => $storage->read($filename), $context, $style, self::photos($pdf)));
+        $html = InventoryCatalog::html($catalog, static fn (string $filename): ?string => $storage->read($filename), $context, $style, self::photos($pdf));
+        self::write($pdf, $html);
+        $this->seal($pdf, 'catalog', 'Daftar Inventaris Berfoto', (string) ($catalog['library_name'] ?? ''), $printedBy, $html, $catalog['items']);
 
         return ['filename' => 'daftar-inventaris-berfoto-' . self::slug($group . '-' . $library, $group) . '.pdf', 'bytes' => $pdf->Output('', 'S'), 'count' => $catalog['items']];
     }
@@ -194,7 +210,9 @@ final class Documents
         $areaPhotos = AreaPhotos::storage();
         $style = $this->style($style);
         $pdf = WatchPdf::mpdf($this->tempDir, 'Daftar Area dan Fasilitas', $style);
-        self::write($pdf, AreaCatalog::html($catalog, static fn (string $filename): ?string => $areaPhotos->read($filename), static fn (string $filename): ?string => $itemPhotos->read($filename), ['library_name' => $libraryName, 'printed_by' => $printedBy, 'documents' => PdfDocuments::load($this->db)], $style, self::photos($pdf)));
+        $html = AreaCatalog::html($catalog, static fn (string $filename): ?string => $areaPhotos->read($filename), static fn (string $filename): ?string => $itemPhotos->read($filename), ['library_name' => $libraryName, 'printed_by' => $printedBy, 'documents' => PdfDocuments::load($this->db)], $style, self::photos($pdf));
+        self::write($pdf, $html);
+        $this->seal($pdf, 'areas', 'Daftar Area dan Fasilitas', $library, $printedBy, $html, $catalog['areas']);
 
         return ['filename' => 'daftar-area-dan-fasilitas' . ($group !== '' ? '-' . $group : '') . '.pdf', 'bytes' => $pdf->Output('', 'S'), 'count' => $catalog['areas']];
     }
@@ -212,7 +230,9 @@ final class Documents
         $list = RoomSizes::build($this->db, $library);
         $style = $this->style($style);
         $pdf = WatchPdf::mpdf($this->tempDir, 'Daftar Area dan Luas Ruangan', $style);
-        self::write($pdf, RoomSizes::html($list, ['library_name' => $libraryName, 'printed_by' => $printedBy, 'documents' => PdfDocuments::load($this->db)], $style));
+        $html = RoomSizes::html($list, ['library_name' => $libraryName, 'printed_by' => $printedBy, 'documents' => PdfDocuments::load($this->db)], $style);
+        self::write($pdf, $html);
+        $this->seal($pdf, 'rooms', 'Daftar Area dan Luas Ruangan', $library, $printedBy, $html, $list['rooms']);
 
         return ['filename' => 'daftar-area-dan-luas-ruangan' . ($library !== '' ? '-' . self::slug($library, 'lokasi') : '') . '.pdf', 'bytes' => $pdf->Output('', 'S'), 'count' => $list['rooms']];
     }
@@ -229,7 +249,9 @@ final class Documents
         $list = SoftwareList::build($this->db, date('Y-m-d'));
         $style = $this->style($style);
         $pdf = WatchPdf::mpdf($this->tempDir, 'Daftar Perangkat Lunak', $style);
-        $pdf->WriteHTML(SoftwareList::html($list, ['printed_by' => $printedBy, 'documents' => PdfDocuments::load($this->db)], $style));
+        $html = SoftwareList::html($list, ['printed_by' => $printedBy, 'documents' => PdfDocuments::load($this->db)], $style);
+        $pdf->WriteHTML($html);
+        $this->seal($pdf, 'software', 'Daftar Perangkat Lunak', '', $printedBy, $html, $list['applications']);
 
         return ['filename' => 'daftar-perangkat-lunak.pdf', 'bytes' => $pdf->Output('', 'S'), 'count' => $list['applications']];
     }

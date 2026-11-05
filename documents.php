@@ -53,6 +53,8 @@ try {
     $db = \SLiMS\DB::getInstance();
     $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $documents = new \SLiMS\Plugins\Inventory\Documents($db, SB . FLS . DS . 'cache');
+    $documents->sign = true;
+    $documents->signerId = (int) ($_SESSION['uid'] ?? 0) ?: null;
     $watch = static fn (): \SLiMS\Plugins\Inventory\Supervision => new \SLiMS\Plugins\Inventory\Supervision($db, new \SLiMS\Plugins\Inventory\PhotoStorage(SB . 'images/inventaris-barang/pengawasan'));
     $libraryName = (string) ($GLOBALS['sysconf']['library_name'] ?? 'Perpustakaan');
     $library = trim((string) ($_GET['library'] ?? ''));

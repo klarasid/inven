@@ -74,6 +74,8 @@ check(in_array('Ruang Baca (Perpustakaan Pusat)', array_column($rooms['groups'],
 $one = InventoryCatalog::build($db, 'room', [], 'P01');
 check(in_array('Ruang Baca', array_column($one['groups'], 'label'), true), 'untuk satu lokasi, nama ruangan tidak diberi lokasi');
 
+check($one['library_name'] === 'Perpustakaan Pusat' && InventoryCatalog::build($db, 'room', [])['library_name'] === '', 'daftar satu lokasi memuat nama lokasinya');
+
 // What is refused.
 rejects(static fn () => InventoryCatalog::build($db, 'ruangan', []), 'pengelompokan lain ditolak', 'kategori, area, atau ruangan');
 rejects(static fn () => InventoryCatalog::build($db, 'category', ['mebel']), 'kategori yang tidak dikenal ditolak', 'Kategori barang tidak valid');
