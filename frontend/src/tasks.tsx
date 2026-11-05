@@ -18,6 +18,7 @@ import {
   User,
   Undo2,
   ChevronDown,
+  Download,
 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
@@ -45,7 +46,7 @@ import {
 } from "./components/ui/dropdown-menu";
 import { cn } from "./lib/utils";
 import { useData, useWorkspace } from "./context";
-import { dateLabel, groups, inspectionErrors, money } from "./api";
+import { dateLabel, groups, inspectionErrors, money, url } from "./api";
 import {
   PageHeader,
   ErrorBox,
@@ -791,6 +792,12 @@ function InspectionEditor({ document: d }: { document: Document }) {
                 Pemeriksaan asal
               </Button>
             )}
+            <Button variant="outline" asChild>
+              <a className="notAJAX" href={url(w.config.watch, { tab: "pdf", record: d.inspection.id, zip: 1 })}>
+                <Download data-icon="inline-start" />
+                Unduh foto (ZIP)
+              </a>
+            </Button>
             <Pdf record={d.inspection.id} />
           </>
         }

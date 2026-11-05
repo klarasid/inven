@@ -30,4 +30,15 @@ $names = []; for ($i = 0; $i < $zip->numFiles; $i++) $names[] = $zip->getNameInd
 $ok(in_array('Layanan dasar/R01-Area baca-Sudut anak-2.jpg', $names, true), 'area name: ' . implode('|', $names));
 $ok(in_array('Layanan dasar/Tempat parkir-1.jpg', $names, true), 'area without code or name');
 $ok(in_array('Fasilitas umum/R01-P-1-Papan nama-1.jpg', $names, true) && $zip->getFromName('Fasilitas umum/R01-P-1-Papan nama-1.jpg') === 'Ii', 'facility item uses item reader');
+require __DIR__ . '/../src/Supervision.php';
+require __DIR__ . '/../src/WatchPdf.php';
+use SLiMS\Plugins\Inventory\WatchPdf;
+$doc = ['results' => [['id' => 7, 'snapshot' => json_encode(['object' => 'AC / Ruang baca'])]], 'photos' => [
+    ['id' => 1, 'result_id' => 7, 'action_id' => null], ['id' => 2, 'result_id' => 7, 'action_id' => null], ['id' => 3, 'result_id' => null, 'action_id' => 9]]];
+$r = WatchPdf::archive($doc, fn ($p) => 'P' . $p['id'], sys_get_temp_dir());
+file_put_contents($tmp, $r['bytes']); $zip = new ZipArchive(); $zip->open($tmp);
+$names = []; for ($i = 0; $i < $zip->numFiles; $i++) $names[] = $zip->getNameIndex($i);
+$ok($r['files'] === 3, 'inspection photos: ' . implode('|', $names));
+$ok(in_array('Butir/Butir 1-AC - Ruang baca-2.jpg', $names, true), 'item photo name');
+$ok(in_array('Tindak lanjut/Tindak lanjut 9-1.jpg', $names, true), 'action photo name');
 unlink($tmp); echo $f ? "$f FAIL\n" : "all ok\n"; exit($f ? 1 : 0);

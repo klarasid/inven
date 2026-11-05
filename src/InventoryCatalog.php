@@ -178,7 +178,7 @@ final class InventoryCatalog
     }
 
     /**
-     * @param  list<array{0:string,1:string,2:string,3:callable}>  $photos  folder, file name without extension, stored filename, reader
+     * @param  list<array{0:string,1:string,2:mixed,3:callable}>  $photos  folder, file name without extension, what the reader takes (a stored filename), reader
      * @return array{bytes:string,files:int}
      */
     public static function zip(array $photos, string $tempDir): array

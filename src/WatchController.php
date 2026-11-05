@@ -161,6 +161,16 @@ try {
         if (count($requests)>=10) { http_response_code(429); header('Retry-After: 60'); throw new RuntimeException('Terlalu banyak permintaan PDF. Coba lagi satu menit kemudian.'); }
         $requests[]=time(); $_SESSION['inventory_watch_pdf_requests']=$requests;
         session_write_close();
+        if (($_GET['zip']??'')==='1') {
+            // The photos of one inspection document as they were uploaded, in a ZIP.
+            require_once __DIR__ . '/WatchPdf.php';
+            $id=(int)($_GET['record']??0);
+            if (!$id) throw new RuntimeException('Pilih dokumen pemeriksaan yang fotonya diunduh.');
+            $zip=\SLiMS\Plugins\Inventory\WatchPdf::archive($watch->document($id),fn($photo)=>$watch->photo($id,(int)$photo['id']),SB.FLS.DS.'cache');
+            watch_log('Download','Foto pemeriksaan #'.$id.' ('.$zip['files'].' foto)');
+            header('Content-Type: application/zip'); header('Content-Disposition: attachment; filename="foto-pemeriksaan-'.$id.'.zip"'); header('Content-Length: '.strlen($zip['bytes']));
+            echo $zip['bytes']; return;
+        }
         $autoload=dirname(__DIR__).'/vendor/autoload.php'; if (is_file($autoload)) require_once $autoload;
         if (!class_exists(\Mpdf\Mpdf::class)) throw new RuntimeException('Dependensi mPDF belum tersedia. Jalankan composer install di direktori plugin.');
         require_once __DIR__ . '/WatchPdf.php';

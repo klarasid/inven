@@ -129,6 +129,41 @@ final class WatchPdf
         ], '...................., ' . PdfLayout::date(new \DateTimeImmutable('now')));
     }
 
+    /**
+     * The photos of an inspection document as they were uploaded, in a ZIP: the photos of each item checked
+     * under "Butir", those of each follow-up action under "Tindak lanjut", named after the item and the number.
+     *
+     * @param  callable(array): ?string  $readPhoto  the bytes of a photo row
+     * @return array{bytes:string,files:int}
+     */
+    public static function archive(array $document, callable $readPhoto, string $tempDir): array
+    {
+        require_once __DIR__ . '/InventoryCatalog.php';
+        $position = [];
+        $object = [];
+        foreach ($document['results'] as $n => $r) {
+            $item = Supervision::decode($r['snapshot']);
+            $position[(int) $r['id']] = $n + 1;
+            $object[(int) $r['id']] = (string) ($item['object'] ?? '');
+        }
+        $count = [];
+        $photos = [];
+        foreach ($document['photos'] as $photo) {
+            if ($photo['action_id'] !== null && (int) $photo['action_id'] > 0) {
+                $folder = 'Tindak lanjut';
+                $base = 'Tindak lanjut ' . (int) $photo['action_id'];
+            } else {
+                $folder = 'Butir';
+                $result = (int) $photo['result_id'];
+                $base = 'Butir ' . ($position[$result] ?? $result) . '-' . InventoryCatalog::fileName($object[$result] ?? '', 'foto');
+            }
+            $key = $folder . '/' . $base;
+            $count[$key] = ($count[$key] ?? 0) + 1;
+            $photos[] = [$folder, $base . '-' . $count[$key], $photo, $readPhoto];
+        }
+        return InventoryCatalog::zip($photos, $tempDir);
+    }
+
     /** Downscaled JPEG data URIs for the photos of one result or one action. */
     private static function photos(array $document, callable $readPhoto, ?int $result, ?int $action): array
     {
