@@ -88,12 +88,22 @@ try {
 
     // Two KIR layouts: the classic form (default) and the modern one, chosen from the print menu.
     $modern = ($_GET['template'] ?? '') === 'modern';
+    // With ?specimens=1 the signers' specimens, when the room has them, are printed in the signature space.
+    $specimens = [];
+    if (($_GET['specimens'] ?? '') === '1') {
+        require_once __DIR__ . '/src/RoomSpecimens.php';
+        try {
+            $specimens = \SLiMS\Plugins\Inventory\RoomSpecimens::dataUris($db, $locationId);
+        } catch (PDOException $exception) {
+            if ((int) ($exception->errorInfo[1] ?? 0) !== 1146) throw $exception;
+        }
+    }
     if ($modern) {
         require_once __DIR__ . '/src/PdfTemplateModern.php';
-        $html = \SLiMS\Plugins\Inventory\PdfTemplateModern::render($location, $items);
+        $html = \SLiMS\Plugins\Inventory\PdfTemplateModern::render($location, $items, null, $specimens);
     } else {
         require_once __DIR__ . '/src/PdfTemplate.php';
-        $html = \SLiMS\Plugins\Inventory\PdfTemplate::render($location, $items);
+        $html = \SLiMS\Plugins\Inventory\PdfTemplate::render($location, $items, null, $specimens);
     }
 
     $tempDir = SB . FLS . DS . 'cache';
@@ -137,7 +147,7 @@ try {
     $disposition = isset($_GET['download']) && $_GET['download'] === '1' ? 'attachment' : 'inline';
     $contents = $pdf->Output('', 'S');
 
-    inventory_pdf_log('Kartu inventaris lokasi #' . $locationId . ' dicetak (' . count($items) . ' barang).', 'Print');
+    inventory_pdf_log('Kartu inventaris lokasi #' . $locationId . ' dicetak (' . count($items) . ' barang)' . ($specimens ? ' dengan spesimen tanda tangan' : '') . '.', 'Print');
     require_once __DIR__ . '/src/UpdateCheck.php';
     require_once __DIR__ . '/src/Telemetry.php';
     \SLiMS\Plugins\Inventory\Telemetry::count('kir_pdf');

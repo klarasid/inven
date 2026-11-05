@@ -160,6 +160,10 @@ Dokumen lain dicetak dari halamannya masing-masing, dengan pilihan gaya yang sam
 - **Jadwal pemeriksaan**: Jadwal → **Cetak jadwal**.
 - **Checklist pemeriksaan** sebagai lembar isian: Checklist → **Cetak checklist terjadwal**, atau **Cetak lembar isian** di halaman satu checklist.
 
+### Spesimen tanda tangan di KIR
+
+Di form ruangan, bagian **Penandatangan KIR**, tiap penandatangan (yang mengetahui dan pengurus barang) bisa diberi gambar spesimen tanda tangan: PNG, JPEG, atau WebP maksimal 2 MB. Gambar disimpan sebagai PNG (paling besar 600 px, latar transparan dipertahankan) di `images/inventaris-barang/spesimen/`, dan hanya bisa dibuka oleh petugas. Saat mencetak, menu **Cetak KIR** punya pilihan **Sertakan spesimen tanda tangan**; bila dicentang, spesimen tercetak di ruang tanda tangan (template klasik maupun modern), bila tidak, ruangnya tetap kosong untuk tanda tangan basah. Aplikasi InvenSync memakai `?specimens=1` pada unduhan KIR. Data tercatat di tabel `inventory_room_specimens` (migrasi 26).
+
 ### Tanda tangan elektronik dan verifikasi
 
 KIR, Daftar inventaris berfoto, Rekap Sarpras, Daftar area dan fasilitas, Daftar area dan luas ruangan, serta Daftar perangkat lunak ditutup dengan blok **Ditandatangani secara elektronik**: kode QR, nama petugas yang mencetak, waktu, kode dokumen, dan awal sidik jari isi (SHA-256). Kode QR membuka halaman publik `index.php?p=verifikasi_dokumen&c=<kode>` yang menampilkan jenis dokumen, penandatangan, tanggal, dan sidik jari lengkap, tanpa isi dokumennya. Mencetak ulang isi yang sama oleh petugas yang sama memakai kode yang sama. Bila catatan tanda tangan tidak bisa dibuat, dokumen tetap tercetak tanpa blok itu. Data tercatat di tabel `inventory_signed_documents` (migrasi 25).

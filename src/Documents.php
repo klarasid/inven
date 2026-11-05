@@ -98,7 +98,7 @@ final class Documents
      *
      * @return array{filename: string, bytes: string, count: int}
      */
-    public function kir(int $locationId, bool $modern, string $author): array
+    public function kir(int $locationId, bool $modern, string $author, bool $withSpecimens = false): array
     {
         self::ensureRuntime();
         $location = $this->room($locationId);
@@ -109,13 +109,23 @@ final class Documents
             throw new RuntimeException('Ruangan memuat lebih dari 500 barang. Cetak KIR dari SLiMS.');
         }
         $title = 'Kartu Inventaris Ruangan - ' . $location['room_name'];
+        $specimens = [];
+        if ($withSpecimens) {
+            require_once __DIR__ . '/RoomSpecimens.php';
+            try {
+                $specimens = RoomSpecimens::dataUris($this->db, $locationId);
+            } catch (\PDOException $exception) {
+                // Before migration 26 no room has a specimen.
+                if ((int) ($exception->errorInfo[1] ?? 0) !== 1146) throw $exception;
+            }
+        }
         if ($modern) {
             require_once __DIR__ . '/PdfTemplateModern.php';
-            $html = PdfTemplateModern::render($location, $items);
+            $html = PdfTemplateModern::render($location, $items, null, $specimens);
             $pdf = PdfLayout::mpdf($this->tempDir, $title, PdfTemplateModern::footer($location), ['format' => [330, 216], 'margin_left' => 10, 'margin_right' => 10, 'margin_top' => 9, 'margin_bottom' => 13, 'margin_footer' => 6, 'exposeVersion' => false]);
         } else {
             require_once __DIR__ . '/PdfTemplate.php';
-            $html = PdfTemplate::render($location, $items);
+            $html = PdfTemplate::render($location, $items, null, $specimens);
             $pdf = new \Mpdf\Mpdf(['mode' => 'utf-8', 'format' => [330, 216], 'margin_left' => 10, 'margin_right' => 10, 'margin_top' => 4, 'margin_bottom' => 7, 'tempDir' => $this->tempDir, 'exposeVersion' => false]);
             $pdf->SetTitle($title);
             $pdf->SetAuthor($author);

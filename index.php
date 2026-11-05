@@ -86,6 +86,28 @@ if (($_GET['action'] ?? '') === 'area_photo') {
     exit;
 }
 
+// A signer's signature specimen of a room's KIR (the room form's preview), to staff with Stock Take access only.
+if (($_GET['action'] ?? '') === 'room_specimen') {
+    require_once __DIR__ . '/src/RoomSpecimens.php';
+    header('Cache-Control: private, no-store');
+    header('X-Content-Type-Options: nosniff');
+    $specimen = null;
+    try {
+        $specimen = \SLiMS\Plugins\Inventory\RoomSpecimens::path($db, (int) ($_GET['location_id'] ?? 0), (string) ($_GET['role'] ?? ''));
+    } catch (Throwable $exception) {
+        error_log('Inventory specimen error: ' . $exception->getMessage());
+    }
+    if ($specimen === null) {
+        http_response_code(404);
+        exit('Spesimen tidak ditemukan.');
+    }
+    header("Content-Security-Policy: default-src 'none'; sandbox");
+    header('Content-Type: image/png');
+    header('Content-Length: ' . filesize($specimen));
+    readfile($specimen);
+    exit;
+}
+
 // A room's floor plan (the Denah tab): the uploaded file, to staff with Stock Take access only.
 if (($_GET['action'] ?? '') === 'room_plan') {
     require_once __DIR__ . '/src/RoomPlans.php';
@@ -316,6 +338,9 @@ try {
             if ($roomName === '') {
                 throw new RuntimeException('Nama ruangan wajib diisi.');
             }
+            // Signature specimens of the KIR: checked before the room is saved, stored right after.
+            require_once __DIR__ . '/src/RoomSpecimens.php';
+            $specimenChanges = \SLiMS\Plugins\Inventory\RoomSpecimens::requested($_FILES, $_POST);
             $slimsLocationId = inventory_post('slims_location_id');
             if (strlen($slimsLocationId) > 3) {
                 throw new RuntimeException('Kode lokasi Perpustakaan tidak valid.');
@@ -376,6 +401,15 @@ try {
                 $id = (int) $db->lastInsertId();
                 inventory_log((string) $id, 'Lokasi inventaris ditambahkan.', 'Create');
                 $message = 'Lokasi berhasil ditambahkan.';
+            }
+            if ($specimenChanges) {
+                try {
+                    \SLiMS\Plugins\Inventory\RoomSpecimens::save($db, $id, $specimenChanges, $now);
+                    inventory_log((string) $id, 'Spesimen tanda tangan KIR diperbarui.', 'Update');
+                } catch (PDOException $exception) {
+                    if ((int) ($exception->errorInfo[1] ?? 0) !== 1146) throw $exception;
+                    throw new RuntimeException('Ruangan tersimpan, tetapi spesimen belum bisa disimpan. Jalankan migrasi plugin hingga versi 26 melalui System → Plugins.');
+                }
             }
         } elseif ($postAction === 'save_item') {
             require_once __DIR__ . '/src/Inventory.php';
@@ -489,6 +523,7 @@ try {
             // A room's areas and floor plans go with it (tables of migration 12).
             $roomDetailsAvailable = !$isItem && (bool) $db->query("SHOW TABLES LIKE 'inventory_room_areas'")->fetchColumn();
             $removedPlans = [];
+            $removedSpecimens = [];
             $removedAreaPhotos = [];
             if ($roomDetailsAvailable) {
                 require_once __DIR__ . '/src/RoomAreas.php';
@@ -524,6 +559,14 @@ try {
                     \SLiMS\Plugins\Inventory\RoomAreas::deleteRoom($db, $id);
                     $removedPlans = array_merge($removedPlans, \SLiMS\Plugins\Inventory\RoomPlans::deleteRoom($db, $id));
                 }
+                if (!$isItem) {
+                    require_once __DIR__ . '/src/RoomSpecimens.php';
+                    try {
+                        $removedSpecimens = array_merge($removedSpecimens, \SLiMS\Plugins\Inventory\RoomSpecimens::deleteRoom($db, $id));
+                    } catch (PDOException $exception) {
+                        if ((int) ($exception->errorInfo[1] ?? 0) !== 1146) throw $exception;
+                    }
+                }
                 $statement->execute($args);
                 $deletedIds[] = $id;
             }
@@ -531,6 +574,7 @@ try {
             $photoStorage->cleanup($removedPhotos);
             $removedPhotos = [];
             if ($removedPlans) \SLiMS\Plugins\Inventory\RoomPlans::cleanup($removedPlans);
+            if ($removedSpecimens) \SLiMS\Plugins\Inventory\RoomSpecimens::cleanup($removedSpecimens);
             if ($removedAreaPhotos) \SLiMS\Plugins\Inventory\AreaPhotos::storage()->cleanup($removedAreaPhotos);
             foreach ($deletedIds as $id) {
                 inventory_log((string) $id, $isItem ? 'Barang inventaris dihapus.' : 'Lokasi inventaris beserta barang terkait dihapus.', 'Delete');

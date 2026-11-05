@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace SLiMS\Plugins\Inventory;
 
+require_once __DIR__ . '/RoomSpecimens.php';
+
 require_once __DIR__ . '/PdfLayout.php';
 
 /**
@@ -47,7 +49,10 @@ final class PdfTemplateModern
             . '<td style="padding-top:1.5mm;text-align:right;">Halaman {PAGENO} dari {nbpg}</td></tr></table>';
     }
 
-    public static function render(array $location, array $items, ?\DateTimeInterface $printedAt = null): string
+    /**
+     * @param array<string,string> $specimens  signature specimens as data URIs by signer (RoomSpecimens::dataUris), printed in the signature space
+     */
+    public static function render(array $location, array $items, ?\DateTimeInterface $printedAt = null, array $specimens = []): string
     {
         $printedAt = $printedAt ?? new \DateTimeImmutable('now');
         $printDate = self::e(PdfLayout::date($printedAt));
@@ -125,7 +130,7 @@ final class PdfTemplateModern
         $signatures = '<table class="sign" style="margin-top:5mm;page-break-inside:avoid">'
             . '<tr><td></td><td style="padding-bottom:1mm">' . $city . ', ' . $printDate . '</td></tr>'
             . '<tr><td>Mengetahui,<br>' . self::value($location, 'knowing_title') . '</td><td><br>' . self::value($location, 'manager_title') . '</td></tr>'
-            . '<tr><td style="height:18mm"></td><td style="height:18mm"></td></tr>'
+            . '<tr><td style="height:18mm;text-align:center;">' . RoomSpecimens::image($specimens, 'knowing', '17mm') . '</td><td style="height:18mm;text-align:center;">' . RoomSpecimens::image($specimens, 'manager', '17mm') . '</td></tr>'
             . '<tr><td><span style="' . $name . '">' . self::value($location, 'knowing_name') . '</span><br><span style="font-size:7.6pt">' . self::value($location, 'knowing_identity') . '</span></td>'
             . '<td><span style="' . $name . '">' . self::value($location, 'manager_name') . '</span><br><span style="font-size:7.6pt">' . self::value($location, 'manager_identity') . '</span></td></tr></table>';
 

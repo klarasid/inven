@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Plus,
@@ -27,7 +27,7 @@ import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
 import { Card, CardContent } from "./components/ui/card";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "./components/ui/table";
-import { FieldGroup, Field, FieldLabel, FieldDescription } from "./components/ui/field";
+import { FieldGroup, Field, FieldLabel, FieldDescription, FieldError } from "./components/ui/field";
 import { ToggleGroup, ToggleGroupItem } from "./components/ui/toggle-group";
 import { Separator } from "./components/ui/separator";
 import { Input } from "./components/ui/input";
@@ -52,6 +52,8 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuGroup,
+  DropdownMenuCheckboxItem,
+  DropdownMenuSeparator,
 } from "./components/ui/dropdown-menu";
 import { useData, useWorkspace } from "./context";
 import { money, url } from "./api";
@@ -483,8 +485,10 @@ function RoomGrid() {
 /** KIR print menu: the classic form stays available next to the modern layout. */
 function KirMenu({ room }: { room: string }) {
   const { config } = useWorkspace();
+  // Whether the signers' specimens (uploaded on the room's form) are printed in the signature space.
+  const [specimens, setSpecimens] = useState(false);
   const target = (template: string) =>
-    url(config.inventory, { workspace: "", action: "print_pdf", location_id: room, template });
+    url(config.inventory, { workspace: "", action: "print_pdf", location_id: room, template, ...(specimens ? { specimens: "1" } : {}) });
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -512,6 +516,16 @@ function KirMenu({ room }: { room: string }) {
             <span className="text-xs text-muted-foreground">Baris jumlah, nomor kolom, dan nomor halaman.</span>
           </DropdownMenuItem>
         </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuCheckboxItem
+          checked={specimens}
+          onCheckedChange={setSpecimens}
+          onSelect={(event) => event.preventDefault()}
+          className="flex flex-col items-start gap-0.5"
+        >
+          <span className="font-medium">Sertakan spesimen tanda tangan</span>
+          <span className="text-xs text-muted-foreground">Bila sudah diunggah di form ruangan.</span>
+        </DropdownMenuCheckboxItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -1061,7 +1075,7 @@ export function InventoryForm() {
 function ExistingInventory() {
   const w = useWorkspace();
   const item = w.route.view.startsWith("item");
-  const { data, error } = useData<{ record: Values; photos: Photo[] }>(item ? "item" : "room", {
+  const { data, error } = useData<{ record: Values; photos: Photo[]; specimens?: Record<string, string> }>(item ? "item" : "room", {
     record: w.route.record,
   });
   const crumbs = useRoomCrumbs(data?.record.location_id);
@@ -1090,10 +1104,56 @@ function ExistingInventory() {
         </Card>
       </>
     );
-  return <InventoryEditor record={data.record} photos={data.photos} />;
+  return <InventoryEditor record={data.record} photos={data.photos} specimens={data.specimens} />;
 }
 
-function InventoryEditor({ record, photos: initialPhotos = [] }: { record?: Values; photos?: Photo[] }) {
+const specimenTypes = ["image/png", "image/jpeg", "image/webp"];
+const specimenMaxBytes = 2 * 1024 * 1024;
+const specimenHint = "Gunakan gambar PNG, JPEG, atau WebP maksimal 2 MB.";
+const specimenError = (file: File) => !specimenTypes.includes(file.type) || file.size > specimenMaxBytes;
+
+/** A signer's specimen on the room form: the saved picture or the one just chosen, to replace or remove. */
+function SpecimenField({
+  label,
+  current,
+  file,
+  removed,
+  inputKey,
+  onFile,
+  onRemove,
+}: {
+  label: string;
+  current?: string;
+  file?: File;
+  removed: boolean;
+  inputKey: number;
+  onFile: (file?: File) => void;
+  onRemove: () => void;
+}) {
+  const id = useId();
+  const preview = useMemo(() => (file && !specimenError(file) ? URL.createObjectURL(file) : undefined), [file]);
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
+  const shown = preview || (removed ? undefined : current);
+  const invalid = !!file && specimenError(file);
+  return (
+    <Field data-invalid={invalid}>
+      <FieldLabel htmlFor={id}>Spesimen tanda tangan</FieldLabel>
+      {shown && (
+        <img src={shown} alt={`Spesimen tanda tangan ${label}`} className="h-20 max-w-full self-start rounded-md border bg-white object-contain p-1" />
+      )}
+      <Input key={inputKey} id={id} type="file" accept={specimenTypes.join(",")} onChange={(e) => onFile(e.target.files?.[0])} />
+      <FieldDescription>Tercetak di ruang tanda tangan KIR bila dipilih saat mencetak. PNG berlatar transparan paling rapi.</FieldDescription>
+      {invalid && <FieldError>{specimenHint}</FieldError>}
+      {shown && (
+        <Button type="button" variant="outline" size="sm" className="self-start" onClick={onRemove}>
+          Hapus spesimen
+        </Button>
+      )}
+    </Field>
+  );
+}
+
+function InventoryEditor({ record, photos: initialPhotos = [], specimens: savedSpecimens = {} }: { record?: Values; photos?: Photo[]; specimens?: Record<string, string> }) {
   const w = useWorkspace();
   const item = w.route.view.startsWith("item");
   const [values, setValues] = useState<Values>(
@@ -1109,6 +1169,8 @@ function InventoryEditor({ record, photos: initialPhotos = [] }: { record?: Valu
   );
   const [photos, setPhotos] = useState(initialPhotos);
   const [files, setFiles] = useState<File[]>([]);
+  // KIR signature specimens: a picture chosen to replace the saved one, or the saved one marked for removal.
+  const [specimens, setSpecimens] = useState<Record<string, { file?: File; remove?: boolean; key: number }>>({});
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
   const [error, setError] = useState("");
@@ -1160,6 +1222,7 @@ function InventoryEditor({ record, photos: initialPhotos = [] }: { record?: Valu
       if (!values.item_name) errors.item_name = "Isi nama barang.";
       if (!values.location_id) errors.location_id = "Pilih ruangan.";
     } else if (!values.room_name) errors.room_name = "Isi nama ruangan.";
+    else if (Object.values(specimens).some((x) => x.file && specimenError(x.file))) errors.specimen = specimenHint;
     setErrors(errors);
     if (Object.keys(errors).length) return;
     lock.current = true;
@@ -1168,9 +1231,17 @@ function InventoryEditor({ record, photos: initialPhotos = [] }: { record?: Valu
     try {
       const body = new FormData();
       files.forEach((f) => body.append("item_photos[]", f));
+      const removeSpecimens: Record<string, string> = {};
+      if (!item) {
+        for (const [role, x] of Object.entries(specimens)) {
+          if (x.file) body.append(`specimen_${role}`, x.file);
+          else if (x.remove) removeSpecimens[`remove_specimen_${role}`] = "1";
+        }
+      }
       const reply = await w.mutate(
         {
           ...values,
+          ...removeSpecimens,
           form_action: item ? "save_item" : "save_location",
           record_id: record?.id || 0,
           expected_updated_at: record?.updated_at,
@@ -1202,6 +1273,25 @@ function InventoryEditor({ record, photos: initialPhotos = [] }: { record?: Valu
       placeholder={opts.placeholder}
       error={errors[key]}
       onChange={(v) => update(key, v)}
+    />
+  );
+  const specimenField = (role: string, label: string) => (
+    <SpecimenField
+      key={role}
+      label={label}
+      current={savedSpecimens[role]}
+      file={specimens[role]?.file}
+      removed={!!specimens[role]?.remove}
+      inputKey={specimens[role]?.key || 0}
+      onFile={(file) => {
+        setSpecimens((x) => ({ ...x, [role]: { file, key: x[role]?.key || 0 } }));
+        w.dirty(true);
+      }}
+      onRemove={() => {
+        // A picture just chosen is dropped first (the saved one shows again); a second click removes the saved one.
+        setSpecimens((x) => ({ ...x, [role]: { remove: !x[role]?.file && !!savedSpecimens[role], key: (x[role]?.key || 0) + 1 } }));
+        w.dirty(true);
+      }}
     />
   );
   // Trail follows where the record lives: Ruangan & Barang › <lokasi> › <ruangan> › <halaman ini>.
@@ -1384,12 +1474,14 @@ function InventoryEditor({ record, photos: initialPhotos = [] }: { record?: Valu
                       {text("knowing_title", "Jabatan")}
                       {text("knowing_name", "Nama")}
                       {text("knowing_identity", "NIP / identitas")}
+                      {specimenField("knowing", "yang mengetahui")}
                     </FieldGroup>
                     <FieldGroup>
                       <p className="text-sm font-medium">Pengurus barang</p>
                       {text("manager_title", "Jabatan")}
                       {text("manager_name", "Nama")}
                       {text("manager_identity", "NIP / identitas")}
+                      {specimenField("manager", "pengurus barang")}
                     </FieldGroup>
                   </div>
                 </FieldGroup>

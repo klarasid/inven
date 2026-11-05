@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace SLiMS\Plugins\Inventory;
 
+require_once __DIR__ . '/RoomSpecimens.php';
+
 final class PdfTemplate
 {
     private const MONTHS = [
@@ -39,7 +41,10 @@ final class PdfTemplate
         return self::e($name === '' ? $id : $name . ($id === '' ? '' : ' (' . $id . ')'));
     }
 
-    public static function render(array $location, array $items, ?\DateTimeInterface $printedAt = null): string
+    /**
+     * @param array<string,string> $specimens  signature specimens as data URIs by signer (RoomSpecimens::dataUris), printed in the signature space
+     */
+    public static function render(array $location, array $items, ?\DateTimeInterface $printedAt = null, array $specimens = []): string
     {
         $printedAt = $printedAt ?? new \DateTimeImmutable('now');
         $month = self::MONTHS[(int) $printedAt->format('n')];
@@ -99,7 +104,7 @@ final class PdfTemplate
             . $rows . '</tbody></table>'
             . '<div class="sign-date">' . $city . ', ' . $printDate . '</div>'
             . '<table class="signatures"><tr><td>MENGETAHUI:<br>' . self::value($location, 'knowing_title') . '</td><td>' . self::value($location, 'manager_title') . '</td></tr>'
-            . '<tr><td class="signature-space"></td><td class="signature-space"></td></tr>'
+            . '<tr><td class="signature-space">' . RoomSpecimens::image($specimens, 'knowing', '14mm') . '</td><td class="signature-space">' . RoomSpecimens::image($specimens, 'manager', '14mm') . '</td></tr>'
             . '<tr><td><span class="signature-name">' . self::value($location, 'knowing_name') . '</span><br><span class="identity-number">' . self::value($location, 'knowing_identity') . '</span></td>'
             . '<td><span class="signature-name">' . self::value($location, 'manager_name') . '</span><br><span class="identity-number">' . self::value($location, 'manager_identity') . '</span></td></tr></table>'
             . '</body></html>';

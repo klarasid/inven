@@ -124,7 +124,16 @@ final class Workspace
             if(!$row)throw new \RuntimeException('Data tidak ditemukan.');
             $photos=[];
             if($resource==='item')foreach($w->query('SELECT id,filename FROM inventory_item_photos WHERE item_id=? ORDER BY id',[$id])->fetchAll(\PDO::FETCH_ASSOC) as $p)$photos[]=['id'=>$p['id'],'url'=>$p['filename']===null?null:self::endpoint('index.php',['action'=>'item_photo','photo_id'=>$p['id']])];
-            return ['record'=>$row,'photos'=>$photos];
+            $result=['record'=>$row,'photos'=>$photos];
+            if($resource==='room') {
+                // Signature specimens of the KIR: a preview address per signer that has one (none before migration 26).
+                require_once __DIR__.'/RoomSpecimens.php';
+                $specimens=[];
+                try{foreach(RoomSpecimens::roles($w->pdo(),$id) as $role)$specimens[$role]=self::endpoint('index.php',['action'=>'room_specimen','location_id'=>$id,'role'=>$role,'v'=>(string)$row['updated_at']]);}
+                catch(\PDOException $e){if((int)($e->errorInfo[1]??0)!==1146)throw $e;}
+                $result['specimens']=(object)$specimens;
+            }
+            return $result;
         }
         if($resource==='areas') {
             // The Area and Denah tabs of a room.

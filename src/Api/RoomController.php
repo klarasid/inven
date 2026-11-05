@@ -64,11 +64,11 @@ final class RoomController
         ]);
     }
 
-    /** Kartu Inventaris Ruangan as PDF: ?layout=classic or modern, else the default saved in Pengaturan Cetak. */
+    /** Kartu Inventaris Ruangan as PDF: ?layout=classic or modern, else the default saved in Pengaturan Cetak; ?specimens=1 prints the signers' signature specimens. */
     public function kir(Context $context, int $id): Sendable
     {
         self::throttlePdf($context);
-        $document = $context->documents()->kir($id, \SLiMS\Plugins\Inventory\PrintDefaults::modern($context->db, $context->request->query('layout')), Context::libraryName());
+        $document = $context->documents()->kir($id, \SLiMS\Plugins\Inventory\PrintDefaults::modern($context->db, $context->request->query('layout')), Context::libraryName(), $context->request->query('specimens') === '1');
         $context->log('Kartu inventaris lokasi #' . $id . ' diunduh (' . $document['count'] . ' barang).', 'Print');
 
         return new BytesResponse($document['bytes'], 'application/pdf', $document['filename']);
