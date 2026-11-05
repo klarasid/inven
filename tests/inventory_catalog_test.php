@@ -16,6 +16,8 @@ function rejects(callable $run, string $label, string $message): void
 
 $db = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 foreach ([
+    'CREATE TABLE mst_location (location_id TEXT PRIMARY KEY, location_name TEXT)',
+    "INSERT INTO mst_location VALUES ('P01', 'Perpustakaan Pusat'), ('P02', 'Perpustakaan Kampus 2')",
     'CREATE TABLE inventory_locations (id INTEGER PRIMARY KEY, room_name TEXT, slims_location_id TEXT)',
     'CREATE TABLE inventory_room_areas (id INTEGER PRIMARY KEY, location_id INTEGER, slims_location_id TEXT, type TEXT, name TEXT NOT NULL DEFAULT \'\')',
     'CREATE TABLE inventory_items (id INTEGER PRIMARY KEY, location_id INTEGER, item_name TEXT, brand_model TEXT NOT NULL DEFAULT \'\', item_code TEXT, quantity_register TEXT NOT NULL DEFAULT \'1\', item_condition TEXT, category TEXT, item_type TEXT NOT NULL DEFAULT \'\')',
@@ -67,6 +69,10 @@ check($summary['items'] === 3 && $summary['groups'][2] === ['label' => 'Gazebo',
 $rooms = InventoryCatalog::build($db, 'room', ['perabot', 'peralatan']);
 check(array_sum(array_map(static fn($g) => count($g['items']), $rooms['groups'])) === $rooms['items'] && count(array_unique(array_column($rooms['groups'], 'label'))) === count($rooms['groups']),
     'tiap barang tercantum sekali, pada ruangan tempatnya dicatat');
+
+check(in_array('Ruang Baca (Perpustakaan Pusat)', array_column($rooms['groups'], 'label'), true), 'untuk semua lokasi, nama ruangan disertai lokasi perpustakaannya');
+$one = InventoryCatalog::build($db, 'room', [], 'P01');
+check(in_array('Ruang Baca', array_column($one['groups'], 'label'), true), 'untuk satu lokasi, nama ruangan tidak diberi lokasi');
 
 // What is refused.
 rejects(static fn () => InventoryCatalog::build($db, 'ruangan', []), 'pengelompokan lain ditolak', 'kategori, area, atau ruangan');

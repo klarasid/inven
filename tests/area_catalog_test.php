@@ -16,6 +16,7 @@ function rejects(callable $run, string $label, string $message): void
 
 $db = new PDO('sqlite::memory:', null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 foreach ([
+    'CREATE TABLE mst_location (location_id TEXT PRIMARY KEY, location_name TEXT)',
     'CREATE TABLE inventory_locations (id INTEGER PRIMARY KEY, room_name TEXT, area_m2 REAL, slims_location_id TEXT)',
     'CREATE TABLE inventory_room_areas (id INTEGER PRIMARY KEY, location_id INTEGER, slims_location_id TEXT, type TEXT, name TEXT NOT NULL DEFAULT \'\')',
     'CREATE TABLE inventory_area_photos (id INTEGER PRIMARY KEY, area_id INTEGER, filename TEXT, created_by INTEGER, created_at TEXT)',

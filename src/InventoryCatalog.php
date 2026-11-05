@@ -48,7 +48,7 @@ final class InventoryCatalog
         $filenames = [];
         foreach ($query->fetchAll(PDO::FETCH_ASSOC) as $row) $filenames[(int) $row['item_id']][] = (string) $row['filename'];
 
-        $query = $db->prepare('SELECT i.id, i.location_id, i.item_name, i.brand_model, i.item_code, i.quantity_register, i.item_condition, i.category, i.item_type, l.room_name'
+        $query = $db->prepare('SELECT i.id, i.location_id, i.item_name, i.brand_model, i.item_code, i.quantity_register, i.item_condition, i.category, i.item_type, l.room_name, (SELECT location_name FROM mst_location WHERE location_id = l.slims_location_id) library_name'
             . ' FROM inventory_items i JOIN inventory_locations l ON l.id = i.location_id' . $where . ' ORDER BY i.item_name, i.item_code, i.id');
         $query->execute($args);
         $items = [];
@@ -91,15 +91,21 @@ final class InventoryCatalog
         return $groups;
     }
 
+    /** A room's name, with its library location when the list spans several (two locations may hold rooms of one name). */
+    private static function roomLabel(string $room, string $libraryName, string $library): string
+    {
+        return $library === '' && $libraryName !== '' ? $room . ' (' . $libraryName . ')' : $room;
+    }
+
     /** One group per room, in the order of their names: every room that holds a listed item. @return list<array{label:string,items:list<array<string,mixed>>}> */
     private static function byRoom(PDO $db, array $items, string $library): array
     {
         $where = $library === '' ? '' : ' WHERE slims_location_id = ?';
-        $query = $db->prepare('SELECT id, room_name FROM inventory_locations' . $where . ' ORDER BY room_name, id');
+        $query = $db->prepare('SELECT l.id, l.room_name, (SELECT location_name FROM mst_location WHERE location_id = l.slims_location_id) library_name FROM inventory_locations l' . str_replace('slims_location_id', 'l.slims_location_id', $where) . ' ORDER BY l.room_name, l.id');
         $query->execute($library === '' ? [] : [$library]);
         $groups = [];
         foreach ($query->fetchAll(PDO::FETCH_ASSOC) as $room) {
-            $groups[] = ['label' => (string) $room['room_name'], 'items' => array_values(array_filter($items, static fn($item) => (int) $item['location_id'] === (int) $room['id']))];
+            $groups[] = ['label' => self::roomLabel((string) $room['room_name'], (string) ($room['library_name'] ?? ''), $library), 'items' => array_values(array_filter($items, static fn($item) => (int) $item['location_id'] === (int) $room['id']))];
         }
         return $groups;
     }
@@ -213,7 +219,7 @@ final class InventoryCatalog
                     $images ? implode(' ', $images) : '<span style="' . $muted . '">Belum ada foto</span>',
                     '<b>' . $e($item['item_name']) . '</b>' . ($detail ? '<br><span style="' . $muted . '">' . $e(implode(' · ', $detail)) . '</span>' : ''),
                     $e($item['item_code']),
-                    $e($item['room_name']),
+                    $e(self::roomLabel((string) $item['room_name'], (string) ($item['library_name'] ?? ''), $catalog['library'])),
                     $e($item['quantity_register']),
                     $e(Inventory::CONDITIONS[$item['item_condition']] ?? $item['item_condition']),
                 ];
