@@ -108,9 +108,7 @@ final class SoftwareList
             $h .= $t::section($group['label'] . ' (' . count($rows) . ' aplikasi)')
                 . $t::table('Perangkat lunak ' . mb_strtolower((string) $group['label']), [['No.', 'r'], 'Aplikasi', 'Jenis lisensi', 'Nomor / bukti lisensi', 'Berlaku sampai', ['Instalasi', 'r'], 'Status'], $rows, '', '8.8pt');
         }
-        return $h . $t::signatures([
-            ['Mengetahui,', 'Kepala Perpustakaan', ''],
-            ['Disusun oleh,', 'Petugas Pengelola', (string) ($context['printed_by'] ?? '')],
-        ], '...................., ' . PdfLayout::date($today));
+        // Signed with an electronic signature (DocumentSignature) instead of a block for handwritten signatures.
+        return $h;
     }
 }

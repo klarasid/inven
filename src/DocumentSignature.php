@@ -21,6 +21,7 @@ final class DocumentSignature
     public const TYPES = [
         'kir' => 'Kartu Inventaris Ruangan', 'catalog' => 'Daftar inventaris berfoto', 'sarpras' => 'Rekap Sarpras',
         'areas' => 'Daftar area dan fasilitas', 'rooms' => 'Daftar area dan luas ruangan', 'software' => 'Daftar perangkat lunak',
+        'inspection' => 'Dokumen pemeriksaan', 'report' => 'Laporan pengawasan dan pemeliharaan', 'schedules' => 'Jadwal pemeriksaan',
     ];
     private const CODE_LENGTH = 16;
 

@@ -62,7 +62,6 @@ final class PdfLetterhead
     public static function table(string $caption, array $headers, array $rows, string $empty = ''): string { return self::body()::table(...func_get_args()); }
     public static function facts(array $pairs): string { return self::body()::facts($pairs); }
     public static function figures(array $images): string { return self::body()::figures($images); }
-    public static function signatures(array $columns, string $placeDate): string { return self::body()::signatures($columns, $placeDate); }
 
     /** The letterhead carries its own footer. */
     public static function footer(): string { return ''; }

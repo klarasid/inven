@@ -21,6 +21,7 @@ $html = WatchSheets::schedules([
 check(str_contains($html, 'Jadwal Pemeriksaan Sarana dan Prasarana') && substr_count($html, 'Ruang Baca') === 2 && str_contains($html, 'Ruang Referensi'), 'tiap jadwal yang berjalan tercantum dengan ruangannya');
 check(str_contains($html, '2 dari 5 ruangan') && str_contains($html, '>3<'), 'ruangan terjadwal dihitung sekali walau jadwalnya lebih dari satu');
 check(str_contains($html, 'Bulanan') && str_contains($html, 'Tanpa batas') && str_contains($html, '31 Desember 2026') && str_contains($html, 'Checklist &lt;ruang&gt;'), 'frekuensi, masa berlaku, dan checklist dicetak; teks di-escape');
+check(!str_contains($html, 'Mengetahui') && !str_contains($html, 'Disusun oleh') && !str_contains(WatchSheets::schedules([], [], 'iso'), 'Pengesahan'), 'jadwal tanpa blok tanda tangan basah; tanda tangannya elektronik (QR)');
 check(str_contains(WatchSheets::schedules([], ['rooms' => 5]), 'Belum ada jadwal pemeriksaan rutin yang berjalan.') && str_contains(WatchSheets::schedules([], ['rooms' => 5]), '0 dari 5 ruangan'), 'tanpa jadwal, lembarnya mengatakan demikian');
 
 $forms = WatchSheets::checklists([

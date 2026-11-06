@@ -181,23 +181,32 @@ try {
             \SLiMS\Plugins\Inventory\PdfLetterhead::configure(\SLiMS\Plugins\Inventory\Letterheads::find($db,substr($style,4)));
             $style='kop';
         } elseif ($style==='kop' || !isset(\SLiMS\Plugins\Inventory\WatchPdf::STYLES[$style])) $style='latex';
+        $printedBy=(string)($_SESSION['realname']??'');
         if ($id) {
-            $html=\SLiMS\Plugins\Inventory\WatchPdf::detail($watch->document($id),fn($photo)=>$watch->photo($id,(int)$photo['id']),$style,\SLiMS\Plugins\Inventory\PdfDocuments::load($db));
+            $document=$watch->document($id);
+            $html=\SLiMS\Plugins\Inventory\WatchPdf::detail($document,fn($photo)=>$watch->photo($id,(int)$photo['id']),$style,\SLiMS\Plugins\Inventory\PdfDocuments::load($db));
             $title='Dokumen Pemeriksaan #'.$id; $file='pemeriksaan-'.$id.'.pdf';
+            // Signed by the examiner once finalised; a draft goes out unsigned.
+            $signer=\SLiMS\Plugins\Inventory\WatchPdf::signer($document);
         } else {
             $rows=$watch->inspections($filter,1,501);
             if (count($rows)>500) { http_response_code(413); throw new RuntimeException('Laporan melebihi 500 pemeriksaan. Persempit periode atau pilih ruangan.'); }
             $context=[
                 'library'=>$filter['library']!==''?(string)$watch->query('SELECT location_name FROM mst_location WHERE location_id=?',[$filter['library']])->fetchColumn():'',
                 'room'=>$filter['room']?(string)$watch->query('SELECT room_name FROM inventory_locations WHERE id=?',[$filter['room']])->fetchColumn():'',
-                'printed_by'=>(string)($_SESSION['realname']??''),
+                'printed_by'=>$printedBy,
                 'documents'=>\SLiMS\Plugins\Inventory\PdfDocuments::load($db),
             ];
             $html=\SLiMS\Plugins\Inventory\WatchPdf::summary($filter,$watch->summary($filter,true),$rows,$context,$style);
             $title='Laporan Pengawasan dan Pemeliharaan'; $file='laporan-pengawasan-'.$filter['from'].'-'.$filter['to'].'.pdf';
+            $signer=['type'=>'report','title'=>$title.' '.\SLiMS\Plugins\Inventory\PdfLayout::date($filter['from']).' - '.\SLiMS\Plugins\Inventory\PdfLayout::date($filter['to']),'scope'=>trim($context['library'].($context['room']!==''?' · '.$context['room']:''),' ·'),'name'=>$printedBy,'id'=>(int)($_SESSION['uid']??0),'count'=>count($rows)];
         }
         $pdf=\SLiMS\Plugins\Inventory\WatchPdf::mpdf(SB.FLS.DS.'cache',$title,$style);
         $pdf->WriteHTML($html);
+        if ($signer) {
+            require_once __DIR__ . '/DocumentSignature.php';
+            \SLiMS\Plugins\Inventory\DocumentSignature::stamp($pdf,$db,$signer['type'],$signer['title'],$signer['scope'],$signer['name'],$signer['id']?:null,$html,$signer['count']);
+        }
         watch_log('Print','Laporan pengawasan '.($id?'#'.$id:Supervision::json($filter)));
         \SLiMS\Plugins\Inventory\Telemetry::count($id?'inspection_pdf':'report_pdf');
         $pdf->Output($file,'I'); return;

@@ -146,19 +146,6 @@ final class PdfLatex
         return $html . '</table>';
     }
 
-    /** @param array<array{0:string,1:string,2:string}> $columns [caption, title, name] */
-    public static function signatures(array $columns, string $placeDate): string
-    {
-        $html = '<table style="width:100%;border-collapse:collapse;margin-top:10mm;page-break-inside:avoid;font-size:10.5pt;">'
-            . '<tr>' . str_repeat('<td></td>', count($columns) - 1) . '<td style="text-align:center;padding-bottom:1mm;">' . $placeDate . '</td></tr><tr>';
-        foreach ($columns as $c) $html .= '<td style="width:' . round(100 / count($columns), 2) . '%;text-align:center;vertical-align:top;">' . self::e($c[0]) . '<br>' . ($c[1] !== '' ? self::e($c[1]) : '&nbsp;') . '</td>';
-        $html .= '</tr><tr>';
-        foreach ($columns as $c) $html .= '<td style="height:20mm;"></td>';
-        $html .= '</tr><tr>';
-        foreach ($columns as $c) $html .= '<td style="text-align:center;">' . ($c[2] !== '' ? '<span style="text-decoration:underline;">' . self::e($c[2]) . '</span>' : str_repeat('.', 42)) . '</td>';
-        return $html . '</tr></table>';
-    }
-
     /** Plain page style: centred page number only. */
     public static function footer(): string
     {

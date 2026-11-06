@@ -41,12 +41,15 @@ final class Documents
     /** The SLiMS user id of the signer, when known. */
     public ?int $signerId = null;
 
-    /** Signs the document and adds its block to the PDF, when signing is on. */
-    private function seal(\Mpdf\Mpdf $pdf, string $type, string $title, string $scope, string $signer, string $html, int $count): void
+    /**
+     * Signs the document and adds its block to the PDF, when signing is on. The signer is the one
+     * printing unless another is named with their user id (an inspection's examiner; 0 when unknown).
+     */
+    private function seal(\Mpdf\Mpdf $pdf, string $type, string $title, string $scope, string $signer, string $html, int $count, ?int $signerId = null): void
     {
         if (!$this->sign) return;
         require_once __DIR__ . '/DocumentSignature.php';
-        DocumentSignature::stamp($pdf, $this->db, $type, $title, $scope, $signer, $this->signerId, $html, $count);
+        DocumentSignature::stamp($pdf, $this->db, $type, $title, $scope, $signer, $signerId ?? $this->signerId, $html, $count);
     }
 
     private function style(string $requested): string
@@ -297,7 +300,7 @@ final class Documents
 
     /**
      * One inspection as a document, as the admin Reports page prints it: what was examined, the
-     * findings with their photos, and the examiner's signature block. The berita acara of the check.
+     * findings with their photos, and once finalised the examiner's electronic signature. The berita acara of the check.
      * $style is `latex`, `iso`, `kop` or `kop:<id>`; with none, the default saved in Pengaturan Cetak.
      *
      * @return array{filename: string, bytes: string, count: int}
@@ -312,6 +315,9 @@ final class Documents
         $html = WatchPdf::detail($document, static fn (array $photo): ?string => $watch->photo($id, (int) $photo['id']), $style, PdfDocuments::load($this->db));
         $pdf = WatchPdf::mpdf($this->tempDir, 'Dokumen Pemeriksaan #' . $id, $style);
         $pdf->WriteHTML($html);
+        if ($signer = WatchPdf::signer($document)) {
+            $this->seal($pdf, $signer['type'], $signer['title'], $signer['scope'], $signer['name'], $html, $signer['count'], (int) $signer['id']);
+        }
         Telemetry::count('inspection_pdf');
 
         return ['filename' => 'pemeriksaan-' . $id . '.pdf', 'bytes' => $pdf->Output('', 'S'), 'count' => count($document['results'])];
@@ -334,7 +340,9 @@ final class Documents
         $rooms = (int) $watch->query('SELECT COUNT(*) FROM inventory_locations')->fetchColumn();
         $style = $this->style($style);
         $pdf = WatchPdf::mpdf($this->tempDir, 'Jadwal Pemeriksaan', $style);
-        $pdf->WriteHTML(WatchSheets::schedules($rows, ['printed_by' => $printedBy, 'rooms' => $rooms, 'documents' => PdfDocuments::load($this->db)], $style));
+        $html = WatchSheets::schedules($rows, ['printed_by' => $printedBy, 'rooms' => $rooms, 'documents' => PdfDocuments::load($this->db)], $style);
+        $pdf->WriteHTML($html);
+        $this->seal($pdf, 'schedules', 'Jadwal Pemeriksaan Sarana dan Prasarana', '', $printedBy, $html, count($rows));
 
         return ['filename' => 'jadwal-pemeriksaan.pdf', 'bytes' => $pdf->Output('', 'S'), 'count' => count($rows)];
     }
@@ -380,6 +388,7 @@ final class Documents
         $html = WatchPdf::summary($filter, $watch->summary($filter, true), $rows, $context, $style);
         $pdf = WatchPdf::mpdf($this->tempDir, 'Laporan Pengawasan dan Pemeliharaan', $style);
         $pdf->WriteHTML($html);
+        $this->seal($pdf, 'report', 'Laporan Pengawasan dan Pemeliharaan ' . PdfLayout::date($filter['from']) . ' - ' . PdfLayout::date($filter['to']), '', $printedBy, $html, count($rows));
         Telemetry::count('report_pdf');
 
         return ['filename' => 'laporan-pengawasan-' . $filter['from'] . '-' . $filter['to'] . '.pdf', 'bytes' => $pdf->Output('', 'S'), 'count' => count($rows)];

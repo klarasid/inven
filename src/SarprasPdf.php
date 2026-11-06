@@ -77,9 +77,7 @@ final class SarprasPdf
             }
         }
 
-        return $h . $t::signatures([
-            ['Mengetahui,', 'Kepala Perpustakaan', ''],
-            ['Disusun oleh,', 'Petugas Pengelola', (string) ($context['printed_by'] ?? '')],
-        ], '...................., ' . PdfLayout::date(new \DateTimeImmutable('now')));
+        // Signed with an electronic signature (DocumentSignature) instead of a block for handwritten signatures.
+        return $h;
     }
 }

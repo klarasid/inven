@@ -123,10 +123,8 @@ final class WatchPdf
         $h .= $t::table('Temuan dan status tindak lanjut', [['No.', 'r'], 'Temuan / ruangan', 'Penanggung jawab', 'Prioritas', 'Tenggat', 'Status'], $findings, 'Tidak ada temuan dalam periode ini.', '8.8pt');
         if ($overdueAny) $h .= '<p class="small">* Melewati tenggat pada saat laporan dicetak.</p>';
 
-        return $h . $t::signatures([
-            ['Mengetahui,', 'Kepala Perpustakaan', ''],
-            ['Disusun oleh,', 'Petugas Pengelola', (string) ($context['printed_by'] ?? '')],
-        ], '...................., ' . PdfLayout::date(new \DateTimeImmutable('now')));
+        // Signed with an electronic signature (DocumentSignature) instead of a block for handwritten signatures.
+        return $h;
     }
 
     /**
@@ -265,11 +263,30 @@ final class WatchPdf
             nl2br(self::e($e['notes'])),
         ], $document['events']), 'Belum ada kegiatan tercatat.', '8.8pt');
 
-        $verifier = '';
-        foreach (array_reverse($document['events']) as $e) if (in_array($e['event'], ['verify', 'import_verification'], true)) { $verifier = $e['actor_name']; break; }
-        return $h . $t::signatures([
-            [$report ? 'Pelapor,' : 'Pemeriksa,', '', (string) ($i['examiner_name'] ?? '')],
-            [$verifier !== '' ? 'Diverifikasi oleh,' : 'Mengetahui,', $verifier !== '' ? '' : 'Kepala Perpustakaan', $verifier],
-        ], '...................., ' . PdfLayout::date($i['performed_date'] ?: $i['due_date']));
+        // Signed by its examiner with an electronic signature (see signer()) instead of a block for handwritten signatures.
+        return $h;
+    }
+
+    /**
+     * Who signs an inspection document electronically: the examiner (the reporter of a damage
+     * report) once it is finalised. A draft is not signed: nobody has vouched for it yet.
+     *
+     * @return array{type:string,title:string,scope:string,name:string,id:?int,count:int}|null
+     */
+    public static function signer(array $document): ?array
+    {
+        $i = $document['inspection']; $s = $document['snapshot'];
+        $name = trim((string) ($i['examiner_name'] ?? ''));
+        if (($i['status'] ?? '') !== 'final' || $name === '') return null;
+        $report = empty($s['template_id']) && ($s['template_name'] ?? '') === 'Laporan kerusakan';
+
+        return [
+            'type' => 'inspection',
+            'title' => ($report ? 'Laporan Kerusakan dan Tindak Lanjut' : 'Dokumen Pemeriksaan Ruangan') . ' #' . (int) $i['id'] . ' - ' . $s['room_name'],
+            'scope' => (string) ($s['library_name'] ?? ''),
+            'name' => $name,
+            'id' => (int) ($i['examiner_id'] ?? 0) ?: null,
+            'count' => count($document['results']),
+        ];
     }
 }

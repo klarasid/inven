@@ -45,6 +45,7 @@ final class WatchSheets
             ];
         }
         $rooms = (int) ($context['rooms'] ?? 0);
+        // Signed with an electronic signature (DocumentSignature) instead of a block for handwritten signatures.
         return $t::begin()
             . $t::titleBlock(
                 'Jadwal Pemeriksaan Sarana dan Prasarana',
@@ -59,11 +60,7 @@ final class WatchSheets
                 'Tanggal' => PdfLayout::date($today),
             ])
             . $t::table('Jadwal pemeriksaan rutin', [['No.', 'r'], 'Ruangan', 'Checklist', 'Frekuensi', 'Mulai', 'Berakhir', 'Petugas'], $rows, 'Belum ada jadwal pemeriksaan rutin yang berjalan.')
-            . $t::paragraph('Tanggal pemeriksaan yang jatuh pada hari libur digeser ke hari kerja terdekat.')
-            . $t::signatures([
-                ['Mengetahui,', 'Kepala Perpustakaan', ''],
-                ['Disusun oleh,', 'Petugas Pengelola', (string) ($context['printed_by'] ?? '')],
-            ], '...................., ' . PdfLayout::date($today));
+            . $t::paragraph('Tanggal pemeriksaan yang jatuh pada hari libur digeser ke hari kerja terdekat.');
     }
 
     /**

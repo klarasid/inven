@@ -169,21 +169,6 @@ final class PdfLayout
         return $html . '</tbody></table>';
     }
 
-    /** Signature block; each column: [caption, title, name, identity]. */
-    public static function signatures(array $columns, string $placeDate = ''): string
-    {
-        $html = '<table class="sign" style="page-break-inside:avoid">';
-        if ($placeDate !== '') $html .= '<tr>' . str_repeat('<td></td>', count($columns) - 1) . '<td style="padding-bottom:1mm">' . $placeDate . '</td></tr>';
-        $html .= '<tr>';
-        foreach ($columns as $c) $html .= '<td>' . self::e($c[0]) . '<br>' . ($c[1] !== '' ? self::e($c[1]) : '&nbsp;') . '</td>';
-        $html .= '</tr><tr>';
-        foreach ($columns as $c) $html .= '<td style="height:18mm"></td>';
-        $html .= '</tr><tr>';
-        foreach ($columns as $c) $html .= '<td><span style="font-weight:bold;text-decoration:underline;">' . ($c[2] !== '' ? self::e($c[2]) : str_repeat('&nbsp;', 40)) . '</span>'
-            . (($c[3] ?? '') !== '' ? '<br><span style="font-size:7.6pt;">' . self::e($c[3]) . '</span>' : '') . '</td>';
-        return $html . '</tr></table>';
-    }
-
     public static function footer(string $label, ?array $institution = null): string
     {
         $i = self::institution($institution);

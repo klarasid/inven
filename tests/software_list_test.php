@@ -40,4 +40,5 @@ check(str_contains($html, 'Sistem operasi (2 aplikasi)') && str_contains($html, 
 check(array_column($byName['Windows 11 Pro']['files'], 'title') === ['Stiker COA', 'Faktur'] && $byName['Ubuntu']['files'] === [] && str_contains($html, '2 berkas bukti terlampir') && substr_count($html, 'berkas bukti terlampir') === 2,
     'berkas bukti lisensi ikut pada aplikasinya, dan jumlahnya dicetak');
 check(substr_count($html, '>Resmi<') === 4 && substr_count($html, '>Kedaluwarsa<') === 1 && substr_count($html, '>Tidak resmi<') === 1, 'status tiap aplikasi dicetak');
+check(!str_contains($html, 'Mengetahui') && !str_contains($html, 'Disusun oleh') && !str_contains(SoftwareList::html($list, [], 'iso'), 'Pengesahan'), 'daftar tanpa blok tanda tangan basah; tanda tangannya elektronik (QR)');
 echo "ok   done\n";

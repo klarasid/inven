@@ -166,7 +166,7 @@ Di form ruangan, bagian **Penandatangan KIR**, tiap penandatangan (yang mengetah
 
 ### Tanda tangan elektronik dan verifikasi
 
-KIR, Daftar inventaris berfoto, Rekap Sarpras, Daftar area dan fasilitas, Daftar area dan luas ruangan, serta Daftar perangkat lunak ditutup dengan blok **Ditandatangani secara elektronik**: kode QR, nama petugas yang mencetak, waktu, kode dokumen, dan awal sidik jari isi (SHA-256). Kode QR membuka halaman publik `index.php?p=verifikasi_dokumen&c=<kode>` yang menampilkan jenis dokumen, penandatangan, tanggal, dan sidik jari lengkap, tanpa isi dokumennya. Mencetak ulang isi yang sama oleh petugas yang sama memakai kode yang sama. Bila catatan tanda tangan tidak bisa dibuat, dokumen tetap tercetak tanpa blok itu. Data tercatat di tabel `inventory_signed_documents` (migrasi 25).
+KIR, Daftar inventaris berfoto, Rekap Sarpras, Daftar area dan fasilitas, Daftar area dan luas ruangan, Daftar perangkat lunak, Jadwal pemeriksaan, Laporan pengawasan, dan Dokumen pemeriksaan ditutup dengan blok **Ditandatangani secara elektronik**: kode QR, nama penandatangan, waktu, kode dokumen, dan awal sidik jari isi (SHA-256). Penandatangannya petugas yang mencetak, kecuali dokumen pemeriksaan dan laporan kerusakan, yang ditandatangani pemeriksa atau pelapornya setelah difinalisasi; drafnya tercetak tanpa tanda tangan. Selain KIR, dokumen-dokumen ini tidak lagi memuat kolom tanda tangan basah (Mengetahui, Disusun oleh, Pengesahan). Kode QR membuka halaman publik `index.php?p=verifikasi_dokumen&c=<kode>` yang menampilkan jenis dokumen, penandatangan, tanggal, dan sidik jari lengkap, tanpa isi dokumennya. Mencetak ulang isi yang sama oleh petugas yang sama memakai kode yang sama. Bila catatan tanda tangan tidak bisa dibuat, dokumen tetap tercetak tanpa blok itu. Data tercatat di tabel `inventory_signed_documents` (migrasi 25).
 
 ### Label QR code
 
@@ -276,6 +276,7 @@ php tests/inventory_catalog_test.php
 php tests/area_photos_test.php
 php tests/area_catalog_test.php
 php tests/watch_sheets_test.php
+php tests/watch_pdf_signature_test.php
 php tests/feedback_test.php
 php tests/support_documents_test.php
 php tests/software_list_test.php

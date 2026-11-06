@@ -155,29 +155,6 @@ final class PdfIso
         return $html . '</table>';
     }
 
-    /**
-     * Approval matrix (Disusun / Diperiksa / Disetujui) instead of free-standing signatures.
-     * @param array<array{0:string,1:string,2:string}> $columns [caption, title, name]
-     */
-    public static function signatures(array $columns, string $placeDate): string
-    {
-        $cell = 'border:' . self::LINE . ';padding:1.4mm 2mm;vertical-align:top;';
-        $label = $cell . 'background-color:' . self::LABEL_BG . ';font-weight:bold;width:16%;';
-        $width = round(84 / count($columns), 2);
-        $html = self::section('Pengesahan')
-            . '<table style="width:100%;border-collapse:collapse;font-size:9pt;page-break-inside:avoid;"><tr><td style="' . $label . '"></td>';
-        foreach ($columns as $c) $html .= '<td style="' . $cell . 'background-color:' . self::HEAD_BG . ';font-weight:bold;text-align:center;width:' . $width . '%;">' . self::e(rtrim($c[0], ',')) . '</td>';
-        $html .= '</tr><tr><td style="' . $label . '">Nama</td>';
-        foreach ($columns as $c) $html .= '<td style="' . $cell . '">' . self::e($c[2]) . '</td>';
-        $html .= '</tr><tr><td style="' . $label . '">Jabatan</td>';
-        foreach ($columns as $c) $html .= '<td style="' . $cell . '">' . self::e($c[1]) . '</td>';
-        $html .= '</tr><tr><td style="' . $label . 'height:18mm;">Tanda tangan</td>';
-        foreach ($columns as $c) $html .= '<td style="' . $cell . '"></td>';
-        $html .= '</tr><tr><td style="' . $label . '">Tanggal</td>';
-        foreach ($columns as $c) $html .= '<td style="' . $cell . '"></td>';
-        return $html . '</tr></table>';
-    }
-
     public static function footer(): string
     {
         return '<table width="100%" style="border-top:' . self::LINE . ';font-family:' . self::FONT . ';font-size:7.4pt;"><tr>'
