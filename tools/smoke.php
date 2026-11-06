@@ -37,8 +37,7 @@ $tmp = $work;
 $location = ['room_name' => 'Ruang Uji', 'location_code' => 'U-01', 'province' => 'Jawa Tengah', 'signature_city' => 'Semarang', 'knowing_name' => 'A', 'manager_name' => 'B'];
 $items = [['item_name' => 'Meja', 'item_code' => 'INV-1', 'item_condition' => 'B', 'acquisition_price' => 1000]];
 $body = fn(string $style) => $style::begin() . $style::titleBlock('Laporan Uji', 'Penyusun', 'Periode', ['number' => 'N-1', 'revision' => '00'])
-    . $style::abstract('Ringkasan <b>tebal</b> dan <i>miring</i>.') . $style::section('Bagian') . $style::table('Tabel', ['A', ['B', 'r']], [['satu', '1']])
-    . $style::signatures([['Mengetahui,', 'Kepala', ''], ['Disusun,', 'Petugas', 'C']], 'Semarang, 1 Januari 2026');
+    . $style::abstract('Ringkasan <b>tebal</b> dan <i>miring</i>.') . $style::section('Bagian') . $style::table('Tabel', ['A', ['B', 'r']], [['satu', '1']]);
 
 $run('KIR klasik', function () use ($location, $items, $tmp) {
     $pdf = new \Mpdf\Mpdf(['tempDir' => $tmp, 'format' => [330, 216]]);
