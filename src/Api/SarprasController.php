@@ -4,12 +4,14 @@ namespace SLiMS\Plugins\Inventory\Api;
 
 use SLiMS\Plugins\Inventory\Sarpras;
 use SlimsConnect\Http\JsonResponse;
+use SlimsConnect\Http\Sendable;
 
 /**
  * Rekap Sarpras: the facility aspects of one library location, or of the institution when the
  * rooms are spread over several. Read only, computed as the Rekap Sarpras page computes it.
  * An aspect's rows are its detail as the page tables it: the rooms with their size or their
  * areas. The institution counts as one library; only its floor area is broken down by location.
+ * The document is the same recap as PDF, signed electronically, in the style asked for (?style=).
  */
 final class SarprasController
 {
@@ -47,5 +49,15 @@ final class SarprasController
                 'fix' => $aspect['fix'],
             ], $recap['aspects']),
         ]);
+    }
+
+    public function document(Context $context): Sendable
+    {
+        RoomController::throttlePdf($context);
+        $library = trim($context->request->query('library'));
+        $document = $context->documents()->sarpras($context->watch(), $library, $context->staff()->name, $context->request->query('style'));
+        $context->log('Rekap Sarpras' . ($library !== '' ? ' lokasi ' . $library : '') . ' diunduh.', 'Print');
+
+        return new BytesResponse($document['bytes'], 'application/pdf', $document['filename']);
     }
 }

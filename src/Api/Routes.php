@@ -43,12 +43,14 @@ final class Routes
 
         $map('GET', '/areas', [AreaController::class, 'summary']);
         $map('GET', '/areas/document', [AreaController::class, 'document']);
+        $map('GET', '/areas/archive', [AreaController::class, 'archive']);
         $map('GET', '/areas/outside', [AreaController::class, 'outside']);
         $map('POST', '/areas/[i:area]/photos', [AreaController::class, 'addOutsidePhotos']);
         $map('GET', '/areas/[i:area]/photos/[i:photo]', [AreaController::class, 'outsidePhoto']);
         $map('DELETE', '/areas/[i:area]/photos/[i:photo]', [AreaController::class, 'deleteOutsidePhoto']);
         $map('GET', '/catalog', [CatalogController::class, 'summary']);
         $map('GET', '/catalog/document', [CatalogController::class, 'document']);
+        $map('GET', '/catalog/archive', [CatalogController::class, 'archive']);
         $map('GET', '/software', [SoftwareController::class, 'index']);
         $map('GET', '/software/document', [SoftwareController::class, 'document']);
         $map('GET', '/software/files/[i:id]', [SoftwareController::class, 'file']);
@@ -92,12 +94,14 @@ final class Routes
         $map('POST', '/schedules/preview', [ScheduleController::class, 'preview'], ['write' => false]);
         $map('POST', '/schedules', [ScheduleController::class, 'store']);
         $map('GET', '/sarpras', [SarprasController::class, 'show']);
+        $map('GET', '/sarpras/document', [SarprasController::class, 'document']);
 
         $map('GET', '/reports/summary', [ReportController::class, 'summary']);
         $map('GET', '/reports/document', [ReportController::class, 'document']);
         $map('GET', '/reports/inspections', [ReportController::class, 'inspections']);
         $map('GET', '/reports/findings', [ReportController::class, 'findings']);
         $map('GET', '/inspections/[i:id]/document', [ReportController::class, 'inspection']);
+        $map('GET', '/inspections/[i:id]/archive', [ReportController::class, 'photos']);
 
         // Anything else under the prefix is a JSON 404, not SLiMS's HTML page. The router passes
         // the unmatched path by name, as rest:, so the handler must take it.

@@ -201,7 +201,7 @@ Petugas masuk dengan akun SLiMS yang memiliki hak **Stock Take**. Anda dapat men
 
 ## Agent AI
 
-Aplikasi AI seperti Claude dapat bekerja di Klaras Inven atas nama petugas: membuat jadwal pemeriksaan dan checklist, menulis laporan kerusakan, merangkum laporan pengawasan dan Rekap Sarpras, serta mencari ruangan dan barang. Aplikasi AI tersambung lewat Klaras Panel; kata sandi SLiMS tidak pernah dimasukkan di aplikasi AI atau di Klaras.
+Aplikasi AI seperti Claude dapat bekerja di Klaras Inven atas nama petugas: membuat jadwal pemeriksaan dan checklist, menulis laporan kerusakan, merangkum laporan pengawasan dan Rekap Sarpras, serta mencari ruangan dan barang. Aplikasi AI juga dapat mengunduh dokumennya: laporan pengawasan untuk satu lokasi atau ruangan, PDF Rekap Sarpras, dan foto daftar inventaris berfoto, daftar area dan fasilitas, serta dokumen pemeriksaan sebagai ZIP. Aplikasi AI tersambung lewat Klaras Panel; kata sandi SLiMS tidak pernah dimasukkan di aplikasi AI atau di Klaras.
 
 Untuk menyalakannya:
 

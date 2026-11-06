@@ -46,6 +46,8 @@ final class Context
     {
         $documents = new Documents($this->db, defined('SB') && defined('FLS') ? SB . FLS . DIRECTORY_SEPARATOR . 'cache' : sys_get_temp_dir());
         $documents->sign = true;
+        // Signed as the librarian the app works for; an inspection names its own examiner.
+        $documents->signerId = $this->staff?->id;
         return $documents;
     }
 

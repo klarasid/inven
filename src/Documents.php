@@ -324,6 +324,60 @@ final class Documents
     }
 
     /**
+     * The photos of one inspection document as they were uploaded, in a ZIP (see WatchPdf::archive).
+     *
+     * @return array{filename: string, bytes: string, count: int}
+     */
+    public function inspectionPhotos(Supervision $watch, int $id): array
+    {
+        require_once __DIR__ . '/WatchPdf.php';
+        $zip = WatchPdf::archive($watch->document($id), static fn (array $photo): ?string => $watch->photo($id, (int) $photo['id']), $this->tempDir);
+
+        return ['filename' => 'foto-pemeriksaan-' . $id . '.zip', 'bytes' => $zip['bytes'], 'count' => $zip['files']];
+    }
+
+    /**
+     * Rekap Sarpras as the Rekap Sarpras page prints it: one library location's recap, or the
+     * institution's where several locations hold rooms and none is named (a lone location is
+     * always its own). In the style asked for or with none the default saved in Pengaturan Cetak.
+     *
+     * @return array{filename: string, bytes: string, count: int}
+     */
+    public function sarpras(Supervision $watch, string $library, string $printedBy, string $style = ''): array
+    {
+        self::ensureRuntime();
+        require_once __DIR__ . '/SarprasPdf.php';
+        require_once __DIR__ . '/PdfDocuments.php';
+        $places = Sarpras::locations($this->db);
+        $codes = array_column($places['locations'], 'code');
+        if ($library !== '' && !in_array($library, $codes, true)) {
+            throw new RuntimeException('Lokasi perpustakaan tidak ditemukan. Pilih salah satu: ' . implode(', ', $codes) . '.');
+        }
+        if ($library === '' && count($codes) === 1 && $places['rooms'] > 0) {
+            $library = $codes[0];
+        }
+        $style = $this->style($style);
+        $context = ['printed_by' => $printedBy, 'documents' => PdfDocuments::load($this->db)];
+        if ($library === '' && $places['rooms'] > 0 && count($codes) > 1) {
+            $overview = Sarpras::overview($this->db, $watch, $places['locations']);
+            $recap = $overview['recap'];
+            $context['locations'] = $overview['locations'];
+            $scope = 'Semua lokasi';
+        } else {
+            $recap = Sarpras::recap($this->db, $watch, $library);
+            $names = array_column($places['locations'], 'name', 'code');
+            $context['location'] = $scope = (string) ($names[$library] ?? '');
+        }
+        $html = SarprasPdf::render($recap, $context, $style);
+        $pdf = WatchPdf::mpdf($this->tempDir, 'Rekap Sarana dan Prasarana', $style);
+        $pdf->WriteHTML($html);
+        $this->seal($pdf, 'sarpras', 'Rekap Sarana dan Prasarana Perpustakaan', $scope, $printedBy, $html, count($recap['aspects']));
+        Telemetry::count('sarpras_pdf');
+
+        return ['filename' => 'rekap-sarpras-' . ($library !== '' ? self::slug($library, 'lokasi') . '-' : '') . date('Ymd') . '.pdf', 'bytes' => $pdf->Output('', 'S'), 'count' => count($recap['aspects'])];
+    }
+
+    /**
      * Jadwal pemeriksaan: the routine inspection schedules that are running, as one sheet.
      *
      * @return array{filename: string, bytes: string, count: int}
@@ -384,14 +438,17 @@ final class Documents
         if (count($rows) > self::MAX_ROWS) {
             throw new RuntimeException('Laporan melebihi 500 pemeriksaan. Pilih periode yang lebih pendek.');
         }
-        $context = ['library' => '', 'room' => '', 'printed_by' => $printedBy, 'documents' => PdfDocuments::load($this->db)];
+        $library = $filter['library'] !== '' ? (string) $watch->query('SELECT location_name FROM mst_location WHERE location_id = ?', [$filter['library']])->fetchColumn() : '';
+        $room = $filter['room'] ? (string) $watch->query('SELECT room_name FROM inventory_locations WHERE id = ?', [$filter['room']])->fetchColumn() : '';
+        $context = ['library' => $library, 'room' => $room, 'printed_by' => $printedBy, 'documents' => PdfDocuments::load($this->db)];
         $html = WatchPdf::summary($filter, $watch->summary($filter, true), $rows, $context, $style);
         $pdf = WatchPdf::mpdf($this->tempDir, 'Laporan Pengawasan dan Pemeliharaan', $style);
         $pdf->WriteHTML($html);
-        $this->seal($pdf, 'report', 'Laporan Pengawasan dan Pemeliharaan ' . PdfLayout::date($filter['from']) . ' - ' . PdfLayout::date($filter['to']), '', $printedBy, $html, count($rows));
+        $this->seal($pdf, 'report', 'Laporan Pengawasan dan Pemeliharaan ' . PdfLayout::date($filter['from']) . ' - ' . PdfLayout::date($filter['to']), implode(' · ', array_filter([$library, $room], 'strlen')), $printedBy, $html, count($rows));
         Telemetry::count('report_pdf');
+        $where = array_filter([$filter['library'], $filter['room'] ? 'ruang-' . $filter['room'] : ''], 'strlen');
 
-        return ['filename' => 'laporan-pengawasan-' . $filter['from'] . '-' . $filter['to'] . '.pdf', 'bytes' => $pdf->Output('', 'S'), 'count' => count($rows)];
+        return ['filename' => 'laporan-pengawasan-' . ($where ? self::slug(implode('-', $where), 'lokasi') . '-' : '') . $filter['from'] . '-' . $filter['to'] . '.pdf', 'bytes' => $pdf->Output('', 'S'), 'count' => count($rows)];
     }
 
     /**

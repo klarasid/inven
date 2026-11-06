@@ -307,6 +307,17 @@ try {
         'a finding comes with the work recorded on it');
     check(call('GET', 'ReportController@findings', headers: bearer($token), query: ['period' => 'month', 'room' => 999])['body']['data']['findings'] === [], 'the findings narrow to one room');
     check($pdf(call('GET', 'ReportController@document', headers: bearer($token), query: ['period' => 'month'])), 'the period report comes as PDF');
+    $db->exec('DELETE FROM slims_connect_rate_limits');
+    $zip = static fn (array $response): bool => $response['body'] instanceof \SLiMS\Plugins\Inventory\Api\BytesResponse && $response['body']->mimeType === 'application/zip' && str_starts_with($response['body']->bytes, 'PK');
+    $located = call('GET', 'ReportController@summary', headers: bearer($token), query: ['period' => 'month', 'library' => 'P01'])['body']['data'];
+    check($located['period']['library'] === 'P01' && $located['findings']['open'] === 2, 'the report narrows to one library location, and says which');
+    check(call('GET', 'ReportController@inspections', headers: bearer($token), query: ['period' => 'month', 'library' => 'X99'])['details']['fields']['library'][0] === 'Lokasi perpustakaan tidak ditemukan. Pilih salah satu: P01.', 'an unknown location is refused, saying what to choose');
+    check($pdf(call('GET', 'ReportController@document', headers: bearer($token), query: ['period' => 'month', 'library' => 'P01', 'room' => '1'])), 'the period report of one location and room comes as PDF');
+    $db->prepare('INSERT INTO inventory_watch_photos (inspection_id, result_id, filename, created_at) VALUES (?, ?, ?, NOW())')->execute([$id, $first, (new PhotoStorage($photos . '/pengawasan'))->write("\xFF\xD8 bukti")]);
+    $photoZip = call('GET', 'ReportController@photos', params: ['id' => $id], headers: bearer($baca));
+    check($zip($photoZip) && str_contains($photoZip['body']->bytes, 'Butir/Butir 1-'), 'an inspection\'s photos come as a ZIP, by the item they show, to a read-only librarian too');
+    $counted = array_column(call('GET', 'ReportController@inspections', headers: bearer($token), query: ['period' => 'month'])['body']['data']['inspections'], 'photos', 'id');
+    check($counted[$id] === 1, 'the period\'s inspections say how many photos each holds');
     $home = call('GET', 'HomeController@show', headers: bearer($token))['body']['data'];
     check($home['stock_take'] === null && $home['counts']['inspections'] === 0, 'home shows no running stock take and nothing left to inspect');
 
@@ -359,6 +370,8 @@ try {
     check($sarpras['scope'] === 'location' && $sarpras['library'] === 'P01' && count($sarpras['aspects']) === 13, 'Rekap Sarpras comes for the one library location');
     check($sarpras['aspects'][0]['columns'] === ['Ruangan', 'Luas'] && $sarpras['aspects'][0]['rows'] === [['Ruang baca umum', '120,50 m²'], ['Ruang referensi', '—']], 'the size of each room comes with the building aspect');
     check($sarpras['aspects'][1]['rows'] === [['Ruang baca umum', 'Area baca, Area literasi / pojok baca (Pojok baca)'], ['Ruang referensi', '—']], 'the areas of each room come with the service area aspect');
+    check($pdf(call('GET', 'SarprasController@document', headers: bearer($baca))) && $pdf(call('GET', 'SarprasController@document', headers: bearer($agentToken), query: ['library' => 'P01', 'style' => 'iso'])), 'Rekap Sarpras comes as PDF, to a read-only librarian too');
+    check(call('GET', 'SarprasController@document', headers: bearer($agentToken), query: ['library' => 'X99'])['message'] === 'Lokasi perpustakaan tidak ditemukan. Pilih salah satu: P01.', 'Rekap Sarpras of an unknown location is refused');
 
     // Daftar inventaris berfoto, as an agent asks for it.
     // The computer of the items above, whose categories a later check emptied.
@@ -366,6 +379,9 @@ try {
     $catalog = call('GET', 'CatalogController@summary', headers: bearer($agentToken), query: ['group' => 'area', 'categories' => 'komputer'])['body']['data'];
     check($catalog['items'] === 1 && $catalog['with_photos'] === 0 && array_column($catalog['groups'], 'items', 'label') === ['Area baca' => 1, 'Area literasi / pojok baca' => 1], 'the photo inventory is summed up by the areas of the items\' rooms');
     check($pdf(call('GET', 'CatalogController@document', headers: bearer($baca), query: ['categories' => 'komputer'])), 'the photo inventory comes as PDF, to a read-only librarian too');
+    check(call('GET', 'CatalogController@archive', headers: bearer($baca), query: ['categories' => 'komputer'])['message'] === 'Tidak ada foto pada daftar ini.'
+        && call('GET', 'AreaController@archive', headers: bearer($baca))['message'] === 'Tidak ada foto pada daftar ini.', 'a list without photos makes no ZIP, and says so');
+    check(call('GET', 'CatalogController@archive', headers: bearer($agentToken), query: ['library' => 'X99'])['code'] === 'validation_failed', 'the photos of a list take the list\'s own filters');
     check(call('GET', 'CatalogController@summary', headers: bearer($agentToken), query: ['group' => 'ruangan'])['code'] === 'validation_failed'
         && call('GET', 'CatalogController@summary', headers: bearer($agentToken), query: ['categories' => 'mebel'])['code'] === 'validation_failed'
         && call('GET', 'CatalogController@summary', headers: bearer($agentToken), query: ['photos' => 'semua'])['code'] === 'validation_failed'

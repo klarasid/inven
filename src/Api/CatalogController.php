@@ -13,7 +13,7 @@ use SlimsConnect\Http\Sendable;
  * the default) or by the areas of their rooms (?group=area), for some categories
  * (?categories=perabot,peralatan) and one library location (?library=P01) when given. An item is
  * shown with its first photo, or with all of them (?photos=all). The document takes ?style= as
- * the reports do (Documents::inspection).
+ * the reports do (Documents::inspection). The archive holds the list's photos as they were uploaded.
  */
 final class CatalogController
 {
@@ -58,5 +58,16 @@ final class CatalogController
         $context->log('Daftar inventaris berfoto diunduh (' . $document['count'] . ' barang).', 'Print');
 
         return new BytesResponse($document['bytes'], 'application/pdf', $document['filename']);
+    }
+
+    /** The photos of the same list as they were uploaded, in a ZIP: a folder per group. */
+    public function archive(Context $context): Sendable
+    {
+        RoomController::throttlePdf($context);
+        [$group, $categories, $library, $photos] = self::filter($context);
+        $document = $context->documents()->catalogPhotos($context->storage, $group, $categories, $library, $photos);
+        $context->log('Foto inventaris diunduh (' . $document['count'] . ' foto).', 'Download');
+
+        return new BytesResponse($document['bytes'], 'application/zip', $document['filename']);
     }
 }

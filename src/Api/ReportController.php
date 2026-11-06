@@ -2,6 +2,7 @@
 
 namespace SLiMS\Plugins\Inventory\Api;
 
+use SLiMS\Plugins\Inventory\Sarpras;
 use SLiMS\Plugins\Inventory\Supervision;
 use SLiMS\Plugins\Inventory\WatchPdf;
 use SlimsConnect\Http\ApiException;
@@ -15,7 +16,8 @@ use SlimsConnect\Http\Sendable;
 final class ReportController
 {
     /**
-     * A named period (month, quarter, year), or any ?from=&to= dates.
+     * A named period (month, quarter, year), or any ?from=&to= dates, of one library location
+     * (?library=<code>) or one room (?room=<id>) when given.
      *
      * @return array{from: string, to: string, library: string, room: int, inspection_status: string, finding_status: string}
      */
@@ -27,7 +29,7 @@ final class ReportController
             if ($from === '' || $to === '') {
                 throw ApiException::validation(['from' => ['Isi from dan to bersama, format YYYY-MM-DD.']]);
             }
-            $filter = $context->watch()->filter(['from' => $from, 'to' => $to]);
+            $filter = $context->watch()->filter(['from' => $from, 'to' => $to, 'library' => self::library($context), 'room' => $context->request->query('room', '0')]);
             $filter['inspection_status'] = '';
             $filter['finding_status'] = '';
 
@@ -40,11 +42,29 @@ final class ReportController
             'year' => date('Y-01-01'),
             default => throw ApiException::validation(['period' => ['Pilih month, quarter, atau year.']]),
         };
-        $filter = $context->watch()->filter(['from' => $from, 'to' => $period === 'year' ? date('Y-12-31') : date('Y-m-t')]);
+        $filter = $context->watch()->filter(['from' => $from, 'to' => $period === 'year' ? date('Y-12-31') : date('Y-m-t'), 'library' => self::library($context), 'room' => $context->request->query('room', '0')]);
         $filter['inspection_status'] = '';
         $filter['finding_status'] = '';
 
         return $filter;
+    }
+
+    /** The library location asked for, one of those holding rooms, or '' for all of them. */
+    private static function library(Context $context): string
+    {
+        $library = trim($context->request->query('library'));
+        $codes = array_column(Sarpras::locations($context->db)['locations'], 'code');
+        if ($library !== '' && !in_array($library, $codes, true)) {
+            throw ApiException::validation(['library' => ['Lokasi perpustakaan tidak ditemukan. Pilih salah satu: ' . implode(', ', $codes) . '.']]);
+        }
+
+        return $library;
+    }
+
+    /** The period as the answers echo it, with the location and room they cover, so a caller can tell the filter was applied. */
+    private static function period(array $filter): array
+    {
+        return ['from' => $filter['from'], 'to' => $filter['to'], 'library' => $filter['library'], 'room' => $filter['room'] ?: null];
     }
 
     public function summary(Context $context): JsonResponse
@@ -58,7 +78,7 @@ final class ReportController
         $findings = $summary['findings'];
 
         return JsonResponse::ok([
-            'period' => ['key' => $context->request->query('from') !== '' ? 'custom' : $context->request->query('period', 'month'), 'from' => $filter['from'], 'to' => $filter['to']],
+            'period' => ['key' => $context->request->query('from') !== '' ? 'custom' : $context->request->query('period', 'month')] + self::period($filter),
             'inspections' => [
                 'routine_final' => (int) $counts['routine_final'],
                 'late' => (int) $counts['late'] + (int) $summary['unformed_late'],
@@ -85,19 +105,24 @@ final class ReportController
     private const KINDS = ['routine' => 'Terjadwal', 'incidental' => 'Insidental', 'historical' => 'Impor riwayat'];
     private const MAX_INSPECTIONS = 500;
 
-    /** The inspections of the period, newest first, optionally of one room (?room=<id>). */
+    /** The inspections of the period, newest first, with how many photos each holds; optionally of one location or room. */
     public function inspections(Context $context): JsonResponse
     {
         $filter = self::filter($context);
-        $filter['room'] = max(0, (int) $context->request->query('room', '0'));
         $rows = $context->watch()->inspections($filter, 1, self::MAX_INSPECTIONS + 1);
         if (count($rows) > self::MAX_INSPECTIONS) {
             throw Failure::rejected('Periode ini memuat lebih dari ' . self::MAX_INSPECTIONS . ' pemeriksaan. Pilih periode yang lebih pendek atau satu ruangan.');
         }
 
+        $photos = [];
+        if ($rows) {
+            $ids = array_map(static fn (array $row): int => (int) $row['id'], $rows);
+            $photos = $context->watch()->query('SELECT inspection_id, COUNT(*) FROM inventory_watch_photos WHERE inspection_id IN (' . implode(',', array_fill(0, count($ids), '?')) . ') GROUP BY inspection_id', $ids)->fetchAll(\PDO::FETCH_KEY_PAIR);
+        }
+
         return JsonResponse::ok([
-            'period' => ['from' => $filter['from'], 'to' => $filter['to']],
-            'inspections' => array_map(static function (array $row): array {
+            'period' => self::period($filter),
+            'inspections' => array_map(static function (array $row) use ($photos): array {
                 $snapshot = Supervision::decode((string) $row['snapshot']);
 
                 return [
@@ -109,6 +134,8 @@ final class ReportController
                     'performed_date' => $row['performed_date'] === null ? null : (string) $row['performed_date'],
                     'examiner' => (string) ($row['examiner_name'] ?? ''),
                     'status' => ['key' => (string) $row['status'], 'label' => Supervision::STATUSES[$row['status']] ?? (string) $row['status']],
+                    // The photos of the items checked and of the follow-up work, which /inspections/{id}/archive holds.
+                    'photos' => (int) ($photos[$row['id']] ?? 0),
                 ];
             }, $rows),
         ]);
@@ -122,7 +149,6 @@ final class ReportController
     {
         require_once dirname(__DIR__) . '/WatchPdf.php';
         $filter = self::filter($context);
-        $filter['room'] = max(0, (int) $context->request->query('room', '0'));
         $watch = $context->watch();
         $rows = $watch->summary($filter, true)['finding_rows'];
         if (count($rows) > self::MAX_INSPECTIONS) {
@@ -146,7 +172,7 @@ final class ReportController
         $today = date('Y-m-d');
 
         return JsonResponse::ok([
-            'period' => ['from' => $filter['from'], 'to' => $filter['to']],
+            'period' => self::period($filter),
             'findings' => array_map(static fn (array $row): array => [
                 'id' => (int) $row['id'],
                 'inspection_id' => (int) $row['inspection_id'],
@@ -174,11 +200,22 @@ final class ReportController
         return new BytesResponse($document['bytes'], 'application/pdf', $document['filename']);
     }
 
+    /** One inspection's photos as they were uploaded, in a ZIP: those of the items checked and of the follow-up work. */
+    public function photos(Context $context, int $id): Sendable
+    {
+        RoomController::throttlePdf($context);
+        $document = $context->documents()->inspectionPhotos($context->watch(), $id);
+        $context->log('Foto pemeriksaan #' . $id . ' diunduh (' . $document['count'] . ' foto).', 'Download');
+
+        return new BytesResponse($document['bytes'], 'application/zip', $document['filename']);
+    }
+
     public function document(Context $context): Sendable
     {
         RoomController::throttlePdf($context);
-        $document = $context->documents()->period($context->watch(), self::filter($context), $context->staff()->name, $context->request->query('style'));
-        $context->log('Laporan pengawasan ' . self::filter($context)['from'] . ' s.d. ' . self::filter($context)['to'] . ' diunduh.', 'Print');
+        $filter = self::filter($context);
+        $document = $context->documents()->period($context->watch(), $filter, $context->staff()->name, $context->request->query('style'));
+        $context->log('Laporan pengawasan ' . $filter['from'] . ' s.d. ' . $filter['to'] . ($filter['library'] !== '' ? ' lokasi ' . $filter['library'] : '') . ' diunduh.', 'Print');
 
         return new BytesResponse($document['bytes'], 'application/pdf', $document['filename']);
     }

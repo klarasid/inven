@@ -255,4 +255,15 @@ final class AreaController
 
         return new BytesResponse($document['bytes'], 'application/pdf', $document['filename']);
     }
+
+    /** The photos of the same list as they were uploaded, in a ZIP: a folder per group. */
+    public function archive(Context $context): Sendable
+    {
+        RoomController::throttlePdf($context);
+        [$group, $library] = self::filter($context);
+        $document = $context->documents()->areaPhotos($context->storage, $group, $library);
+        $context->log('Foto area dan fasilitas diunduh (' . $document['count'] . ' foto).', 'Download');
+
+        return new BytesResponse($document['bytes'], 'application/zip', $document['filename']);
+    }
 }
